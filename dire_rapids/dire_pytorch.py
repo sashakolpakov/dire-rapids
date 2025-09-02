@@ -16,15 +16,16 @@ Performance characteristics:
 - Chunked computation prevents GPU out-of-memory errors
 """
 
+import gc
+
 import numpy as np
+import pandas as pd
+import plotly.express as px
 import torch
+from loguru import logger
+from scipy.optimize import curve_fit
 from sklearn.base import TransformerMixin
 from sklearn.decomposition import PCA
-from scipy.optimize import curve_fit
-import plotly.express as px
-import pandas as pd
-from loguru import logger
-import gc
 
 # PyKeOps for efficient force computations
 try:
@@ -116,12 +117,12 @@ class DiRePyTorch(TransformerMixin):
         yv[xv < self.min_dist] = 1.0
         yv[xv >= self.min_dist] = np.exp(-(xv[xv >= self.min_dist] - self.min_dist) / self.spread)
 
-        params, _ = curve_fit(curve, xv, yv)
+        params, _ = curve_fit(curve, xv, yv)[:2]  # Extract only params and covariance
         self._a, self._b = params
 
         self.logger.info(f"Found kernel params: a={self._a:.4f}, b={self._b:.4f}")
 
-    def _compute_knn(self, X, chunk_size=50000, use_fp16=None):
+    def _compute_knn(self, X, chunk_size=50000, use_fp16=None):  # pylint: disable=too-many-branches
         """
         Compute k-nearest neighbors with memory-efficient chunking.
         Intelligently chooses between PyKeOps and PyTorch based on dimensionality.
@@ -245,7 +246,7 @@ class DiRePyTorch(TransformerMixin):
 
         elif self.init == 'random':
             self.logger.info("Initializing with random projection")
-            rng = np.random.RandomState(self.random_state)
+            rng = np.random.RandomState(self.random_state)  # pylint: disable=no-member
             projection = rng.randn(X.shape[1], self.n_components)
             projection /= np.linalg.norm(projection, axis=0)
             embedding = X @ projection
@@ -259,7 +260,7 @@ class DiRePyTorch(TransformerMixin):
 
         return torch.tensor(embedding, dtype=torch.float32, device=self.device)
 
-    def _compute_forces(self, positions, iteration, max_iterations, chunk_size=5000):
+    def _compute_forces(self, positions, iteration, max_iterations, chunk_size=5000):  # pylint: disable=too-many-branches,too-many-locals
         """
         Memory-efficient force computation with chunked processing:
         - Attraction: only between k-NN neighbors
@@ -404,7 +405,7 @@ class DiRePyTorch(TransformerMixin):
                     rep_forces = (rep_coeff * diff / dist).sum(dim=1)  # (chunk, D)
                     forces[chunk_indices] += rep_forces
                     
-                except (RuntimeError, torch.cuda.OutOfMemoryError) as e:
+                except (RuntimeError, torch.cuda.OutOfMemoryError):
                     # Fall back to point-by-point
                     if self.device.type == 'cuda':
                         torch.cuda.empty_cache()
@@ -464,7 +465,7 @@ class DiRePyTorch(TransformerMixin):
 
         return positions
 
-    def fit_transform(self, X, y=None):
+    def fit_transform(self, X, y=None):  # pylint: disable=unused-argument,arguments-differ
         """
         Fit the model and transform data (API compatible with JAX backend).
         """
@@ -496,7 +497,7 @@ class DiRePyTorch(TransformerMixin):
 
         return self._layout
 
-    def fit(self, X: np.ndarray, y=None):
+    def fit(self, X: np.ndarray, y=None):  # pylint: disable=unused-argument,arguments-differ
         """
         Fit the model to data: create the kNN graph and fit the probability kernel to force layout parameters.
 
@@ -550,6 +551,6 @@ class DiRePyTorch(TransformerMixin):
         else:
             fig = px.scatter_3d(df, x='x', y='y', z='z', **vis_params)
 
-        fig.update_traces(marker=dict(size=point_size))
+        fig.update_traces(marker={'size': point_size})
 
         return fig
