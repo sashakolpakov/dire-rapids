@@ -7,18 +7,15 @@ Or import it: from finance_analysis_notebook import *
 
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 
+from finance_tick_hierarchical import HierarchicalTickEmbedder
+
 # Set plotly to notebook mode for better display
 pio.renderers.default = "notebook"
-
-# Import our modules
-from finance_tick_hierarchical import HierarchicalTickEmbedder
-from dire_jax.dire_pytorch import DiRePyTorch
 
 # Initialize global analyzer
 analyzer = HierarchicalTickEmbedder()
@@ -54,13 +51,13 @@ def quick_analysis(ticker='SPY', max_trades=50000, save_plots=False):
             x=df['embed_x'],
             y=df['embed_y'],
             mode='markers',
-            marker=dict(
-                size=5,
-                color=df['time_of_day'],
-                colorscale='Viridis',
-                showscale=True,
-                colorbar=dict(title="Hour", x=0.45, y=0.85)
-            ),
+            marker={
+                'size': 5,
+                'color': df['time_of_day'],
+                'colorscale': 'Viridis',
+                'showscale': True,
+                'colorbar': {'title': 'Hour', 'x': 0.45, 'y': 0.85}
+            },
             text=df.index.strftime('%H:%M:%S'),
             hovertemplate='Time: %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}',
             name='Time'
@@ -74,13 +71,13 @@ def quick_analysis(ticker='SPY', max_trades=50000, save_plots=False):
             x=df['embed_x'],
             y=df['embed_y'],
             mode='markers',
-            marker=dict(
-                size=5,
-                color=df['volatility'],
-                colorscale='Reds',
-                showscale=True,
-                colorbar=dict(title="Vol", x=1.0, y=0.85)
-            ),
+            marker={
+                'size': 5,
+                'color': df['volatility'],
+                'colorscale': 'Reds',
+                'showscale': True,
+                'colorbar': {'title': 'Vol', 'x': 1.0, 'y': 0.85}
+            },
             text=df['volatility'].round(4),
             hovertemplate='Volatility: %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}',
             showlegend=False
@@ -94,13 +91,13 @@ def quick_analysis(ticker='SPY', max_trades=50000, save_plots=False):
             x=df['embed_x'],
             y=df['embed_y'],
             mode='markers',
-            marker=dict(
-                size=5,
-                color=np.log10(df['volume'] + 1),
-                colorscale='Blues',
-                showscale=True,
-                colorbar=dict(title="Log Vol", x=0.45, y=0.35)
-            ),
+            marker={
+                'size': 5,
+                'color': np.log10(df['volume'] + 1),
+                'colorscale': 'Blues',
+                'showscale': True,
+                'colorbar': {'title': 'Log Vol', 'x': 0.45, 'y': 0.35}
+            },
             text=df['volume'].astype(int),
             hovertemplate='Volume: %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}',
             showlegend=False
@@ -114,13 +111,13 @@ def quick_analysis(ticker='SPY', max_trades=50000, save_plots=False):
             x=df['embed_x'],
             y=df['embed_y'],
             mode='markers',
-            marker=dict(
-                size=5,
-                color=df['trade_intensity'],
-                colorscale='Greens',
-                showscale=True,
-                colorbar=dict(title="Intensity", x=1.0, y=0.35)
-            ),
+            marker={
+                'size': 5,
+                'color': df['trade_intensity'],
+                'colorscale': 'Greens',
+                'showscale': True,
+                'colorbar': {'title': 'Intensity', 'x': 1.0, 'y': 0.35}
+            },
             text=df['trade_intensity'].round(2),
             hovertemplate='Trade Intensity: %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}',
             showlegend=False
@@ -164,10 +161,12 @@ def quick_analysis(ticker='SPY', max_trades=50000, save_plots=False):
     
     return df
 
-def compare_tickers(tickers=['SPY', 'QQQ', 'IWM'], max_trades=30000):
+def compare_tickers(tickers=None, max_trades=30000):
     """
     Compare multiple tickers in a single embedding space.
     """
+    if tickers is None:
+        tickers = ['SPY', 'QQQ', 'IWM']
     all_data = []
     
     for ticker in tickers:
@@ -238,7 +237,7 @@ def find_anomalies(df, threshold=2.5):
     print(f"Found {len(anomalies)} anomalous periods (>{threshold} std from center):")
     print("\nTop 10 Anomalies:")
     
-    for idx, row in anomalies.head(10).iterrows():
+    for _, row in anomalies.head(10).iterrows():
         time_str = row.name.strftime('%H:%M:%S') if hasattr(row.name, 'strftime') else str(row.name)
         print(f"  {time_str}: volatility={row['volatility']:.4f}, "
               f"volume={row['volume']:.0f}, distance={row['distance_from_center']:.2f}")
@@ -252,7 +251,7 @@ def find_anomalies(df, threshold=2.5):
         x=normal['embed_x'],
         y=normal['embed_y'],
         mode='markers',
-        marker=dict(size=4, color='blue', opacity=0.5),
+        marker={'size': 4, 'color': 'blue', 'opacity': 0.5},
         name='Normal',
         text=normal.index.strftime('%H:%M:%S') if hasattr(normal.index, 'strftime') else normal.index,
         hovertemplate='Time: %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}'
@@ -263,7 +262,7 @@ def find_anomalies(df, threshold=2.5):
         x=anomalies['embed_x'],
         y=anomalies['embed_y'],
         mode='markers',
-        marker=dict(size=8, color='red'),
+        marker={'size': 8, 'color': 'red'},
         name='Anomalous',
         text=anomalies.index.strftime('%H:%M:%S') if hasattr(anomalies.index, 'strftime') else anomalies.index,
         hovertemplate='ANOMALY<br>Time: %{text}<br>X: %{x:.2f}<br>Y: %{y:.2f}'

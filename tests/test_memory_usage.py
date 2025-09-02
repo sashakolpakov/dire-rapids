@@ -4,11 +4,11 @@
 Test memory usage of different PyTorch implementations.
 """
 
-import numpy as np
-import torch
-from sklearn.datasets import make_blobs
 import time
 import traceback
+
+import torch
+from sklearn.datasets import make_blobs
 
 # Import implementations
 from dire_jax.dire_pytorch import DiRePyTorch  # Current (with memory issues)
@@ -20,16 +20,16 @@ def get_gpu_memory():
         return torch.cuda.memory_allocated() / 1024 / 1024
     return 0
 
-def test_memory_usage(n_samples=5000):
+def test_memory_usage(n_points=5000):
     """
     Compare memory usage between implementations.
     """
-    print(f"\nTesting with {n_samples} samples")
+    print(f"\nTesting with {n_points} samples")
     print("="*70)
     
     # Generate test data
-    X, y = make_blobs(
-        n_samples=n_samples,
+    X, _ = make_blobs(  # _ for labels (sklearn compatibility)
+        n_samples=n_points,
         n_features=100,
         centers=10,
         cluster_std=0.5,
@@ -59,7 +59,7 @@ def test_memory_usage(n_samples=5000):
         
         t0 = time.time()
         reducer_current = DiRePyTorch(**params)
-        embedding_current = reducer_current.fit_transform(X)
+        _ = reducer_current.fit_transform(X)  # embedding not needed for memory test
         time_current = time.time() - t0
         
         mem_after = get_gpu_memory()
@@ -68,7 +68,7 @@ def test_memory_usage(n_samples=5000):
         else:
             peak_memory = 0
         
-        print(f"\nResults:")
+        print("\nResults:")
         print(f"  Time: {time_current:.2f}s")
         print(f"  GPU memory after: {mem_after:.1f} MB")
         print(f"  Peak GPU memory: {peak_memory:.1f} MB")
@@ -76,9 +76,9 @@ def test_memory_usage(n_samples=5000):
         
         current_memory = peak_memory - mem_before
         
-    except Exception as e:
+    except (RuntimeError, MemoryError, torch.cuda.OutOfMemoryError) as e:
         print(f"  ERROR: {e}")
-        print(f"  This is likely due to out-of-memory!")
+        print("  This is likely due to out-of-memory!")
         traceback.print_exc()
         current_memory = float('inf')
         time_current = float('inf')
@@ -100,7 +100,7 @@ def test_memory_usage(n_samples=5000):
         
         t0 = time.time()
         reducer_efficient = DiRePyTorchMemoryEfficient(**params)
-        embedding_efficient = reducer_efficient.fit_transform(X)
+        _ = reducer_efficient.fit_transform(X)  # embedding not needed for memory test
         time_efficient = time.time() - t0
         
         mem_after = get_gpu_memory()
@@ -109,7 +109,7 @@ def test_memory_usage(n_samples=5000):
         else:
             peak_memory = 0
         
-        print(f"\nResults:")
+        print("\nResults:")
         print(f"  Time: {time_efficient:.2f}s")
         print(f"  GPU memory after: {mem_after:.1f} MB")
         print(f"  Peak GPU memory: {peak_memory:.1f} MB")
@@ -117,7 +117,7 @@ def test_memory_usage(n_samples=5000):
         
         efficient_memory = peak_memory - mem_before
         
-    except Exception as e:
+    except (RuntimeError, MemoryError, torch.cuda.OutOfMemoryError) as e:
         print(f"  ERROR: {e}")
         traceback.print_exc()
         efficient_memory = float('inf')

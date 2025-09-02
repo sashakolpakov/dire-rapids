@@ -9,7 +9,6 @@ import pytest
 import numpy as np
 import torch
 from sklearn.datasets import make_blobs, make_swiss_roll
-from sklearn.decomposition import PCA
 
 # Import dire-rapids
 from dire_rapids import DiRePyTorch
@@ -24,7 +23,7 @@ class TestDiRePyTorchBasic:
         np.random.seed(42)
         torch.manual_seed(42)
         # Force CPU for tests
-        self.device = torch.device('cpu')
+        self.device = torch.device('cpu')  # pylint: disable=attribute-defined-outside-init
         
     def test_import(self):
         """Test that the package can be imported."""
@@ -51,7 +50,7 @@ class TestDiRePyTorchBasic:
     def test_fit_transform_small_data(self):
         """Test fit_transform on a small dataset."""
         # Create small test data
-        X, y = make_blobs(n_samples=100, n_features=10, centers=3, random_state=42)
+        X, _ = make_blobs(n_samples=100, n_features=10, centers=3, random_state=42)  # _ for labels (sklearn compatibility)
         
         # Fit and transform
         model = DiRePyTorch(n_components=2, max_iter_layout=10, verbose=False)
@@ -141,7 +140,7 @@ class TestDiRePyTorchBasic:
         
     def test_swiss_roll_data(self):
         """Test on Swiss roll dataset (common DR benchmark)."""
-        X, color = make_swiss_roll(n_samples=100, random_state=42)
+        X, _ = make_swiss_roll(n_samples=100, random_state=42)  # _ for color (sklearn compatibility)
         
         model = DiRePyTorch(n_components=2, max_iter_layout=10, verbose=False)
         X_embedded = model.fit_transform(X)

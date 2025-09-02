@@ -4,10 +4,12 @@
 Test cuVS backend for DIRE and compare with PyTorch backend.
 """
 
-import numpy as np
 import time
-from sklearn.datasets import make_blobs
+import traceback
+
+import numpy as np
 import torch
+from sklearn.datasets import make_blobs
 
 # Try to import both backends
 try:
@@ -42,7 +44,7 @@ def test_backend(backend_class, X, backend_name="Backend", **kwargs):
         
         dt = time.time() - t0
         
-        print(f"✅ Success!")
+        print("✅ Success!")
         print(f"  Time: {dt:.2f}s")
         print(f"  Throughput: {len(X)/dt:.0f} points/sec")
         print(f"  Embedding shape: {embedding.shape}")
@@ -56,9 +58,8 @@ def test_backend(backend_class, X, backend_name="Backend", **kwargs):
         
         return embedding, dt
         
-    except Exception as e:
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"❌ Failed: {e}")
-        import traceback
         traceback.print_exc()
         return None, None
 

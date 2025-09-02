@@ -5,22 +5,23 @@ Test PyTorch backend scaling with high-dimensional data (1000D).
 Tests from 5K to 3M points.
 """
 
+import gc
+import time
+import traceback
+
 import numpy as np
 import torch
 from sklearn.datasets import make_blobs
-import time
-import gc
-import traceback
 
 from dire_jax.dire_pytorch import DiRePyTorch
 
-def format_memory(bytes):
+def format_memory(size_bytes):
     """Format bytes to human readable."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes < 1024.0:
-            return f"{bytes:.1f}{unit}"
-        bytes /= 1024.0
-    return f"{bytes:.1f}PB"
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f}{unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f}PB"
 
 def test_scaling(n_samples, n_features=1000, n_clusters=50):
     """
@@ -68,7 +69,7 @@ def test_scaling(n_samples, n_features=1000, n_clusters=50):
         }
         
         # Run dimensionality reduction
-        print(f"\nRunning PyTorch DiRe...")
+        print("\nRunning PyTorch DiRe...")
         print(f"Parameters: k={params['n_neighbors']}, neg_ratio={params['neg_ratio']}")
         
         if torch.cuda.is_available():
@@ -94,7 +95,7 @@ def test_scaling(n_samples, n_features=1000, n_clusters=50):
         
         # Results
         print(f"\n{'='*50}")
-        print(f"SUCCESS!")
+        print("SUCCESS!")
         print(f"Total time: {total_time:.1f}s")
         print(f"  - k-NN: {t_knn:.1f}s ({t_knn/total_time*100:.1f}%)")
         print(f"  - Forces + layout: {total_time-t_knn:.1f}s ({(total_time-t_knn)/total_time*100:.1f}%)")
@@ -125,7 +126,7 @@ def test_scaling(n_samples, n_features=1000, n_clusters=50):
         
         return True, total_time
         
-    except Exception as e:
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"\nFAILED: {e}")
         traceback.print_exc()
         

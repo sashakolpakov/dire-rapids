@@ -4,15 +4,18 @@
 Test cuML PCA performance vs sklearn PCA for high-dimensional data.
 """
 
+import gc
+import os
+import time
+import traceback
+import warnings
+
 import numpy as np
 import torch
-import time
-import gc
-import warnings
-warnings.filterwarnings('ignore')
 
-# Import backends
 from dire_jax import DiReCuVS
+
+warnings.filterwarnings('ignore')
 
 def test_pca_performance(n_samples, n_dims):
     """Compare PCA performance: sklearn vs cuML."""
@@ -22,12 +25,12 @@ def test_pca_performance(n_samples, n_dims):
     print(f"{'='*70}")
     
     # Generate data
-    print(f"\nGenerating data...")
+    print("\nGenerating data...")
     X = np.random.randn(n_samples, n_dims).astype(np.float32)
     print(f"  Data size: {X.nbytes / 1e9:.2f} GB")
     
     # Test sklearn PCA (via DiReCuVS with use_cuml=False)
-    print(f"\n1. Testing sklearn PCA (CPU)...")
+    print("\n1. Testing sklearn PCA (CPU)...")
     torch.cuda.empty_cache()
     gc.collect()
     
@@ -47,7 +50,7 @@ def test_pca_performance(n_samples, n_dims):
     print(f"  Embedding shape: {embedding_sklearn.shape}")
     
     # Test cuML PCA (via DiReCuVS with use_cuml=True)
-    print(f"\n2. Testing cuML PCA (GPU)...")
+    print("\n2. Testing cuML PCA (GPU)...")
     torch.cuda.empty_cache()
     gc.collect()
     
@@ -77,13 +80,14 @@ def test_pca_performance(n_samples, n_dims):
     # PCA can flip signs, so check absolute correlation
     corr1 = np.corrcoef(embed_sklearn_np[:, 0], embed_cuml_np[:, 0])[0, 1]
     corr2 = np.corrcoef(embed_sklearn_np[:, 1], embed_cuml_np[:, 1])[0, 1]
-    print(f"\nResults similarity (absolute correlation):")
+    print("\nResults similarity (absolute correlation):")
     print(f"  Component 1: {abs(corr1):.3f}")
     print(f"  Component 2: {abs(corr2):.3f}")
     
     return t_sklearn, t_cuml, speedup
 
 def main():
+    """Run PCA performance comparison tests between sklearn and cuML.""
     print("=" * 80)
     print("cuML PCA vs sklearn PCA PERFORMANCE COMPARISON")
     print("=" * 80)
@@ -93,7 +97,7 @@ def main():
     print(f"  GPU: {torch.cuda.get_device_name() if torch.cuda.is_available() else 'None'}")
     
     try:
-        import cuml
+        import cuml  # pylint: disable=import-outside-toplevel
         print(f"  cuML: v{cuml.__version__}")
     except ImportError:
         print("  cuML: Not available")
@@ -119,9 +123,8 @@ def main():
                 'cuml_time': t_cuml,
                 'speedup': speedup
             })
-        except Exception as e:
+        except (RuntimeError, MemoryError, ValueError) as e:
             print(f"\nFailed: {e}")
-            import traceback
             traceback.print_exc()
             break
     
@@ -143,6 +146,5 @@ def main():
 
 
 if __name__ == "__main__":
-    import os
     os.chdir('/home/ubuntu/devel/dire-jax')
     main()

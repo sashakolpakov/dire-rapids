@@ -5,24 +5,27 @@ Test cuVS backend with 1000-dimensional data at scale.
 Compare with PyTorch backend to see if cuVS helps with high-D.
 """
 
+import gc
+import os
+import sys
+import time
+import traceback
+import warnings
+
 import numpy as np
 import torch
-import time
-import gc
-from sklearn.datasets import make_blobs
-import warnings
-warnings.filterwarnings('ignore')
 
-# Import backends
 from dire_jax import DiRePyTorch, DiReCuVS
 
-def format_memory(bytes):
+warnings.filterwarnings('ignore')
+
+def format_memory(size_bytes):
     """Format bytes to human readable."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes < 1024.0:
-            return f"{bytes:.1f}{unit}"
-        bytes /= 1024.0
-    return f"{bytes:.1f}PB"
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f}{unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f}PB"
 
 def test_backend(backend, X, name, **kwargs):
     """Test a specific backend with timing and memory tracking."""
@@ -62,7 +65,7 @@ def test_backend(backend, X, name, **kwargs):
         total_time = time.time() - t0
         
         # Results
-        print(f"\n✅ SUCCESS!")
+        print("\n✅ SUCCESS!")
         print(f"  k-NN time: {t_knn:.1f}s ({len(X)/t_knn:.0f} points/sec)")
         print(f"  Total time: {total_time:.1f}s")
         print(f"  Embedding shape: {embedding.shape}")
@@ -74,14 +77,14 @@ def test_backend(backend, X, name, **kwargs):
         
         return t_knn, total_time
         
-    except Exception as e:
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"❌ FAILED: {e}")
-        import traceback
         traceback.print_exc()
         return None, None
 
 
 def main():
+    """Run tests comparing cuVS and PyTorch backends on 1000D data.""
     print("=" * 70)
     print("TESTING cuVS WITH 1000-DIMENSIONAL DATA")
     print("=" * 70)
@@ -91,7 +94,7 @@ def main():
     print(f"  GPU: {torch.cuda.get_device_name() if torch.cuda.is_available() else 'None'}")
     
     try:
-        import cuvs
+        import cupy  # pylint: disable=import-outside-toplevel,unused-import
         print("  cuVS: ✅ Available")
     except ImportError:
         print("  cuVS: ❌ Not available")
@@ -145,7 +148,7 @@ def main():
         if t_pytorch and t_cuvs:
             speedup_knn = t_pytorch / t_cuvs
             speedup_total = total_pytorch / total_cuvs
-            print(f"\n🚀 SPEEDUP:")
+            print("\n🚀 SPEEDUP:")
             print(f"  k-NN: {speedup_knn:.1f}x")
             print(f"  Total: {speedup_total:.1f}x")
             
@@ -197,11 +200,9 @@ def main():
 
 if __name__ == "__main__":
     # Run in rapids environment
-    import sys
     print(f"Python: {sys.version}")
-    print(f"Working directory: {os.getcwd() if 'os' in dir() else 'unknown'}")
+    print(f"Working directory: {os.getcwd()}")
     
-    import os
     os.chdir('/home/ubuntu/devel/dire-jax')
     
     main()

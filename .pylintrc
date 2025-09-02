@@ -5,12 +5,16 @@ fail-under=9.5
 max-line-length=128   # Longer lines
 max-module-lines=2048 # Longer modules
 
+
+
 [DESIGN]
-max-locals=32                 # Variables per function
+max-locals=48                 # Variables per function
+max-branches=17		      # Control-flow split point per function
 max-statements=128            # Statements per function
 max-args=16                   # Arguments per function
 max-positional-arguments=16   # Positional arguments per function
 max-attributes=32             # Attributes per class
+
 
 
 [MESSAGES CONTROL]

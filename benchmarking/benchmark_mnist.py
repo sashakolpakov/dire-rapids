@@ -5,19 +5,20 @@ Benchmark DIRE on full MNIST dataset from OpenML.
 Tests both speed and clustering quality.
 """
 
+import gc
+import time
+import warnings
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import time
-import gc
-from sklearn.datasets import fetch_openml
-from sklearn.metrics import silhouette_score, adjusted_rand_score
 from sklearn.cluster import KMeans
-import matplotlib.pyplot as plt
-import warnings
-warnings.filterwarnings('ignore')
+from sklearn.datasets import fetch_openml
+from sklearn.metrics import adjusted_rand_score, silhouette_score
 
-# Import backends
-from dire_jax import DiReCuVS, DiRePyTorch, create_dire
+from dire_rapids import DiReCuVS, DiRePyTorch, create_dire
+
+warnings.filterwarnings('ignore')
 
 def load_mnist_full():
     """Load full MNIST dataset from OpenML."""
@@ -53,7 +54,7 @@ def evaluate_clustering(X_2d, y_true, n_clusters=10):
     ari = adjusted_rand_score(y_true, y_pred)
     
     # Calculate cluster purity
-    from scipy.stats import mode
+    from scipy.stats import mode  # pylint: disable=import-outside-toplevel
     purity = 0
     for cluster_id in range(n_clusters):
         mask = (y_pred == cluster_id)
@@ -102,8 +103,8 @@ def visualize_embedding(X_2d, y, title="DIRE MNIST Embedding", save_path=None):
             center = X_plot[mask].mean(axis=0)
             plt.text(center[0], center[1], str(digit), 
                     fontsize=14, fontweight='bold',
-                    bbox=dict(boxstyle='round,pad=0.3', 
-                             facecolor='white', alpha=0.7))
+                    bbox={'boxstyle': 'round,pad=0.3',
+                          'facecolor': 'white', 'alpha': 0.7})
     
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
@@ -116,7 +117,7 @@ def visualize_embedding(X_2d, y, title="DIRE MNIST Embedding", save_path=None):
     
     plt.close()
 
-def benchmark_dire(X, y, backend='auto', max_iter=30):
+def benchmark_dire(X, y, backend='auto', max_iter=30):  # pylint: disable=unused-argument
     """Benchmark DIRE on dataset."""
     print(f"\n{'='*70}")
     print(f"Benchmarking DIRE with {backend.upper()} backend")
@@ -154,8 +155,7 @@ def benchmark_dire(X, y, backend='auto', max_iter=30):
                              verbose=True)
     
     # Time the embedding
-    print(f"\nComputing 2D embedding...")
-    t_start = time.time()
+    print("\nComputing 2D embedding...")
     
     # Detailed timing
     t0 = time.time()
@@ -166,7 +166,7 @@ def benchmark_dire(X, y, backend='auto', max_iter=30):
     if torch.is_tensor(X_2d):
         X_2d = X_2d.cpu().numpy()
     
-    print(f"\nEmbedding complete!")
+    print("\nEmbedding complete!")
     print(f"  Total time: {total_time:.1f}s")
     print(f"  Throughput: {len(X)/total_time:.0f} points/sec")
     
@@ -178,6 +178,7 @@ def benchmark_dire(X, y, backend='auto', max_iter=30):
     return X_2d, total_time
 
 def main():
+    """Run MNIST benchmark with different backends."""
     print("=" * 80)
     print("MNIST BENCHMARK - SPEED AND QUALITY TEST")
     print("=" * 80)
@@ -187,9 +188,8 @@ def main():
     print(f"  GPU: {torch.cuda.get_device_name() if torch.cuda.is_available() else 'None'}")
     
     try:
-        import cuvs
-        import cuml
-        print(f"  cuVS: Available")
+        import cuml  # pylint: disable=import-outside-toplevel
+        print("  cuVS: Available")
         print(f"  cuML: v{cuml.__version__}")
         has_rapids = True
     except ImportError:
@@ -252,7 +252,7 @@ def main():
         quality_diff = (results['cuvs']['quality']['silhouette'] - 
                        results['pytorch']['quality']['silhouette'])
         
-        print(f"\nPerformance Comparison:")
+        print("\nPerformance Comparison:")
         print(f"  Speed: cuVS is {speedup:.1f}x faster")
         print(f"  Quality: {'Similar' if abs(quality_diff) < 0.05 else 'Different'} "
               f"(Delta silhouette = {quality_diff:+.3f})")
@@ -261,6 +261,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import os
-    os.chdir('/home/ubuntu/devel/dire-jax')
     main()

@@ -4,12 +4,10 @@
 Prototype: Using DIRE to embed and visualize tick-level financial data from Polygon.io
 """
 
+from datetime import datetime, timedelta
+
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
-import time
-from collections import deque
-import os
 
 # Polygon API client
 try:
@@ -21,7 +19,7 @@ except ImportError:
     from polygon import RESTClient
 
 # Our DIRE implementation
-from dire_jax.dire_pytorch import DiRePyTorch
+from dire_rapids import DiRePyTorch
 
 # Set API key (you can also set as environment variable)
 API_KEY = "BBRlVSAOiNqeJ77yjnveFBqZZTOFv2gN"
@@ -200,9 +198,9 @@ class TickDataEmbedder:
         features_norm = (features - features.mean(axis=0)) / (features.std(axis=0) + 1e-8)
         
         # Create embedding
-        embedding = self.embedder.fit_transform(features_norm)
+        embed_result = self.embedder.fit_transform(features_norm)
         
-        return embedding
+        return embed_result
     
     def analyze_market_session(self, ticker="SPY", date_str=None):
         """
@@ -235,13 +233,13 @@ class TickDataEmbedder:
             return df, None, None
         
         # Create embedding
-        embedding = self.create_embedding(features)
+        embed_result = self.create_embedding(features)
         
         # Add embedding back to dataframe for analysis
         embed_df = pd.DataFrame(
-            embedding, 
+            embed_result, 
             columns=['x', 'y'],
-            index=df.index[20:20+len(embedding)]  # Align with feature computation
+            index=df.index[20:20+len(embed_result)]  # Align with feature computation
         )
         
         # Add time-based coloring
@@ -260,7 +258,7 @@ class TickDataEmbedder:
         """
         Create interactive visualization of the embedding.
         """
-        import plotly.express as px
+        import plotly.express as px  # pylint: disable=import-outside-toplevel
         
         fig = px.scatter(
             embed_df,
@@ -272,7 +270,7 @@ class TickDataEmbedder:
             labels={'x': 'DIRE Dimension 1', 'y': 'DIRE Dimension 2'}
         )
         
-        fig.update_traces(marker=dict(size=5))
+        fig.update_traces(marker={'size': 5})
         fig.update_layout(width=1000, height=700)
         fig.show()
         
@@ -293,10 +291,10 @@ def main():
     ticker = "SPY"
     
     # Get data and create embedding
-    raw_data, features, embedding_df = embedder.analyze_market_session(ticker)
+    _, _, embedding_df = embedder.analyze_market_session(ticker)
     
     if embedding_df is not None:
-        print(f"\nEmbedding created successfully!")
+        print("\nEmbedding created successfully!")
         print(f"Shape: {embedding_df.shape}")
         print(f"Time range: {embedding_df.index[0]} to {embedding_df.index[-1]}")
         
@@ -326,4 +324,4 @@ def main():
 
 
 if __name__ == "__main__":
-    embedding = main()
+    main()

@@ -5,23 +5,25 @@ Test cuVS scaling with 1000D data.
 Focus on cuVS performance only since PyTorch OOMs.
 """
 
+import gc
+import time
+import traceback
+import warnings
+
 import numpy as np
 import torch
-import time
-import gc
-import warnings
-warnings.filterwarnings('ignore')
 
-# Import backends
 from dire_jax import DiReCuVS
 
-def format_memory(bytes):
+warnings.filterwarnings('ignore')
+
+def format_memory(size_bytes):
     """Format bytes to human readable."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes < 1024.0:
-            return f"{bytes:.1f}{unit}"
-        bytes /= 1024.0
-    return f"{bytes:.1f}PB"
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f}{unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f}PB"
 
 def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
     """Test cuVS at specific scale."""
@@ -35,7 +37,7 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
     gc.collect()
     
     # Generate data
-    print(f"Generating data...")
+    print("Generating data...")
     t0 = time.time()
     X = np.random.randn(n_samples, n_dims).astype(np.float32)
     gen_time = time.time() - t0
@@ -45,7 +47,7 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
     
     try:
         # Test cuVS
-        print(f"\nComputing k-NN with cuVS...")
+        print("\nComputing k-NN with cuVS...")
         t0 = time.time()
         
         reducer = DiReCuVS(
@@ -66,7 +68,7 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
         # Quick embedding
         print("Computing layout...")
         initial = reducer._initialize_embedding(X)
-        embedding = reducer._optimize_layout(initial).cpu().numpy()
+        _ = reducer._optimize_layout(initial).cpu().numpy()  # embedding not used
         
         total_time = time.time() - t0
         
@@ -74,7 +76,7 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
         peak_bytes = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0
         
         # Results
-        print(f"\n✅ SUCCESS!")
+        print("\n✅ SUCCESS!")
         print(f"  k-NN time: {t_knn:.1f}s ({n_samples/t_knn:.0f} points/sec)")
         print(f"  Total time: {total_time:.1f}s")
         print(f"  Peak GPU memory: {format_memory(peak_bytes)}")
@@ -89,9 +91,8 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
             'success': True
         }
         
-    except Exception as e:
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"\n❌ FAILED: {e}")
-        import traceback
         traceback.print_exc()
         return {
             'n_samples': n_samples,
@@ -108,6 +109,7 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
 
 
 def main():
+    """Run cuVS scaling tests with high-dimensional data.""
     print("=" * 70)
     print("TESTING cuVS SCALING WITH 1000-DIMENSIONAL DATA")
     print("=" * 70)
@@ -117,8 +119,7 @@ def main():
     print(f"  GPU: {torch.cuda.get_device_name() if torch.cuda.is_available() else 'None'}")
     
     try:
-        import cuvs
-        import cupy
+        import cupy  # pylint: disable=import-outside-toplevel
         print("  cuVS: ✅ Available")
         print(f"  CuPy: ✅ v{cupy.__version__}")
     except ImportError as e:
@@ -149,7 +150,7 @@ def main():
             break
         
         if result['knn_time'] > 300:
-            print(f"\n⚠️ Stopping - k-NN taking too long (>5 minutes)")
+            print("\n⚠️ Stopping - k-NN taking too long (>5 minutes)")
             break
     
     # Summary

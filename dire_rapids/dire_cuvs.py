@@ -13,7 +13,6 @@ Requirements:
 import numpy as np
 import torch
 from loguru import logger
-import gc
 
 # Import base DIRE PyTorch implementation
 from .dire_pytorch import DiRePyTorch
@@ -117,16 +116,15 @@ class DiReCuVS(DiRePyTorch):
         if n_samples < 50000:
             # Small dataset - use flat (IVF with many lists)
             return 'flat'
-        elif n_samples < 500000 or n_dims > 500:
+        if n_samples < 500000 or n_dims > 500:
             # Medium dataset or high-D - IVF without compression
             # IVF-Flat works better than CAGRA for high dimensions
             return 'ivf_flat'
-        elif n_samples < 5000000:
+        if n_samples < 5000000:
             # Large dataset - IVF with compression
             return 'ivf_pq'
-        else:
-            # Very large dataset with moderate dimensions - graph-based
-            return 'cagra' if n_dims <= 500 else 'ivf_pq'
+        # Very large dataset with moderate dimensions - graph-based
+        return 'cagra' if n_dims <= 500 else 'ivf_pq'
     
     def _build_cuvs_index(self, X_gpu, index_type):
         """
@@ -141,7 +139,7 @@ class DiReCuVS(DiRePyTorch):
             self.logger.info("Using brute-force search (exact)")
             return None
             
-        elif index_type == 'ivf_flat':
+        if index_type == 'ivf_flat':
             # IVF without compression
             # For high-D data, use more lists for better quantization
             if n_dims > 500:
@@ -197,7 +195,7 @@ class DiReCuVS(DiRePyTorch):
             
             index = cagra.build(build_params, X_gpu)
             
-            self.logger.info(f"Built CAGRA graph-based index")
+            self.logger.info("Built CAGRA graph-based index")
         
         else:
             raise ValueError(f"Unknown index type: {index_type}")
@@ -378,14 +376,13 @@ class DiReCuVS(DiRePyTorch):
             
             # Convert to PyTorch
             # Use dlpack for zero-copy transfer from CuPy to PyTorch
-            from torch.utils.dlpack import from_dlpack
+            from torch.utils.dlpack import from_dlpack  # pylint: disable=import-outside-toplevel
             embedding_torch = from_dlpack(embedding_cp.toDlpack())
             
             return embedding_torch.to(self.device)
         
-        else:
-            # Fall back to CPU sklearn PCA
-            return super()._initialize_embedding(X)
+        # Fall back to CPU sklearn PCA
+        return super()._initialize_embedding(X)
     
     def fit_transform(self, X, y=None):
         """
@@ -417,26 +414,24 @@ def create_dire(backend='auto', **kwargs):
         if CUVS_AVAILABLE and torch.cuda.is_available():
             logger.info("Auto-selected cuVS backend")
             return DiReCuVS(use_cuvs=True, **kwargs)
-        elif torch.cuda.is_available():
+        if torch.cuda.is_available():
             logger.info("Auto-selected PyTorch backend")
             return DiRePyTorch(**kwargs)
-        else:
-            # Fall back to JAX
-            from .dire import DiRe
-            logger.info("Auto-selected JAX backend")
-            return DiRe(**kwargs)
+        # Fall back to JAX
+        from .dire import DiRe  # pylint: disable=import-outside-toplevel
+        logger.info("Auto-selected JAX backend")
+        return DiRe(**kwargs)
     
-    elif backend == 'cuvs':
+    if backend == 'cuvs':
         if not CUVS_AVAILABLE:
             raise RuntimeError("cuVS backend requested but RAPIDS not installed")
         return DiReCuVS(use_cuvs=True, **kwargs)
     
-    elif backend == 'pytorch':
+    if backend == 'pytorch':
         return DiRePyTorch(**kwargs)
     
-    elif backend == 'jax':
-        from .dire import DiRe
+    if backend == 'jax':
+        from .dire import DiRe  # pylint: disable=import-outside-toplevel
         return DiRe(**kwargs)
     
-    else:
-        raise ValueError(f"Unknown backend: {backend}")
+    raise ValueError(f"Unknown backend: {backend}")

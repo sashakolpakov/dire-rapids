@@ -5,12 +5,15 @@ Advanced: Hierarchical DIRE for high-frequency tick data analysis.
 Handles millions of ticks using the hierarchical approach.
 """
 
+from datetime import datetime, timedelta
+from typing import List, Tuple
+import warnings
+
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
-import time
-from typing import List, Tuple, Optional
-import warnings
+
+from dire_jax.dire_pytorch import DiRePyTorch
+
 warnings.filterwarnings('ignore')
 
 try:
@@ -20,8 +23,6 @@ except ImportError:
     import subprocess
     subprocess.check_call(["pip", "install", "polygon-api-client"])
     from polygon import RESTClient
-
-from dire_jax.dire_pytorch import DiRePyTorch
 
 API_KEY = "BBRlVSAOiNqeJ77yjnveFBqZZTOFv2gN"
 
@@ -140,10 +141,12 @@ class HierarchicalTickEmbedder:
         return features_df
     
     def hierarchical_embedding(self, features_df: pd.DataFrame, 
-                              levels: List[int] = [100, 1000, 10000]) -> Tuple[np.ndarray, List[np.ndarray]]:
+                              levels: List[int] = None) -> Tuple[np.ndarray, List[np.ndarray]]:
         """
         Perform hierarchical embedding at multiple scales.
         """
+        if levels is None:
+            levels = [100, 1000, 10000]
         n_total = len(features_df)
         features = features_df.values
         
@@ -157,8 +160,7 @@ class HierarchicalTickEmbedder:
         print(f"Hierarchical embedding of {n_total} points...")
         
         for level_idx, n_points in enumerate(levels):
-            if n_points > n_total:
-                n_points = n_total
+            n_points = min(n_points, n_total)
             
             print(f"  Level {level_idx}: {n_points} points")
             
@@ -168,7 +170,6 @@ class HierarchicalTickEmbedder:
                 indices = np.linspace(0, n_total-1, n_points, dtype=int)
             else:
                 # Subsequent levels: guided by previous embedding
-                prev_embedding = embeddings[-1]
                 prev_indices = indices_per_level[-1]
                 
                 # Find points far from existing samples for diversity
@@ -302,7 +303,7 @@ class HierarchicalTickEmbedder:
             else:
                 levels = [100, 1000, 5000, n_points]
             
-            embedding, level_embeddings = self.hierarchical_embedding(features_10s, levels)
+            embedding, _ = self.hierarchical_embedding(features_10s, levels)
             
             # Create result dataframe
             result_df = features_10s.copy()
@@ -316,15 +317,14 @@ class HierarchicalTickEmbedder:
             result_df['time_of_day'] = result_df['hour'] + result_df['minute']/60 + result_df['seconds']/3600
             
             return result_df
-        else:
-            print("Not enough data for embedding")
-            return None
+        print("Not enough data for embedding")
+        return None
     
     def identify_market_regimes(self, embedding_df: pd.DataFrame) -> pd.DataFrame:
         """
         Identify market regimes using clustering on the embedding.
         """
-        from sklearn.cluster import DBSCAN
+        from sklearn.cluster import DBSCAN  # pylint: disable=import-outside-toplevel
         
         # Cluster the embedding
         X = embedding_df[['embed_x', 'embed_y']].values
@@ -380,14 +380,14 @@ def main():
     )
     
     if result_df is not None:
-        print(f"\nEmbedding complete!")
+        print("\nEmbedding complete!")
         print(f"Data shape: {result_df.shape}")
         
         # Identify regimes
         result_df = analyzer.identify_market_regimes(result_df)
         
         # Visualize
-        import plotly.express as px
+        import plotly.express as px  # pylint: disable=import-outside-toplevel
         
         # Plot 1: Colored by time of day
         fig1 = px.scatter(

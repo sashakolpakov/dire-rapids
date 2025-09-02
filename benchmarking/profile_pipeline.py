@@ -5,35 +5,35 @@ Profile the entire DIRE pipeline to identify bottlenecks.
 Compare k-NN, PCA initialization, and force layout times.
 """
 
+import gc
+import time
+import warnings
+
 import numpy as np
 import torch
-import time
-import gc
-import warnings
-warnings.filterwarnings('ignore')
 
-# Import backends
-from dire_jax import DiReCuVS, DiRePyTorch
+from dire_rapids import DiReCuVS, DiRePyTorch
+
+warnings.filterwarnings('ignore')
 
 def format_time(seconds):
     """Format seconds to human readable."""
     if seconds < 1:
         return f"{seconds*1000:.1f}ms"
-    elif seconds < 60:
+    if seconds < 60:
         return f"{seconds:.1f}s"
-    else:
-        minutes = seconds / 60
-        return f"{minutes:.1f}min"
+    minutes = seconds / 60
+    return f"{minutes:.1f}min"
 
-def format_memory(bytes):
+def format_memory(memory_bytes):
     """Format bytes to human readable."""
     for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-        if bytes < 1024.0:
-            return f"{bytes:.1f}{unit}"
-        bytes /= 1024.0
-    return f"{bytes:.1f}PB"
+        if memory_bytes < 1024.0:
+            return f"{memory_bytes:.1f}{unit}"
+        memory_bytes /= 1024.0
+    return f"{memory_bytes:.1f}PB"
 
-def profile_stage(func, *args, stage_name="Stage", **kwargs):
+def profile_stage(func, *args, **kwargs):  # pylint: disable=unused-argument
     """Profile a single stage of the pipeline."""
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
@@ -80,27 +80,24 @@ def profile_dire_pipeline(X, n_dims, n_samples, backend='cuvs', max_iter=30):
     
     # 1. Parameter finding (usually instant)
     _, t_params, mem_params = profile_stage(
-        reducer._find_ab_params,
-        stage_name="Parameter finding"
+        reducer._find_ab_params
     )
     profile_results['params'] = {'time': t_params, 'memory': mem_params}
     
     # 2. k-NN computation
-    print(f"Computing k-NN graph...")
+    print("Computing k-NN graph...")
     _, t_knn, mem_knn = profile_stage(
         reducer._compute_knn,
         X,
-        use_fp16=(backend == 'pytorch'),
-        stage_name="k-NN computation"
+        use_fp16=(backend == 'pytorch')
     )
     profile_results['knn'] = {'time': t_knn, 'memory': mem_knn}
     
     # 3. PCA initialization
-    print(f"Computing PCA initialization...")
+    print("Computing PCA initialization...")
     initial, t_pca, mem_pca = profile_stage(
         reducer._initialize_embedding,
-        X,
-        stage_name="PCA initialization"
+        X
     )
     profile_results['pca'] = {'time': t_pca, 'memory': mem_pca}
     
@@ -166,7 +163,7 @@ def print_profile_summary(results, total_time):
     """Print a nice summary of profiling results."""
     
     print(f"\n{'='*70}")
-    print(f"PIPELINE BREAKDOWN")
+    print("PIPELINE BREAKDOWN")
     print(f"{'='*70}")
     
     # Calculate percentages
@@ -199,7 +196,7 @@ def print_profile_summary(results, total_time):
     # Layout iteration details
     if 'layout' in results:
         layout = results['layout']
-        print(f"\nForce Layout Details:")
+        print("\nForce Layout Details:")
         print(f"  Average per iteration: {format_time(layout['avg_per_iter'])}")
         print(f"  First iteration: {format_time(layout['iterations'][0])}")
         print(f"  Last iteration: {format_time(layout['iterations'][-1])}")
@@ -208,7 +205,7 @@ def create_comparison_chart(all_results):
     """Create a text-based comparison chart."""
     
     print(f"\n{'='*80}")
-    print(f"BOTTLENECK ANALYSIS ACROSS SCALES")
+    print("BOTTLENECK ANALYSIS ACROSS SCALES")
     print(f"{'='*80}")
     
     # Header
@@ -233,6 +230,7 @@ def create_comparison_chart(all_results):
     print("  • Force layout scales well due to sampling-based repulsion")
 
 def main():
+    """Run pipeline profiling with different configurations."""
     print("=" * 80)
     print("DIRE PIPELINE PROFILING - IDENTIFYING BOTTLENECKS")
     print("=" * 80)
@@ -277,9 +275,9 @@ def main():
             # Store for comparison
             all_results[name] = (results, total_time)
             
-        except Exception as e:
+        except (RuntimeError, MemoryError) as e:
             print(f"\nFailed: {e}")
-            import traceback
+            import traceback  # pylint: disable=import-outside-toplevel
             traceback.print_exc()
         
         finally:
@@ -318,6 +316,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import os
-    os.chdir('/home/ubuntu/devel/dire-jax')
     main()
