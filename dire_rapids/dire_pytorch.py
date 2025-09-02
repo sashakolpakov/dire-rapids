@@ -496,6 +496,24 @@ class DiRePyTorch(TransformerMixin):
 
         return self._layout
 
+    def fit(self, X: np.ndarray, y=None):
+        """
+        Fit the model to data: create the kNN graph and fit the probability kernel to force layout parameters.
+
+        Parameters
+        ----------
+        X: (numpy.ndarray)
+            High-dimensional data to fit the model. Shape (n_samples, n_features).
+        y: None
+            Ignored, exists for sklearn compatibility.
+
+        Returns
+        -------
+        self: The DiRe instance fitted to data.
+        """
+        self.fit_transform(X, y)
+        return self
+
     def visualize(self, labels=None, point_size=2, title=None, **kwargs):
         """
         Visualize the embedding (API compatible).

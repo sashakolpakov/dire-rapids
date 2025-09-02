@@ -1,0 +1,29 @@
+# Development dependencies
+-r requirements.txt
+-r requirements-test.txt
+
+# Development tools
+ipython>=8.0.0
+jupyter>=1.0.0
+notebook>=6.4.0
+
+# Visualization
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Profiling and benchmarking
+memory_profiler>=0.60.0
+line_profiler>=3.5.0
+
+# Documentation
+sphinx>=4.5.0
+sphinx-rtd-theme>=1.0.0
+nbsphinx>=0.8.0
+
+# Code formatting
+black>=22.0.0
+isort>=5.10.0
+flake8>=4.0.0
+
+# Type checking
+mypy>=0.950
