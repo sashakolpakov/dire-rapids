@@ -13,7 +13,7 @@ import warnings
 import numpy as np
 import torch
 
-from dire_jax import DiReCuVS
+from dire_rapids import DiReCuVS
 
 warnings.filterwarnings('ignore')
 
@@ -109,7 +109,7 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
 
 
 def main():
-    """Run cuVS scaling tests with high-dimensional data.""
+    """Run cuVS scaling tests with high-dimensional data."""
     print("=" * 70)
     print("TESTING cuVS SCALING WITH 1000-DIMENSIONAL DATA")
     print("=" * 70)

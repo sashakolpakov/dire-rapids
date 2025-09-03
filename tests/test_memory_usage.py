@@ -11,8 +11,8 @@ import torch
 from sklearn.datasets import make_blobs
 
 # Import implementations
-from dire_jax.dire_pytorch import DiRePyTorch  # Current (with memory issues)
-from dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient  # Fixed
+from dire_rapids.dire_pytorch import DiRePyTorch  # Current implementation
+from dire_rapids.dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient  # Memory-efficient version
 
 def get_gpu_memory():
     """Get current GPU memory usage in MB."""

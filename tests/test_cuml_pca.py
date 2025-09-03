@@ -13,7 +13,7 @@ import warnings
 import numpy as np
 import torch
 
-from dire_jax import DiReCuVS
+from dire_rapids import DiReCuVS
 
 warnings.filterwarnings('ignore')
 
@@ -87,7 +87,7 @@ def test_pca_performance(n_samples, n_dims):
     return t_sklearn, t_cuml, speedup
 
 def main():
-    """Run PCA performance comparison tests between sklearn and cuML.""
+    """Run PCA performance comparison tests between sklearn and cuML."""
     print("=" * 80)
     print("cuML PCA vs sklearn PCA PERFORMANCE COMPARISON")
     print("=" * 80)

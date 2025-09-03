@@ -13,12 +13,14 @@ from sklearn.datasets import make_blobs
 
 # Try to import both backends
 try:
-    from dire_jax.dire_cuvs import DiReCuVS, CUVS_AVAILABLE
+    from dire_rapids.dire_cuvs import DiReCuVS
+    CUVS_AVAILABLE = True
 except ImportError:
     print("Could not import DiReCuVS")
     CUVS_AVAILABLE = False
+    DiReCuVS = None
 
-from dire_jax.dire_pytorch import DiRePyTorch
+from dire_rapids.dire_pytorch import DiRePyTorch
 
 
 def test_backend(backend_class, X, backend_name="Backend", **kwargs):

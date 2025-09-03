@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from sklearn.datasets import make_blobs
 
-from dire_jax.dire_pytorch import DiRePyTorch
+from dire_rapids.dire_pytorch import DiRePyTorch
 
 def format_memory(size_bytes):
     """Format bytes to human readable."""

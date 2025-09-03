@@ -15,7 +15,7 @@ import warnings
 import numpy as np
 import torch
 
-from dire_jax import DiRePyTorch, DiReCuVS
+from dire_rapids import DiRePyTorch, DiReCuVS
 
 warnings.filterwarnings('ignore')
 
@@ -84,7 +84,7 @@ def test_backend(backend, X, name, **kwargs):
 
 
 def main():
-    """Run tests comparing cuVS and PyTorch backends on 1000D data.""
+    """Run tests comparing cuVS and PyTorch backends on 1000D data."""
     print("=" * 70)
     print("TESTING cuVS WITH 1000-DIMENSIONAL DATA")
     print("=" * 70)
