@@ -146,22 +146,22 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         b_val = float(self._b)
         b_exp = float(2 * b_val)
         
-        # ============ ATTRACTION FORCES (point-by-point for memory efficiency) ============
-        # Always use point-by-point for attraction to minimize memory usage
-        for i in range(n_samples):
-            neighbor_ids = self._knn_indices[i]
-            pos_i = positions[i:i+1]
-            pos_neighbors = positions[neighbor_ids]
-            
-            diff = pos_neighbors - pos_i
-            dist = torch.norm(diff, dim=1, keepdim=True) + 1e-10
-            
-            att_coeff = 1.0 / (1.0 + a_val * (1.0 / dist) ** b_exp)
-            forces[i] += (att_coeff * diff / dist).sum(0)
-            
-            # Aggressive cache clearing
-            if self.device.type == 'cuda' and i % 500 == 0:
-                torch.cuda.empty_cache()
+        # ============ ATTRACTION FORCES (vectorized for speed) ============
+        # Vectorize k-NN attraction forces for efficiency
+        # Get all neighbor positions at once
+        neighbor_positions = positions[self._knn_indices]  # shape: (n_samples, k, n_components)
+        center_positions = positions.unsqueeze(1)          # shape: (n_samples, 1, n_components)
+        
+        # Compute differences and distances
+        diff = neighbor_positions - center_positions       # shape: (n_samples, k, n_components)
+        dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10  # shape: (n_samples, k, 1)
+        
+        # Attraction coefficients
+        att_coeff = 1.0 / (1.0 + a_val * (1.0 / dist) ** b_exp)  # shape: (n_samples, k, 1)
+        
+        # Sum attraction forces for each point
+        attraction_forces = (att_coeff * diff / dist).sum(dim=1)  # shape: (n_samples, n_components)
+        forces += attraction_forces
         
         # ============ REPULSION FORCES ============
         # Decide whether to use PyKeOps based on dataset size and availability
@@ -202,31 +202,40 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             # Fall back to parent implementation
             return super()._compute_forces(positions, iteration, max_iterations, chunk_size)
         else:
-            # Use random sampling for large datasets or when PyKeOps unavailable
+            # Use random sampling for large datasets or when PyKeOps unavailable (vectorized)
             self.logger.debug("Using random sampling for repulsion")
             n_neg = min(int(self.neg_ratio * self.n_neighbors), n_samples - 1)
             
-            for i in range(n_samples):
-                # Sample negative points
-                neg_idx = np.random.choice(n_samples, min(n_neg + 1, n_samples), replace=False)
-                neg_idx = neg_idx[neg_idx != i][:n_neg]
-                
-                if len(neg_idx) > 0:
-                    pos_i = positions[i:i+1]
-                    pos_neg = positions[neg_idx]
-                    
-                    diff = pos_neg - pos_i
-                    dist = torch.norm(diff, dim=1, keepdim=True) + 1e-10
-                    
-                    rep_coeff = -1.0 / (1.0 + a_val * (dist ** b_exp))
-                    cutoff_scale = torch.exp(-dist / self.cutoff)
-                    rep_coeff = rep_coeff * cutoff_scale
-                    
-                    forces[i] += (rep_coeff * diff / dist).sum(0)
-                
-                # Aggressive cache clearing
-                if self.device.type == 'cuda' and i % 500 == 0:
-                    torch.cuda.empty_cache()
+            # Generate negative samples for all points at once (fully vectorized)
+            # Simple strategy: random sample with replacement, then mask out self-indices
+            neg_indices = torch.randint(0, n_samples, (n_samples, n_neg), device=self.device)
+            
+            # Create mask to avoid self-selection
+            self_indices = torch.arange(n_samples, device=self.device).unsqueeze(1).expand(-1, n_neg)
+            mask = neg_indices == self_indices
+            
+            # Replace self-indices with different random indices
+            if mask.any():
+                # For each self-index, replace with (self_index + 1) % n_samples
+                replacement = (self_indices + 1) % n_samples
+                neg_indices = torch.where(mask, replacement, neg_indices)
+            
+            # Vectorized repulsion computation
+            neg_positions = positions[neg_indices]  # shape: (n_samples, n_neg, n_components)
+            center_positions = positions.unsqueeze(1)  # shape: (n_samples, 1, n_components)
+            
+            # Compute differences and distances
+            diff = neg_positions - center_positions  # shape: (n_samples, n_neg, n_components)
+            dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10  # shape: (n_samples, n_neg, 1)
+            
+            # Repulsion coefficients
+            rep_coeff = -1.0 / (1.0 + a_val * (dist ** b_exp))  # shape: (n_samples, n_neg, 1)
+            cutoff_scale = torch.exp(-dist / self.cutoff)
+            rep_coeff = rep_coeff * cutoff_scale
+            
+            # Sum repulsion forces for each point
+            repulsion_forces = (rep_coeff * diff / dist).sum(dim=1)  # shape: (n_samples, n_components)
+            forces += repulsion_forces
         
         # Apply cooling and clipping
         forces = alpha * forces
