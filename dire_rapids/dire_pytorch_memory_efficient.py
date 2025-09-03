@@ -192,11 +192,9 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             rep_kernel = rep_kernel * cutoff_scale
             
             # Compute forces (reduction happens efficiently in PyKeOps)
-            # For LazyTensors, we need to expand dimensions differently
-            D_ij_expanded = D_ij[:, :, None]  # Expand to (N, N, 1)
-            force_dir = diff / D_ij_expanded
-            rep_kernel_expanded = rep_kernel[:, :, None]  # Expand to (N, N, 1)
-            rep_forces = (rep_kernel_expanded * force_dir).sum(1)
+            # For LazyTensors, division broadcasts automatically
+            force_dir = diff / D_ij
+            rep_forces = (rep_kernel * force_dir).sum(1)
             forces += rep_forces
             
         elif self.use_exact_repulsion:
