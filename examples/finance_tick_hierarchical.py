@@ -12,7 +12,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from dire_jax.dire_pytorch import DiRePyTorch
+from dire_rapids.dire_pytorch import DiRePyTorch
 
 warnings.filterwarnings('ignore')
 
