@@ -67,9 +67,6 @@ setup(
         ],
     },
     
-    # Python version requirement
-    python_requires=">=3.8,<3.12",
-    
     # Metadata
     author="Alexander Kolpakov (UATX), Igor Rivin (Temple University)",
     author_email="akolpakov@uaustin.org, rivin@temple.edu",
