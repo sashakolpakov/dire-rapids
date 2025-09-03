@@ -22,7 +22,7 @@ setup(
         "scikit-learn>=1.0.0",
         "pandas>=1.3.0",
         "plotly>=5.0.0",
-        "websockets>=15.0.1,<16.0.0",
+        "websockets>=10.3,<16.0.0",
     ],
     
     # Optional dependencies
