@@ -27,13 +27,13 @@ setup(
     # Optional dependencies
     extras_require={
         "cuda": [
-            "cupy-cuda11x>=10.0.0",  # Generic CUDA 11.x support
+            "cupy-cuda12x>=10.0.0",  # Generic CUDA 12.x support
         ],
         "rapids": [
-            "cuml-cu11>=23.0.0",
-            "cuvs-cu11>=23.0.0",
-            "cudf-cu11>=23.0.0",
-            "cupy-cuda11x>=10.0.0",
+            "cuml-cu12>=23.0.0",
+            "cuvs-cu12>=23.0.0",
+            "cudf-cu12>=23.0.0",
+            "cupy-cuda12x>=10.0.0",
         ],
         "dev": [
             "pytest>=7.0.0",
