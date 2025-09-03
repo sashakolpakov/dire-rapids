@@ -88,7 +88,7 @@ class DiRePyTorch(TransformerMixin):
         # Setup logger
         self.logger = logger
         if not verbose:
-            self.logger.disable(__name__)
+            self.logger.disable("dire_rapids")
 
         # Internal state
         self._data = None
@@ -554,3 +554,124 @@ class DiRePyTorch(TransformerMixin):
         fig.update_traces(marker={'size': point_size})
 
         return fig
+
+
+def create_dire(backend='auto', memory_efficient=False, **kwargs):
+    """
+    Create DiRe instance with appropriate backend.
+    
+    Args:
+        backend: Backend selection strategy
+            - 'auto': Automatically select best available backend
+            - 'cuvs': Force RAPIDS cuVS backend (requires RAPIDS)
+            - 'pytorch': Force PyTorch backend
+            - 'pytorch_gpu': Force PyTorch with GPU
+            - 'pytorch_cpu': Force PyTorch with CPU
+        memory_efficient: If True, use memory-efficient PyTorch implementation
+        **kwargs: Parameters passed to the DiRe constructor
+    
+    Returns:
+        DiRe instance with selected backend
+        
+    Examples:
+        >>> # Auto-select best backend
+        >>> reducer = create_dire()
+        
+        >>> # Force memory-efficient mode
+        >>> reducer = create_dire(memory_efficient=True)
+        
+        >>> # Force CPU-only PyTorch
+        >>> reducer = create_dire(backend='pytorch_cpu')
+    """
+    # Handle verbose parameter early to disable logging if needed
+    verbose = kwargs.get('verbose', True)
+    
+    # Import here to avoid circular imports
+    try:
+        from .dire_cuvs import DiReCuVS
+        CUVS_AVAILABLE = True
+    except ImportError:
+        CUVS_AVAILABLE = False
+    
+    from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient
+    
+    if backend == 'auto':
+        # Auto-select best backend based on availability
+        if CUVS_AVAILABLE and torch.cuda.is_available():
+            if verbose:
+                logger.info("Auto-selected RAPIDS cuVS backend (GPU acceleration)")
+            return DiReCuVS(use_cuvs=True, **kwargs)
+        
+        if torch.cuda.is_available():
+            if memory_efficient:
+                if verbose:
+                    logger.info("Auto-selected memory-efficient PyTorch backend (GPU)")
+                return DiRePyTorchMemoryEfficient(**kwargs)
+            else:
+                if verbose:
+                    logger.info("Auto-selected PyTorch backend (GPU)")
+                return DiRePyTorch(**kwargs)
+        
+        # CPU fallback
+        if verbose:
+            logger.info("Auto-selected PyTorch backend (CPU)")
+        if memory_efficient:
+            if verbose:
+                logger.warning("Memory-efficient mode has limited benefits on CPU")
+            return DiRePyTorchMemoryEfficient(**kwargs)
+        return DiRePyTorch(**kwargs)
+    
+    elif backend == 'cuvs':
+        if not CUVS_AVAILABLE:
+            raise RuntimeError(
+                "cuVS backend requested but RAPIDS not installed. "
+                "Install with: conda install -c rapidsai rapids"
+            )
+        if not torch.cuda.is_available():
+            raise RuntimeError("cuVS backend requires CUDA GPU")
+        if verbose:
+            logger.info("Using RAPIDS cuVS backend")
+        return DiReCuVS(use_cuvs=True, **kwargs)
+    
+    elif backend == 'pytorch':
+        # Use PyTorch with auto device selection
+        if memory_efficient:
+            if verbose:
+                logger.info(f"Using memory-efficient PyTorch backend")
+            return DiRePyTorchMemoryEfficient(**kwargs)
+        else:
+            if verbose:
+                logger.info(f"Using PyTorch backend")
+            return DiRePyTorch(**kwargs)
+    
+    elif backend == 'pytorch_gpu':
+        if not torch.cuda.is_available():
+            raise RuntimeError("GPU requested but CUDA not available")
+        if memory_efficient:
+            if verbose:
+                logger.info("Using memory-efficient PyTorch backend (GPU)")
+            return DiRePyTorchMemoryEfficient(**kwargs)
+        else:
+            if verbose:
+                logger.info("Using PyTorch backend (GPU)")
+            return DiRePyTorch(**kwargs)
+    
+    elif backend == 'pytorch_cpu':
+        # Force CPU even if GPU is available
+        if verbose:
+            logger.info("Using PyTorch backend (forced CPU)")
+        if memory_efficient:
+            if verbose:
+                logger.warning("Memory-efficient mode has limited benefits on CPU")
+            # Create instance and force CPU
+            reducer = DiRePyTorchMemoryEfficient(**kwargs)
+        else:
+            reducer = DiRePyTorch(**kwargs)
+        reducer.device = torch.device('cpu')
+        return reducer
+    
+    else:
+        raise ValueError(
+            f"Unknown backend: {backend}. "
+            f"Choose from: 'auto', 'cuvs', 'pytorch', 'pytorch_gpu', 'pytorch_cpu'"
+        )

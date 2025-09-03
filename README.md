@@ -36,18 +36,38 @@ pip install -e .[rapids]
 ## Quick Start
 
 ```python
-from dire_rapids import DiRePyTorch
+from dire_rapids import DiRePyTorch, DiRePyTorchMemoryEfficient
 import numpy as np
 
 # Generate sample data
 X = np.random.randn(1000, 50).astype(np.float32)
 
-# Create and fit model
+# Standard PyTorch implementation
 model = DiRePyTorch(n_components=2, n_neighbors=15)
 X_embedded = model.fit_transform(X)
 
+# Memory-efficient version (recommended for large datasets)
+# Uses FP16, point-by-point forces, and aggressive memory management
+model_efficient = DiRePyTorchMemoryEfficient(
+    n_components=2, 
+    n_neighbors=15,
+    use_fp16=True,  # Use half precision for memory savings
+    memory_fraction=0.15  # Conservative GPU memory usage
+)
+X_embedded_efficient = model_efficient.fit_transform(X)
+
 print(X_embedded.shape)  # (1000, 2)
 ```
+
+### Available Backends
+
+- **DiRePyTorch**: Standard PyTorch implementation with adaptive chunking
+- **DiRePyTorchMemoryEfficient**: Memory-optimized version with:
+  - FP16 support for 2x memory savings
+  - Point-by-point force computation
+  - More aggressive memory management
+  - PyKeOps LazyTensors for efficient repulsion (when available)
+- **DiReCuVS** (optional): RAPIDS cuVS backend for massive-scale datasets
 
 ## Testing
 
