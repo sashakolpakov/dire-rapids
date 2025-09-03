@@ -1,8 +1,6 @@
-# dire-rapids
+# DiRe Rapids
 
-PyTorch and RAPIDS accelerated dimensionality reduction
-
-GPU-accelerated implementation of DiRe (Dimensionality Reduction) using PyTorch and optionally NVIDIA RAPIDS for massive-scale datasets.
+GPU-accelerated implementation of [DiRe](https://github.com/sashakolpakov/dire-jax) using PyTorch and optionally NVIDIA RAPIDS for massive-scale datasets.
 
 ## Installation
 
