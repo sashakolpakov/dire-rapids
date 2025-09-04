@@ -34,7 +34,7 @@ All examples require the base DiRe installation. Some examples have additional d
 ### Financial Examples
 ```bash
 # Install DiRe with PyTorch backend (recommended for these examples)
-pip install dire-jax[pytorch]
+pip install dire-rapids[pytorch]
 
 # Additional dependencies for financial examples
 pip install polygon-api-client plotly
