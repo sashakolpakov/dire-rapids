@@ -1,4 +1,4 @@
-# DIRE-JAX Benchmarking Documentation
+# DiRe-Rapids Benchmarking Documentation
 
 ## Overview
 
