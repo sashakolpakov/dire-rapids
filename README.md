@@ -79,9 +79,9 @@ pytest tests/ -v
 
 ## Requirements
 
-- Python 3.8-3.11
+- Python 3.8-3.12
 - PyTorch 2.0+
 - PyKeOps 2.1+
 - NumPy, SciPy, scikit-learn
-- (Optional) CUDA 11.x+ for GPU acceleration
+- (Optional) CUDA 12.x+ for GPU acceleration
 - (Optional) RAPIDS 23.08+ for cuVS backend
