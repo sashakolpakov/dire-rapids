@@ -6,8 +6,7 @@ This directory contains comprehensive benchmarking results and performance analy
 
 ## Key Achievements
 
-Through systematic optimization, we improved performance by 10-200x over the original implementation:
-- Original: Timeout at 50,000 points
+**High throughput for large datasets:**
 - Optimized PyTorch: 500,000 points in <30 seconds (1000D)
 - cuVS Backend: 1,500,000+ points with <500MB GPU memory (1000D)
 
@@ -17,14 +16,12 @@ Through systematic optimization, we improved performance by 10-200x over the ori
 
 **Strengths:**
 - Excellent for small to medium datasets (<100K points)
-- Exact k-NN computation with 100% accuracy
+- Exact k-NN computation with PyKeOps
 - Efficient tensor operations using GPU tensor cores
-- FP16 support provides 2-14x speedup and 2x memory reduction
 
 **Limitations:**
-- O(N²) memory requirement for distance matrix
-- Maximum ~500K points in 1000D on 80GB GPU
-- Performance degrades significantly beyond 250K points
+- Exact k-NN needs $O(N^2)$ memory
+- Force layout memory overflow for large datasets
 
 **Performance (1000D, H100 GPU):**
 | Points | Time | Throughput | Memory | Status |
@@ -46,7 +43,6 @@ Through systematic optimization, we improved performance by 10-200x over the ori
 **Limitations:**
 - ~5% accuracy tradeoff (95% recall vs exact k-NN)
 - Index building overhead for small datasets
-- 2-5x slower than PyTorch for <100K points
 
 **Performance (1000D, H100 GPU):**
 | Points | Time | Memory | Throughput | Index Type |
@@ -180,27 +176,10 @@ Profiles the complete DIRE pipeline:
 - Memory allocation patterns
 - GPU utilization metrics
 
-## Future Work
-
-1. **Algorithm Improvements:**
-   - Integrate FAISS for additional approximate k-NN options
-   - Implement progressive k-NN refinement
-   - Add support for streaming/online updates
-
-2. **Hardware Optimization:**
-   - Multi-GPU support for datasets >10M points
-   - FP8 support for 2x additional speedup on H100
-   - CPU fallback for memory-constrained scenarios
-
-3. **Benchmarking:**
-   - Comparison with UMAP/t-SNE on standard datasets
-   - Real-world embedding data (BERT, GPT embeddings)
-   - Scaling studies on cloud GPU clusters
-
 ## Summary
 
 The benchmarking results demonstrate that DIRE-JAX can efficiently handle high-dimensional data at scale through:
-- Intelligent backend selection (PyTorch vs cuVS)
+- Intelligent backend selection (PyTorch + cuVS + memory efficient)
 - Memory-aware processing with automatic fallbacks
 - FP16 optimization for modern GPUs
 - Approximate k-NN for massive datasets
