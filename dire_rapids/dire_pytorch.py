@@ -95,7 +95,6 @@ class DiRePyTorch(TransformerMixin):
             # Add handler that outputs to stderr with formatting
             self.logger.add(
                 sys.stderr,
-                format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
                 level="INFO"
             )
         else:
