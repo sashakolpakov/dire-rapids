@@ -58,7 +58,7 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         use_fp16=True,  # Enable FP16 by default for memory efficiency
         use_pykeops_repulsion=True,  # Use PyKeOps for repulsion when possible
         pykeops_threshold=50000,     # Max points for PyKeOps all-pairs
-        memory_fraction=0.15,         # More conservative memory usage (15% vs 30%)
+        memory_fraction=0.25,
     ):
         """Initialize with memory-efficient defaults."""
         
@@ -327,15 +327,13 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         
         # Log initial memory usage
         if self.device.type == 'cuda':
-            mem_allocated = torch.cuda.memory_allocated() / 1e9
             mem_reserved = torch.cuda.memory_reserved() / 1e9
             mem_total = torch.cuda.get_device_properties(0).total_memory / 1e9
-            self.logger.info(f"Initial GPU memory: {mem_allocated:.2f}GB allocated, {mem_reserved:.2f}GB reserved / {mem_total:.1f}GB total")
+            self.logger.info(f"Initial GPU memory: {mem_reserved:.2f}GB used / {mem_total:.1f}GB total")
         
         for iteration in range(self.max_iter_layout):
             # Monitor memory before computation
             if self.device.type == 'cuda' and iteration % 20 == 0:
-                mem_before = torch.cuda.memory_allocated() / 1e9
                 mem_available = torch.cuda.mem_get_info()[0] / 1e9
                 
                 # Warn if memory usage is getting high
@@ -353,11 +351,10 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
                 if self.verbose and iteration % 20 == 0:
                     force_mag = torch.norm(forces, dim=1).mean().item()
                     if self.device.type == 'cuda':
-                        mem_allocated = torch.cuda.memory_allocated() / 1e9
                         mem_reserved = torch.cuda.memory_reserved() / 1e9
                         mem_available = torch.cuda.mem_get_info()[0] / 1e9
                         self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}, avg force: {force_mag:.6f}, "
-                                       f"GPU memory: {mem_allocated:.1f}GB allocated, {mem_reserved:.1f}GB reserved, {mem_available:.1f}GB free")
+                                       f"GPU memory: {mem_reserved:.1f}GB used, {mem_available:.1f}GB free")
                     else:
                         self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}, avg force: {force_mag:.6f}")
                 
