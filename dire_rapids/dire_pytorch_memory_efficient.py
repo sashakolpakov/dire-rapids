@@ -327,9 +327,10 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         
         # Log initial memory usage
         if self.device.type == 'cuda':
-            mem_used = torch.cuda.memory_allocated() / 1e9
+            mem_allocated = torch.cuda.memory_allocated() / 1e9
+            mem_reserved = torch.cuda.memory_reserved() / 1e9
             mem_total = torch.cuda.get_device_properties(0).total_memory / 1e9
-            self.logger.info(f"Initial GPU memory: {mem_used:.2f}/{mem_total:.1f} GB")
+            self.logger.info(f"Initial GPU memory: {mem_allocated:.2f}GB allocated, {mem_reserved:.2f}GB reserved / {mem_total:.1f}GB total")
         
         for iteration in range(self.max_iter_layout):
             # Monitor memory before computation
@@ -352,10 +353,11 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
                 if self.verbose and iteration % 20 == 0:
                     force_mag = torch.norm(forces, dim=1).mean().item()
                     if self.device.type == 'cuda':
-                        mem_used = torch.cuda.memory_allocated() / 1e9
+                        mem_allocated = torch.cuda.memory_allocated() / 1e9
+                        mem_reserved = torch.cuda.memory_reserved() / 1e9
                         mem_available = torch.cuda.mem_get_info()[0] / 1e9
                         self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}, avg force: {force_mag:.6f}, "
-                                       f"GPU memory: {mem_used:.1f}GB used, {mem_available:.1f}GB free")
+                                       f"GPU memory: {mem_allocated:.1f}GB allocated, {mem_reserved:.1f}GB reserved, {mem_available:.1f}GB free")
                     else:
                         self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}, avg force: {force_mag:.6f}")
                 
