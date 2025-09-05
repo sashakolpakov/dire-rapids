@@ -17,6 +17,7 @@ Performance characteristics:
 """
 
 import gc
+import sys
 
 import numpy as np
 import pandas as pd
@@ -85,10 +86,21 @@ class DiRePyTorch(TransformerMixin):
         self.random_state = random_state if random_state is not None else np.random.randint(0, 2 ** 32)
         self.use_exact_repulsion = use_exact_repulsion
 
-        # Setup logger
-        self.logger = logger
-        if not verbose:
-            self.logger.disable("dire_rapids")
+        # Setup instance-specific logger
+        # Create a completely new logger instance for this DiRe object
+        self.logger = logger.bind(dire_instance=id(self))
+        self.logger.remove()  # Remove all existing handlers
+        
+        if verbose:
+            # Add handler that outputs to stderr with formatting
+            self.logger.add(
+                sys.stderr,
+                format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+                level="INFO"
+            )
+        else:
+            # Add null handler that discards all messages
+            self.logger.add(lambda msg: None, level="TRACE")
 
         # Internal state
         self._data = None
