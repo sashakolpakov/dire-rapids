@@ -40,18 +40,92 @@ except ImportError:
 
 class DiRePyTorch(TransformerMixin):
     """
-    Memory-efficient PyTorch/PyKeOps implementation of DiRe.
+    Memory-efficient PyTorch/PyKeOps implementation of DiRe dimensionality reduction.
     
-    Features adaptive memory management for large datasets:
+    This class provides a high-performance implementation of the DiRe algorithm using PyTorch
+    as the computational backend. It features adaptive memory management for large datasets
+    and automatic GPU optimization.
+    
+    Features
+    --------
     - Chunked k-NN computation prevents GPU out-of-memory errors
-    - Memory-aware force computation with automatic chunk sizing  
+    - Memory-aware force computation with automatic chunk sizing
     - Attraction forces between k-NN neighbors only
     - Repulsion forces from random sampling for efficiency
+    - Automatic FP16 optimization for memory and speed
+    - Optional PyKeOps integration for low-dimensional data
     
-    Best suited for:
+    Best suited for
+    ---------------
     - Large datasets (>50K points) on CUDA GPUs
     - Production environments requiring reliable memory usage
     - High-performance dimensionality reduction workflows
+    
+    Parameters
+    ----------
+    n_components : int, default=2
+        Number of dimensions in the target embedding space.
+    n_neighbors : int, default=16
+        Number of nearest neighbors to use for attraction forces.
+    init : {'pca', 'random'}, default='pca'
+        Method for initializing the embedding. 'pca' uses PCA initialization,
+        'random' uses random projection.
+    max_iter_layout : int, default=128
+        Maximum number of optimization iterations.
+    min_dist : float, default=1e-2
+        Minimum distance between points in the embedding.
+    spread : float, default=1.0
+        Controls how tightly points are packed in the embedding.
+    cutoff : float, default=42.0
+        Distance cutoff for repulsion forces.
+    n_sample_dirs : int, default=8
+        Number of sampling directions (used by derived classes).
+    sample_size : int, default=16
+        Size of samples for force computation (used by derived classes).
+    neg_ratio : int, default=8
+        Ratio of negative samples to positive samples for repulsion.
+    verbose : bool, default=True
+        Whether to print progress information.
+    random_state : int or None, default=None
+        Random seed for reproducible results.
+    use_exact_repulsion : bool, default=False
+        If True, use exact all-pairs repulsion (memory intensive, for testing only).
+        
+    Attributes
+    ----------
+    device : torch.device
+        The PyTorch device being used (CPU or CUDA).
+    logger : loguru.Logger
+        Instance-specific logger for this reducer.
+        
+    Examples
+    --------
+    Basic usage::
+    
+        from dire_rapids import DiRePyTorch
+        import numpy as np
+        
+        # Create sample data
+        X = np.random.randn(10000, 100)
+        
+        # Create and fit reducer
+        reducer = DiRePyTorch(n_neighbors=32, verbose=True)
+        embedding = reducer.fit_transform(X)
+        
+        # Visualize results
+        fig = reducer.visualize()
+        fig.show()
+    
+    With custom parameters::
+    
+        reducer = DiRePyTorch(
+            n_components=3,
+            n_neighbors=50,
+            max_iter_layout=200,
+            min_dist=0.1,
+            random_state=42
+        )
+        embedding = reducer.fit_transform(X)
     """
 
     def __init__(
@@ -70,7 +144,38 @@ class DiRePyTorch(TransformerMixin):
             random_state=None,
             use_exact_repulsion=False,  # If True, use all-pairs repulsion (for testing)
     ):
-        """Initialize with parameters matching original DiRe."""
+        """
+        Initialize DiRePyTorch reducer with specified parameters.
+        
+        Parameters
+        ----------
+        n_components : int, default=2
+            Number of dimensions in the target embedding space.
+        n_neighbors : int, default=16
+            Number of nearest neighbors to use for attraction forces.
+        init : {'pca', 'random'}, default='pca'
+            Method for initializing the embedding.
+        max_iter_layout : int, default=128
+            Maximum number of optimization iterations.
+        min_dist : float, default=1e-2
+            Minimum distance between points in the embedding.
+        spread : float, default=1.0
+            Controls how tightly points are packed in the embedding.
+        cutoff : float, default=42.0
+            Distance cutoff for repulsion forces.
+        n_sample_dirs : int, default=8
+            Number of sampling directions (reserved for future use).
+        sample_size : int, default=16
+            Size of samples for force computation (reserved for future use).
+        neg_ratio : int, default=8
+            Ratio of negative samples to positive samples for repulsion.
+        verbose : bool, default=True
+            Whether to print progress information.
+        random_state : int or None, default=None
+            Random seed for reproducible results.
+        use_exact_repulsion : bool, default=False
+            If True, use exact all-pairs repulsion (memory intensive, testing only).
+        """
 
         self.n_components = n_components
         self.n_neighbors = n_neighbors
@@ -118,7 +223,22 @@ class DiRePyTorch(TransformerMixin):
             self.logger.warning("CUDA not available, using CPU")
 
     def _find_ab_params(self):
-        """Find a and b parameters for the distribution kernel."""
+        """
+        Find optimal a and b parameters for the distribution kernel.
+        
+        This private method fits a curve to determine the optimal parameters for the
+        probability kernel used in force calculations. The parameters control the
+        shape of the attraction/repulsion curve.
+        
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        The kernel function is: 1 / (1 + a * x^(2*b))
+        
+        Side Effects
+        ------------
+        Sets self._a and self._b attributes with the fitted parameters.
+        """
 
         def curve(x, a, b):
             return 1.0 / (1.0 + a * x ** (2 * b))
@@ -136,13 +256,34 @@ class DiRePyTorch(TransformerMixin):
     def _compute_knn(self, X, chunk_size=None, use_fp16=None):  # pylint: disable=too-many-branches
         """
         Compute k-nearest neighbors with memory-efficient chunking.
-        Intelligently chooses between PyKeOps and PyTorch based on dimensionality.
         
-        Args:
-            X: Input data
-            chunk_size: Size of chunks for processing
-            use_fp16: Use FP16 for k-NN computation (auto-detect if None)
-                     FP16 gives 2x memory savings and 2-14x speedup!
+        This private method computes the k-nearest neighbors graph using either PyTorch
+        or PyKeOps backends. It intelligently selects the optimal backend based on
+        data dimensionality and automatically manages memory through chunking.
+        
+        Parameters
+        ----------
+        X : numpy.ndarray
+            Input data of shape (n_samples, n_features).
+        chunk_size : int, optional
+            Size of chunks for processing. If None, automatically determined based
+            on available memory.
+        use_fp16 : bool, optional
+            Use FP16 precision for computation. If None, automatically determined
+            based on data size and GPU capabilities. FP16 provides 2x memory savings
+            and 2-14x speedup on modern GPUs.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        
+        Backend Selection:
+        - PyTorch: Used for high-dimensional data (>= 200D) or when PyKeOps unavailable
+        - PyKeOps: Used for low-dimensional data (< 200D) on GPU for better performance
+        
+        Side Effects
+        ------------
+        Sets self._knn_indices and self._knn_distances with computed k-NN graph.
         """
         n_samples = X.shape[0]
         n_dims = X.shape[1]
@@ -254,7 +395,29 @@ class DiRePyTorch(TransformerMixin):
         self.logger.info(f"k-NN graph computed: shape {self._knn_indices.shape}")
 
     def _initialize_embedding(self, X):
-        """Initialize the embedding using PCA or random."""
+        """
+        Initialize the low-dimensional embedding.
+        
+        This private method creates the initial embedding using either PCA or random
+        projection, then normalizes the result.
+        
+        Parameters
+        ----------
+        X : numpy.ndarray
+            Input high-dimensional data of shape (n_samples, n_features).
+            
+        Returns
+        -------
+        torch.Tensor
+            Initial embedding of shape (n_samples, n_components) on the target device.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        
+        The embedding is normalized to have zero mean and unit standard deviation
+        along each dimension.
+        """
 
         if self.init == 'pca':
             self.logger.info("Initializing with PCA")
@@ -279,9 +442,39 @@ class DiRePyTorch(TransformerMixin):
 
     def _compute_forces(self, positions, iteration, max_iterations, chunk_size=5000):  # pylint: disable=too-many-branches,too-many-locals
         """
-        Memory-efficient force computation with chunked processing:
-        - Attraction: only between k-NN neighbors
-        - Repulsion: random sampling
+        Compute attraction and repulsion forces for layout optimization.
+        
+        This private method computes forces between points in the embedding space
+        using a memory-efficient chunked approach. Attraction forces are computed
+        only between k-nearest neighbors, while repulsion forces use random sampling.
+        
+        Parameters
+        ----------
+        positions : torch.Tensor
+            Current positions of points in embedding space, shape (n_samples, n_components).
+        iteration : int
+            Current iteration number (0-indexed).
+        max_iterations : int
+            Total number of iterations planned.
+        chunk_size : int, default=5000
+            Maximum chunk size for memory-efficient processing.
+            
+        Returns
+        -------
+        torch.Tensor
+            Computed forces of shape (n_samples, n_components).
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by _optimize_layout().
+        
+        Force Computation:
+        - **Attraction forces**: Applied only between k-nearest neighbors using
+          the kernel function 1 / (1 + a * (1/d)^(2*b))
+        - **Repulsion forces**: Applied between randomly sampled pairs using
+          the kernel function -1 / (1 + a * d^(2*b)) with exponential cutoff
+        - **Cooling**: Forces are scaled by (1 - iteration/max_iterations)
+        - **Clipping**: Forces are clipped to [-cutoff, cutoff] range
         """
         # PyKeOps is optional - we can use pure PyTorch
         # if not PYKEOPS_AVAILABLE:
@@ -459,7 +652,28 @@ class DiRePyTorch(TransformerMixin):
 
     def _optimize_layout(self, initial_positions):
         """
-        Main optimization loop using force computation.
+        Optimize the embedding layout using iterative force computation.
+        
+        This private method performs the main optimization loop, iteratively
+        computing and applying forces to refine the embedding layout.
+        
+        Parameters
+        ----------
+        initial_positions : torch.Tensor
+            Initial embedding positions of shape (n_samples, n_components).
+            
+        Returns
+        -------
+        torch.Tensor
+            Optimized final positions of shape (n_samples, n_components),
+            normalized to zero mean and unit standard deviation.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        
+        The optimization uses a simple force-directed layout algorithm with
+        linear cooling schedule.
         """
         positions = initial_positions.clone()
 
@@ -484,7 +698,37 @@ class DiRePyTorch(TransformerMixin):
 
     def fit_transform(self, X, y=None):  # pylint: disable=unused-argument,arguments-differ
         """
-        Fit the model and transform data (API compatible with JAX backend).
+        Fit the DiRe model and transform data to low-dimensional embedding.
+        
+        This method performs the complete dimensionality reduction pipeline:
+        1. Computes k-nearest neighbors graph
+        2. Fits kernel parameters
+        3. Initializes embedding with PCA or random projection
+        4. Optimizes layout using force-directed algorithm
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            High-dimensional input data to transform.
+        y : array-like of shape (n_samples,), optional
+            Ignored. Present for scikit-learn API compatibility.
+            
+        Returns
+        -------
+        numpy.ndarray of shape (n_samples, n_components)
+            Low-dimensional embedding of the input data.
+            
+        Examples
+        --------
+        Transform high-dimensional data::
+        
+            import numpy as np
+            from dire_rapids import DiRePyTorch
+            
+            X = np.random.randn(1000, 100)
+            reducer = DiRePyTorch(n_neighbors=16)
+            embedding = reducer.fit_transform(X)
+            print(embedding.shape)  # (1000, 2)
         """
         # Store data
         self._data = np.asarray(X, dtype=np.float32)
@@ -516,25 +760,77 @@ class DiRePyTorch(TransformerMixin):
 
     def fit(self, X: np.ndarray, y=None):  # pylint: disable=unused-argument,arguments-differ
         """
-        Fit the model to data: create the kNN graph and fit the probability kernel to force layout parameters.
+        Fit the DiRe model to data without transforming.
+        
+        This method fits the model by computing the k-NN graph, kernel parameters,
+        and optimized embedding, but primarily serves for scikit-learn compatibility.
+        For practical use, fit_transform() is recommended.
 
         Parameters
         ----------
-        X: (numpy.ndarray)
-            High-dimensional data to fit the model. Shape (n_samples, n_features).
-        y: None
-            Ignored, exists for sklearn compatibility.
+        X : numpy.ndarray of shape (n_samples, n_features)
+            High-dimensional data to fit the model to.
+        y : array-like of shape (n_samples,), optional
+            Ignored. Present for scikit-learn API compatibility.
 
         Returns
         -------
-        self: The DiRe instance fitted to data.
+        self : DiRePyTorch
+            The fitted DiRe instance.
+            
+        Notes
+        -----
+        This method calls fit_transform() internally. The embedding result
+        is stored in self._layout and can be accessed after fitting.
         """
         self.fit_transform(X, y)
         return self
 
     def visualize(self, labels=None, point_size=2, title=None, **kwargs):
         """
-        Visualize the embedding (API compatible).
+        Create an interactive visualization of the embedding.
+        
+        This method creates a 2D or 3D scatter plot of the embedding using Plotly,
+        with optional color coding by labels.
+        
+        Parameters
+        ----------
+        labels : array-like of shape (n_samples,), optional
+            Labels for coloring points in the visualization.
+        point_size : int, default=2
+            Size of points in the scatter plot.
+        title : str, optional
+            Title for the plot. If None, a default title is generated.
+        **kwargs : dict
+            Additional keyword arguments passed to plotly.express plotting functions.
+            
+        Returns
+        -------
+        plotly.graph_objects.Figure or None
+            Interactive Plotly figure, or None if no embedding is available.
+            
+        Examples
+        --------
+        Basic visualization::
+        
+            fig = reducer.visualize()
+            fig.show()
+            
+        With labels and custom styling::
+        
+            fig = reducer.visualize(
+                labels=y, 
+                point_size=3, 
+                title="My Embedding",
+                width=800, 
+                height=600
+            )
+            fig.show()
+            
+        Notes
+        -----
+        Requires a fitted model with available embedding (self._layout).
+        Only supports 2D and 3D visualizations.
         """
         if self._layout is None:
             self.logger.warning("No layout available for visualization")
@@ -575,30 +871,82 @@ class DiRePyTorch(TransformerMixin):
 
 def create_dire(backend='auto', memory_efficient=False, **kwargs):
     """
-    Create DiRe instance with appropriate backend.
+    Create DiRe instance with automatic backend selection.
     
-    Args:
-        backend: Backend selection strategy
-            - 'auto': Automatically select best available backend
-            - 'cuvs': Force RAPIDS cuVS backend (requires RAPIDS)
-            - 'pytorch': Force PyTorch backend
-            - 'pytorch_gpu': Force PyTorch with GPU
-            - 'pytorch_cpu': Force PyTorch with CPU
-        memory_efficient: If True, use memory-efficient PyTorch implementation
-        **kwargs: Parameters passed to the DiRe constructor
+    This factory function automatically selects the optimal DiRe implementation
+    based on available hardware and software, or allows manual backend selection.
+    It provides a convenient interface for creating DiRe instances without
+    importing specific backend classes.
     
-    Returns:
-        DiRe instance with selected backend
+    Parameters
+    ----------
+    backend : {'auto', 'cuvs', 'pytorch', 'pytorch_gpu', 'pytorch_cpu'}, default='auto'
+        Backend selection strategy:
         
-    Examples:
-        >>> # Auto-select best backend
-        >>> reducer = create_dire()
+        - 'auto': Automatically select best available backend based on hardware
+        - 'cuvs': Force RAPIDS cuVS backend (requires RAPIDS installation)
+        - 'pytorch': Force PyTorch backend with automatic device selection
+        - 'pytorch_gpu': Force PyTorch backend on GPU (requires CUDA)
+        - 'pytorch_cpu': Force PyTorch backend on CPU only
         
-        >>> # Force memory-efficient mode
-        >>> reducer = create_dire(memory_efficient=True)
+    memory_efficient : bool, default=False
+        If True, use memory-efficient PyTorch implementation which provides:
         
-        >>> # Force CPU-only PyTorch
-        >>> reducer = create_dire(backend='pytorch_cpu')
+        - Reduced memory usage for large datasets
+        - FP16 support for additional memory savings
+        - Enhanced chunking strategies
+        - More aggressive memory cleanup
+        
+    **kwargs : dict
+        Additional keyword arguments passed to the DiRe constructor.
+        See individual backend documentation for available parameters.
+    
+    Returns
+    -------
+    DiRe instance
+        An instance of the selected DiRe backend (DiRePyTorch, DiRePyTorchMemoryEfficient,
+        or DiReCuVS) configured with the specified parameters.
+        
+    Raises
+    ------
+    RuntimeError
+        If a specific backend is requested but requirements are not met
+        (e.g., requesting cuVS without RAPIDS, or GPU without CUDA).
+    ValueError
+        If an unknown backend name is specified.
+        
+    Examples
+    --------
+    Auto-select optimal backend::\n    
+        from dire_rapids import create_dire
+        
+        # Will use cuVS if available, otherwise PyTorch with GPU if available
+        reducer = create_dire(n_neighbors=32, verbose=True)
+        embedding = reducer.fit_transform(X)
+        
+    Force memory-efficient mode for large datasets::\n    
+        reducer = create_dire(
+            memory_efficient=True,
+            n_neighbors=50,
+            max_iter_layout=200
+        )
+        
+    Force specific backend::\n    
+        # CPU-only processing
+        reducer = create_dire(backend='pytorch_cpu')
+        
+        # GPU processing with cuVS acceleration
+        reducer = create_dire(backend='cuvs', use_cuvs=True)
+        
+    Notes
+    -----
+    Backend Selection Priority (when backend='auto'):
+    1. RAPIDS cuVS (if available and CUDA GPU present)
+    2. PyTorch with CUDA (if CUDA GPU available)  
+    3. PyTorch with CPU (fallback)
+    
+    The function automatically handles import errors and missing dependencies,
+    falling back to available alternatives when possible.
     """
     # Handle verbose parameter early to disable logging if needed
     verbose = kwargs.get('verbose', True)

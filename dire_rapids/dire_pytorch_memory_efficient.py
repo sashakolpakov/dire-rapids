@@ -30,14 +30,91 @@ except ImportError:
 
 class DiRePyTorchMemoryEfficient(DiRePyTorch):
     """
-    Memory-efficient PyTorch/PyKeOps implementation that inherits from DiRePyTorch.
+    Memory-optimized PyTorch implementation of DiRe for large-scale datasets.
     
-    Key improvements over base class:
-    - FP16 support by default for k-NN computation
-    - Point-by-point attraction force computation
-    - More aggressive GPU memory management
-    - Optional PyKeOps LazyTensors for exact repulsion
-    - Dynamic memory-aware chunk sizing
+    This class extends DiRePyTorch with enhanced memory management capabilities,
+    making it suitable for processing very large datasets that would otherwise
+    cause out-of-memory errors with the standard implementation.
+    
+    Key Improvements over DiRePyTorch
+    ---------------------------------
+    - **FP16 Support**: Uses half-precision by default for 2x memory reduction
+    - **Dynamic Chunking**: Automatically adjusts chunk sizes based on available memory
+    - **Aggressive Cleanup**: More frequent garbage collection and cache clearing
+    - **PyKeOps Integration**: Optional LazyTensors for memory-efficient exact repulsion
+    - **Memory Monitoring**: Real-time memory usage tracking and warnings
+    - **Point-wise Processing**: Falls back to point-by-point computation when needed
+    
+    Best Use Cases
+    --------------
+    - Datasets with >100K points
+    - High-dimensional data (>500 features) 
+    - Memory-constrained environments
+    - Production systems requiring reliable memory usage
+    
+    Parameters
+    ----------
+    n_components : int, default=2
+        Number of dimensions in the target embedding space.
+    n_neighbors : int, default=16
+        Number of nearest neighbors to use for attraction forces.
+    init : {'pca', 'random'}, default='pca'
+        Method for initializing the embedding.
+    max_iter_layout : int, default=128
+        Maximum number of optimization iterations.
+    min_dist : float, default=1e-2
+        Minimum distance between points in the embedding.
+    spread : float, default=1.0
+        Controls how tightly points are packed in the embedding.
+    cutoff : float, default=42.0
+        Distance cutoff for repulsion forces.
+    n_sample_dirs : int, default=8
+        Number of sampling directions (reserved for future use).
+    sample_size : int, default=16
+        Size of samples for force computation (reserved for future use).
+    neg_ratio : int, default=8
+        Ratio of negative samples to positive samples for repulsion.
+    verbose : bool, default=True
+        Whether to print progress information.
+    random_state : int or None, default=None
+        Random seed for reproducible results.
+    use_exact_repulsion : bool, default=False
+        If True, use exact all-pairs repulsion (memory intensive).
+    use_fp16 : bool, default=True
+        Enable FP16 precision for memory efficiency (recommended).
+    use_pykeops_repulsion : bool, default=True
+        Use PyKeOps LazyTensors for repulsion when beneficial.
+    pykeops_threshold : int, default=50000
+        Maximum dataset size for PyKeOps all-pairs computation.
+    memory_fraction : float, default=0.25
+        Fraction of available memory to use for computations.
+        
+    Examples
+    --------
+    Memory-efficient processing of large dataset::
+    
+        from dire_rapids import DiRePyTorchMemoryEfficient
+        import numpy as np
+        
+        # Large dataset
+        X = np.random.randn(500000, 512)
+        
+        # Memory-efficient reducer
+        reducer = DiRePyTorchMemoryEfficient(
+            use_fp16=True,
+            memory_fraction=0.3,
+            verbose=True
+        )
+        
+        embedding = reducer.fit_transform(X)
+        
+    Custom memory settings::
+    
+        reducer = DiRePyTorchMemoryEfficient(
+            use_pykeops_repulsion=False,  # Disable PyKeOps
+            memory_fraction=0.15,         # Use less memory
+            pykeops_threshold=20000       # Lower PyKeOps threshold
+        )
     """
     
     def __init__(
@@ -60,7 +137,50 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         pykeops_threshold=50000,     # Max points for PyKeOps all-pairs
         memory_fraction=0.25,
     ):
-        """Initialize with memory-efficient defaults."""
+        """
+        Initialize memory-efficient DiRe reducer.
+        
+        Parameters
+        ----------
+        n_components : int, default=2
+            Number of dimensions in the target embedding space.
+        n_neighbors : int, default=16
+            Number of nearest neighbors to use for attraction forces.
+        init : {'pca', 'random'}, default='pca'
+            Method for initializing the embedding.
+        max_iter_layout : int, default=128
+            Maximum number of optimization iterations.
+        min_dist : float, default=1e-2
+            Minimum distance between points in the embedding.
+        spread : float, default=1.0
+            Controls how tightly points are packed in the embedding.
+        cutoff : float, default=42.0
+            Distance cutoff for repulsion forces.
+        n_sample_dirs : int, default=8
+            Number of sampling directions (reserved for future use).
+        sample_size : int, default=16
+            Size of samples for force computation (reserved for future use).
+        neg_ratio : int, default=8
+            Ratio of negative samples to positive samples for repulsion.
+        verbose : bool, default=True
+            Whether to print progress information.
+        random_state : int or None, default=None
+            Random seed for reproducible results.
+        use_exact_repulsion : bool, default=False
+            If True, use exact all-pairs repulsion (memory intensive).
+        use_fp16 : bool, default=True
+            Enable FP16 precision for memory efficiency. Provides 2x memory
+            reduction and significant speed improvements on modern GPUs.
+        use_pykeops_repulsion : bool, default=True
+            Use PyKeOps LazyTensors for memory-efficient repulsion computation
+            when dataset size is below pykeops_threshold.
+        pykeops_threshold : int, default=50000
+            Maximum dataset size for PyKeOps all-pairs computation.
+            Above this threshold, random sampling is used instead.
+        memory_fraction : float, default=0.25
+            Fraction of available memory to use for computations.
+            Lower values are more conservative but may be slower.
+        """
         
         # Call parent constructor
         super().__init__(
@@ -94,7 +214,24 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
                 self.logger.info(f"PyKeOps repulsion enabled (threshold: {self.pykeops_threshold} points)")
     
     def _get_available_memory(self):
-        """Get available GPU/CPU memory in bytes."""
+        """
+        Get available system memory in bytes.
+        
+        Private method that queries the available memory on the current device
+        (GPU or CPU) to inform memory-aware chunk sizing decisions.
+        
+        Returns
+        -------
+        int
+            Available memory in bytes.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by _compute_optimal_chunk_size().
+        
+        For CUDA devices, returns free GPU memory.
+        For CPU, returns available system RAM.
+        """
         if self.device.type == 'cuda':
             return torch.cuda.mem_get_info()[0]  # Free memory
         else:
@@ -104,7 +241,36 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
     def _compute_optimal_chunk_size(self, n_samples, n_features, operation_type="knn", dtype=torch.float32):
         """
         Compute optimal chunk size based on available memory and operation type.
-        Uses the existing self.memory_fraction parameter.
+        
+        This private method dynamically calculates the optimal chunk size for different
+        operations based on available system memory, data characteristics, and the
+        configured memory fraction.
+        
+        Parameters
+        ----------
+        n_samples : int
+            Total number of samples in the dataset.
+        n_features : int
+            Number of features per sample.
+        operation_type : {'knn', 'repulsion', 'general'}, default='knn'
+            Type of operation to optimize for:
+            - 'knn': k-nearest neighbors computation
+            - 'repulsion': Repulsion force computation  
+            - 'general': General tensor operations
+        dtype : torch.dtype, default=torch.float32
+            Data type for memory calculations.
+            
+        Returns
+        -------
+        int
+            Optimal chunk size for the specified operation.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by _compute_knn() and _compute_forces().
+        
+        The chunk size is bounded between reasonable minimum and maximum values
+        to ensure both memory safety and computational efficiency.
         """
         available_memory = self._get_available_memory()
         usable_memory = available_memory * self.memory_fraction
@@ -140,7 +306,34 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
     
     def _compute_knn(self, X, chunk_size=None, use_fp16=None):
         """
-        Override k-NN computation with memory-aware chunk sizing and FP16 by default.
+        Compute k-nearest neighbors with enhanced memory management.
+        
+        This method overrides the parent implementation with memory-aware chunk
+        sizing, automatic FP16 selection, and aggressive memory cleanup.
+        
+        Parameters
+        ----------
+        X : numpy.ndarray
+            Input data of shape (n_samples, n_features).
+        chunk_size : int, optional
+            Size of chunks for processing. If None, automatically computed
+            based on available memory.
+        use_fp16 : bool, optional
+            Use FP16 precision. If None, automatically determined based on
+            data size and GPU capabilities.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        
+        Enhancements over parent method:
+        - Automatic FP16 selection for large/high-dimensional datasets
+        - Memory-aware chunk size computation
+        - More aggressive memory cleanup after processing
+        
+        Side Effects
+        ------------
+        Sets self._knn_indices and self._knn_distances with computed k-NN graph.
         """
         n_samples = X.shape[0]
         n_dims = X.shape[1]
@@ -175,8 +368,43 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
     
     def _compute_forces(self, positions, iteration, max_iterations, chunk_size=None):
         """
-        Override force computation with point-by-point processing for attraction
-        and optional PyKeOps for repulsion.
+        Compute forces with memory-efficient strategies and PyKeOps integration.
+        
+        This method overrides the parent force computation with enhanced memory
+        management, point-by-point fallback capabilities, and optional PyKeOps
+        LazyTensors for exact repulsion computation.
+        
+        Parameters
+        ----------
+        positions : torch.Tensor
+            Current positions of points in embedding space, shape (n_samples, n_components).
+        iteration : int
+            Current iteration number (0-indexed).
+        max_iterations : int
+            Total number of iterations planned.
+        chunk_size : int, optional
+            Maximum chunk size for processing. If None, automatically computed
+            based on available memory.
+            
+        Returns
+        -------
+        torch.Tensor
+            Computed forces of shape (n_samples, n_components).
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by _optimize_layout().
+        
+        Force Computation Strategy:
+        - **Attraction forces**: Vectorized computation with fallback to point-by-point
+        - **Repulsion forces**: Chooses between PyKeOps LazyTensors, exact computation,
+          or chunked random sampling based on dataset size and available memory
+        - **Memory management**: Aggressive cleanup of intermediate tensors
+        
+        Backend Selection for Repulsion:
+        - PyKeOps LazyTensors: For datasets < pykeops_threshold on GPU
+        - Exact computation: When use_exact_repulsion=True (testing only)
+        - Random sampling: For large datasets or memory-constrained environments
         """
         n_samples = positions.shape[0]
         forces = torch.zeros_like(positions)
@@ -319,7 +547,31 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
     
     def _optimize_layout(self, initial_positions):
         """
-        Override optimization with more frequent memory management.
+        Optimize embedding layout with enhanced memory monitoring and management.
+        
+        This method overrides the parent optimization loop with real-time memory
+        monitoring, more frequent cleanup, and detailed progress reporting.
+        
+        Parameters
+        ----------
+        initial_positions : torch.Tensor
+            Initial embedding positions of shape (n_samples, n_components).
+            
+        Returns
+        -------
+        torch.Tensor
+            Optimized final positions of shape (n_samples, n_components),
+            normalized to zero mean and unit standard deviation.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        
+        Enhancements over parent method:
+        - Real-time GPU memory monitoring and warnings
+        - More frequent cache clearing (every 10 iterations)
+        - Detailed memory usage reporting
+        - Low memory warnings when free GPU memory < 2GB
         """
         positions = initial_positions.clone()
         
@@ -370,7 +622,48 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
     
     def fit_transform(self, X, y=None):
         """
-        Override to add memory-efficient logging and cleanup.
+        Fit the model and transform data with memory-efficient processing.
+        
+        This method extends the parent implementation with memory-optimized data
+        handling, enhanced logging, and aggressive cleanup procedures.
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            High-dimensional input data to transform.
+        y : array-like of shape (n_samples,), optional
+            Ignored. Present for scikit-learn API compatibility.
+            
+        Returns
+        -------
+        numpy.ndarray of shape (n_samples, n_components)
+            Low-dimensional embedding of the input data.
+            
+        Notes
+        -----
+        Memory Optimizations:
+        - Automatic FP16 conversion for large datasets on GPU
+        - Strategic backend selection based on dataset characteristics
+        - Aggressive memory cleanup after processing
+        - Real-time memory monitoring and reporting
+        
+        Examples
+        --------
+        Process large dataset with memory monitoring::
+        
+            import numpy as np
+            from dire_rapids import DiRePyTorchMemoryEfficient
+            
+            # Large high-dimensional dataset
+            X = np.random.randn(200000, 1000)
+            
+            reducer = DiRePyTorchMemoryEfficient(
+                use_fp16=True,
+                memory_fraction=0.3,
+                verbose=True
+            )
+            
+            embedding = reducer.fit_transform(X)
         """
         # Store data with potential dtype conversion
         if self.use_fp16 and self.device.type == 'cuda':

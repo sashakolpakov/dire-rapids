@@ -42,15 +42,109 @@ except ImportError:
 
 class DiReCuVS(DiRePyTorch):
     """
-    DIRE implementation with optional cuVS backend for k-NN.
+    RAPIDS cuVS/cuML accelerated implementation of DiRe for massive datasets.
     
-    Advantages over PyTorch/PyKeOps:
-    - 10-100x faster k-NN for large datasets
-    - Handles 10M+ points efficiently
-    - Approximate k-NN with high recall (>95%)
-    - Multi-GPU support for extreme scale
+    This class extends DiRePyTorch with optional RAPIDS cuVS (CUDA Vector Search)
+    integration for GPU-accelerated k-nearest neighbors computation and cuML
+    integration for GPU-accelerated PCA initialization. It provides substantial
+    performance improvements for large-scale datasets.
     
-    Falls back to PyTorch backend if cuVS is not available.
+    Performance Advantages over PyTorch/PyKeOps
+    -------------------------------------------
+    - **10-100x faster k-NN**: For large datasets (>100K points)
+    - **Massive scale support**: Handles 10M+ points efficiently
+    - **High accuracy**: Approximate k-NN with >95% recall
+    - **Multi-GPU ready**: Supports extreme scale processing
+    - **GPU-accelerated PCA**: cuML PCA/SVD for initialization
+    
+    Automatic Fallback
+    ------------------
+    Falls back to PyTorch backend if cuVS is not available, ensuring
+    compatibility across different environments.
+    
+    Parameters
+    ----------
+    use_cuvs : bool or None, default=None
+        Whether to use cuVS for k-NN computation. If None, automatically
+        detected based on availability and hardware.
+    use_cuml : bool or None, default=None  
+        Whether to use cuML for PCA initialization. If None, automatically
+        detected based on availability and hardware.
+    cuvs_index_type : {'auto', 'ivf_flat', 'ivf_pq', 'cagra', 'flat'}, default='auto'
+        Type of cuVS index to build:
+        - 'auto': Automatically select based on data characteristics
+        - 'ivf_flat': Inverted file index without compression
+        - 'ivf_pq': Inverted file index with product quantization
+        - 'cagra': Graph-based index for very large datasets
+        - 'flat': Brute-force exact search
+    cuvs_build_params : dict, optional
+        Custom parameters for cuVS index building. Overrides defaults.
+    cuvs_search_params : dict, optional  
+        Custom parameters for cuVS search. Overrides defaults.
+    *args, **kwargs
+        Additional arguments passed to DiRePyTorch parent class.
+        
+    Attributes
+    ----------
+    use_cuvs : bool
+        Whether cuVS backend is enabled and available.
+    use_cuml : bool
+        Whether cuML backend is enabled and available.
+    cuvs_index : object or None
+        Built cuVS index for k-NN search.
+        
+    Examples
+    --------
+    Basic usage with automatic backend selection::
+    
+        from dire_rapids import DiReCuVS
+        import numpy as np
+        
+        # Large dataset
+        X = np.random.randn(100000, 512)
+        
+        # Auto-detect cuVS/cuML availability
+        reducer = DiReCuVS()
+        embedding = reducer.fit_transform(X)
+        
+    Force cuVS with custom index parameters::
+    
+        reducer = DiReCuVS(
+            use_cuvs=True,
+            cuvs_index_type='ivf_pq',
+            cuvs_build_params={'n_lists': 2048, 'pq_dim': 64}
+        )
+        
+    Massive dataset processing::
+    
+        # 10M points, 1000 dimensions
+        X = np.random.randn(10_000_000, 1000)
+        
+        reducer = DiReCuVS(
+            use_cuvs=True,
+            use_cuml=True,
+            cuvs_index_type='cagra',  # Best for very large datasets
+            n_neighbors=32
+        )
+        
+        embedding = reducer.fit_transform(X)
+        
+    Notes
+    -----
+    **Requirements:**
+    - RAPIDS cuVS: ``conda install -c rapidsai rapids=25.08``
+    - CUDA-capable GPU with compute capability >= 6.0
+    
+    **Index Selection Guidelines:**
+    - < 50K points: 'flat' (exact search)
+    - 50K-500K points: 'ivf_flat' 
+    - 500K-5M points: 'ivf_pq'
+    - > 5M points: 'cagra' (if dimensions <= 500)
+    
+    **Memory Considerations:**
+    - cuVS requires float32 precision (no FP16 support)
+    - Index building requires additional GPU memory
+    - 'cagra' uses more memory but provides best performance for huge datasets
     """
     
     def __init__(
@@ -64,13 +158,47 @@ class DiReCuVS(DiRePyTorch):
         **kwargs
     ):
         """
-        Initialize DIRE with optional cuVS backend.
+        Initialize DiReCuVS with cuVS and cuML backend configuration.
         
-        Args:
-            use_cuvs: Use cuVS for k-NN (auto-detect if None)
-            cuvs_index_type: Type of cuVS index ('auto' selects based on data size)
-            cuvs_build_params: Custom parameters for index building
-            cuvs_search_params: Custom parameters for search
+        Parameters
+        ----------
+        *args
+            Positional arguments passed to DiRePyTorch parent class.
+        use_cuvs : bool or None, default=None
+            Whether to use cuVS for k-NN computation:
+            - None: Auto-detect based on availability and GPU presence
+            - True: Force cuVS usage (raises error if unavailable)
+            - False: Disable cuVS, use PyTorch backend
+        use_cuml : bool or None, default=None
+            Whether to use cuML for PCA initialization:
+            - None: Auto-detect based on availability and GPU presence  
+            - True: Force cuML usage (raises error if unavailable)
+            - False: Disable cuML, use sklearn backend
+        cuvs_index_type : {'auto', 'ivf_flat', 'ivf_pq', 'cagra', 'flat'}, default='auto'
+            Type of cuVS index to build:
+            - 'auto': Automatically select optimal index based on data size/dimensionality
+            - 'ivf_flat': Inverted file index without compression (good balance)
+            - 'ivf_pq': Inverted file with product quantization (memory efficient)
+            - 'cagra': Graph-based index (best for very large datasets)
+            - 'flat': Brute-force exact search (small datasets only)
+        cuvs_build_params : dict, optional
+            Custom parameters for cuVS index building. These override the
+            automatically determined parameters. See cuVS documentation for
+            index-specific parameters.
+        cuvs_search_params : dict, optional
+            Custom parameters for cuVS search operations. These override the
+            automatically determined parameters. See cuVS documentation for
+            index-specific search parameters.
+        **kwargs
+            Additional keyword arguments passed to DiRePyTorch parent class.
+            See DiRePyTorch documentation for available parameters.
+            
+        Raises
+        ------
+        ImportError
+            If cuVS or cuML are requested but not available.
+        RuntimeError
+            If GPU is required but not available.
         """
         super().__init__(*args, **kwargs)
         
@@ -106,7 +234,33 @@ class DiReCuVS(DiRePyTorch):
     
     def _select_cuvs_index_type(self, n_samples, n_dims):
         """
-        Automatically select the best cuVS index type based on data characteristics.
+        Automatically select optimal cuVS index type based on data characteristics.
+        
+        This private method uses heuristics to select the most appropriate cuVS index
+        type based on dataset size, dimensionality, and performance trade-offs.
+        
+        Parameters
+        ----------
+        n_samples : int
+            Number of samples in the dataset.
+        n_dims : int
+            Number of dimensions/features per sample.
+            
+        Returns
+        -------
+        str
+            Selected cuVS index type ('flat', 'ivf_flat', 'ivf_pq', or 'cagra').
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by _compute_knn().
+        
+        Selection Heuristics:
+        - **< 50K samples**: 'flat' (exact search)
+        - **50K-500K samples or >500D**: 'ivf_flat' (good balance)
+        - **500K-5M samples**: 'ivf_pq' (memory efficient)
+        - **> 5M samples and ≤500D**: 'cagra' (best performance)
+        - **> 5M samples and >500D**: 'ivf_pq' (high-D fallback)
         """
         if self.cuvs_index_type != 'auto':
             return self.cuvs_index_type
@@ -129,6 +283,37 @@ class DiReCuVS(DiRePyTorch):
     def _build_cuvs_index(self, X_gpu, index_type):
         """
         Build cuVS index for fast k-NN search.
+        
+        This private method constructs the appropriate cuVS index based on the
+        specified index type and data characteristics, with optimized parameters
+        for each index variant.
+        
+        Parameters
+        ----------
+        X_gpu : cupy.ndarray
+            Input data on GPU, shape (n_samples, n_features), dtype float32.
+        index_type : str
+            Type of index to build ('flat', 'ivf_flat', 'ivf_pq', 'cagra').
+            
+        Returns
+        -------
+        cuVS index object or None
+            Built cuVS index ready for search operations.
+            Returns None for 'flat' type (no index needed).
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by _compute_knn().
+        
+        Index-Specific Optimizations:
+        - **IVF-Flat**: Adaptive n_lists based on dataset size and dimensionality
+        - **IVF-PQ**: Optimized PQ dimension and quantization parameters  
+        - **CAGRA**: Graph-based parameters tuned for large datasets
+        
+        Raises
+        ------
+        ValueError
+            If unknown index_type is specified.
         """
         n_samples, n_dims = X_gpu.shape
         
@@ -205,6 +390,42 @@ class DiReCuVS(DiRePyTorch):
     def _search_cuvs(self, index, index_type, X_gpu, k):
         """
         Search cuVS index for k nearest neighbors.
+        
+        This private method performs k-NN search using the built cuVS index,
+        with optimized search parameters for each index type.
+        
+        Parameters
+        ----------
+        index : cuVS index object or None
+            Built cuVS index from _build_cuvs_index().
+        index_type : str
+            Type of index being searched ('flat', 'ivf_flat', 'ivf_pq', 'cagra').
+        X_gpu : cupy.ndarray
+            Query data on GPU, shape (n_samples, n_features), dtype float32.
+        k : int
+            Number of nearest neighbors to find (plus 1 for self).
+            
+        Returns
+        -------
+        tuple of cupy.ndarray
+            distances : cupy.ndarray of shape (n_samples, k+1)
+                Distances to k+1 nearest neighbors (including self).
+            indices : cupy.ndarray of shape (n_samples, k+1)  
+                Indices of k+1 nearest neighbors (including self).
+                
+        Notes
+        -----
+        Private method, should not be called directly. Used by _compute_knn().
+        
+        Search Parameters:
+        - **IVF methods**: Adaptive n_probes based on index size
+        - **CAGRA**: Optimized search width and internal parameters
+        - **Flat**: Uses IVF-Flat with high probe count for near-exact results
+        
+        Raises
+        ------
+        ValueError
+            If unknown index_type is specified.
         """
         n_samples = X_gpu.shape[0]
         
@@ -281,7 +502,37 @@ class DiReCuVS(DiRePyTorch):
     
     def _compute_knn(self, X, chunk_size=50000, use_fp16=None):
         """
-        Compute k-NN using cuVS if available and beneficial.
+        Compute k-NN using cuVS acceleration when available and beneficial.
+        
+        This method overrides the parent implementation to use cuVS for k-NN
+        computation when it provides performance benefits, automatically falling
+        back to PyTorch for cases where cuVS isn't optimal.
+        
+        Parameters
+        ----------
+        X : numpy.ndarray
+            Input data of shape (n_samples, n_features).
+        chunk_size : int, default=50000
+            Chunk size for processing (used by fallback PyTorch method).
+        use_fp16 : bool, optional
+            Use FP16 precision (used by fallback PyTorch method).
+            Note: cuVS requires float32, so FP16 is only used for PyTorch fallback.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        
+        cuVS Usage Criteria:
+        - cuVS backend must be enabled and available
+        - Dataset size >= 10,000 samples (cuVS overhead not worth it for smaller datasets)
+        - Dimensionality <= 2,048 (cuVS works best for moderate dimensions)
+        
+        If criteria aren't met, falls back to parent PyTorch implementation.
+        
+        Side Effects
+        ------------
+        Sets self._knn_indices and self._knn_distances with computed k-NN graph.
+        Cleans up GPU memory after computation.
         """
         n_samples, n_dims = X.shape
         
@@ -338,7 +589,36 @@ class DiReCuVS(DiRePyTorch):
     
     def _initialize_embedding(self, X):
         """
-        Initialize embedding using cuML PCA if available, else fall back to sklearn.
+        Initialize embedding using cuML PCA when available, with sklearn fallback.
+        
+        This method overrides the parent implementation to use GPU-accelerated
+        cuML PCA/TruncatedSVD for initialization when available, providing
+        significant speedups for high-dimensional data.
+        
+        Parameters
+        ----------
+        X : numpy.ndarray
+            Input high-dimensional data of shape (n_samples, n_features).
+            
+        Returns
+        -------
+        torch.Tensor
+            Initial embedding of shape (n_samples, n_components) on the target device.
+            
+        Notes
+        -----
+        Private method, should not be called directly. Used by fit_transform().
+        
+        cuML Usage:
+        - Uses TruncatedSVD for high-dimensional data (>100 features) for efficiency
+        - Uses regular PCA for lower-dimensional data
+        - Performs normalization on GPU before converting to PyTorch
+        - Uses DLPack for zero-copy GPU tensor transfer
+        
+        Falls back to parent sklearn-based initialization if:
+        - cuML is not available or disabled
+        - Initialization method is not 'pca'
+        - Any errors occur during cuML processing
         """
         if self.use_cuml and self.init == 'pca':
             self.logger.info("Initializing with cuML PCA (GPU-accelerated)")
@@ -386,7 +666,47 @@ class DiReCuVS(DiRePyTorch):
     
     def fit_transform(self, X, y=None):
         """
-        Fit and transform with cuVS acceleration.
+        Fit the model and transform data with cuVS/cuML acceleration.
+        
+        This method extends the parent implementation with intelligent backend
+        selection and logging to inform users about the acceleration being used.
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            High-dimensional input data to transform.
+        y : array-like of shape (n_samples,), optional
+            Ignored. Present for scikit-learn API compatibility.
+            
+        Returns
+        -------
+        numpy.ndarray of shape (n_samples, n_components)
+            Low-dimensional embedding of the input data.
+            
+        Notes
+        -----
+        Backend Selection Logic:
+        - Uses cuVS for k-NN if dataset is large enough and cuVS is available
+        - Uses cuML for PCA initialization if available and init='pca'
+        - Falls back to PyTorch implementations automatically
+        
+        Performance Benefits:
+        - cuVS k-NN: 10-100x speedup for large datasets
+        - cuML PCA: 5-50x speedup for high-dimensional initialization
+        
+        Examples
+        --------
+        Large dataset with cuVS acceleration::
+        
+            import numpy as np
+            from dire_rapids import DiReCuVS
+            
+            # 500K points, 1000 dimensions  
+            X = np.random.randn(500000, 1000)
+            
+            reducer = DiReCuVS(verbose=True)  # Will log backend selection
+            embedding = reducer.fit_transform(X)
+            # Output: "Using cuVS-accelerated backend for 500000 points"
         """
         # Log backend being used
         if self.use_cuvs and X.shape[0] >= 10000:

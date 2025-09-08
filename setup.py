@@ -22,6 +22,7 @@ setup(
         "scikit-learn>=1.0.0",
         "pandas>=1.3.0",
         "plotly>=5.0.0",
+        "psutil>=5.8.0",
     ],
 
     # Python versioning
