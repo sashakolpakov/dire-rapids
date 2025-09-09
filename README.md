@@ -1,4 +1,7 @@
-
+<!-- Logo + Project title -->
+<p align="center">
+  <img src="images/dire_rapids_logo.png" alt="DiRe-RAPIDS logo" width="280" style="margin-bottom:10px;">
+</p>
 <p align="center">
   <a href="https://opensource.org/licenses/Apache-2.0">
     <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg">
