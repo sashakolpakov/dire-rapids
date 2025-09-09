@@ -1,3 +1,30 @@
+
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT">
+    <img alt="License" src="https://img.shields.io/badge/License-MIT-blue.svg">
+  </a>
+  <a href="https://www.python.org/downloads/">
+    <img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8+-blue.svg">
+  </a>
+  <a href="https://pypi.org/project/dire-rapids/">
+    <img alt="PyPI" src="https://img.shields.io/pypi/v/dire-rapids.svg">
+  </a>
+  <a href="https://pepy.tech/projects/dire-rapids">
+    <img src="https://static.pepy.tech/badge/dire-rapids" alt="PyPI Downloads">
+  </a>
+</p>
+<p align="center">
+  <a href="https://github.com/sashakolpakov/dire-rapids/actions/workflows/pylint.yml">
+    <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/sashakolpakov/dire-rapids/pylint.yml?branch=main&label=CI&logo=github">
+  </a>
+  <a href="https://github.com/sashakolpakov/dire-rapids/actions/workflows/deploy_docs.yml">
+    <img alt="Docs" src="https://img.shields.io/github/actions/workflow/status/sashakolpakov/dire-rapids/deploy_docs.yml?branch=main&label=Docs&logo=github">
+  </a>
+  <a href="https://sashakolpakov.github.io/dire-rapids/">
+    <img alt="Docs Live" src="https://img.shields.io/website-up-down-green-red/https/sashakolpakov.github.io/dire-rapids?label=API%20Documentation">
+  </a>
+</p>
+
 # DiRe Rapids
 
 GPU-accelerated implementation of [DiRe](https://github.com/sashakolpakov/dire-jax) using PyTorch and optionally NVIDIA RAPIDS for massive-scale datasets.
