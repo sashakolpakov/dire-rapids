@@ -1,7 +1,7 @@
 
 <p align="center">
-  <a href="https://opensource.org/licenses/MIT">
-    <img alt="License" src="https://img.shields.io/badge/License-MIT-blue.svg">
+  <a href="https://opensource.org/licenses/Apache-2.0">
+    <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg">
   </a>
   <a href="https://www.python.org/downloads/">
     <img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8+-blue.svg">
