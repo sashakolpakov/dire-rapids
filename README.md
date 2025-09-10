@@ -34,7 +34,7 @@ GPU-accelerated implementation of [DiRe](https://github.com/sashakolpakov/dire-j
 
 ## Installation
 
-### From Repository
+### From Repository (development)
 
 ```bash
 # Clone the repository
@@ -51,14 +51,19 @@ pip install -e .[cuda]
 pip install -e .[dev]
 ```
 
-### With RAPIDS Support (Optional, GPU only)
+#### With RAPIDS Support (Optional, GPU only)
 
+First, install RAPIDS following provided [installation instructions](https://docs.rapids.ai/install/). 
 ```bash
-# First install RAPIDS (requires CUDA 11.x or 12.x)
-conda install -c rapidsai -c conda-forge -c nvidia rapids=24.10 python=3.11 cuda-version=11.8
-
 # Then install dire-rapids with RAPIDS support
 pip install -e .[rapids]
+```
+
+### From PyPI (stable)
+
+```bash
+# Use the above installation options
+pip install dire-rapids[options]
 ```
 
 ## Quick Start
