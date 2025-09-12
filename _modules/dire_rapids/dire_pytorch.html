@@ -110,7 +110,7 @@
 
 
 <div class="viewcode-block" id="DiRePyTorch">
-<a class="viewcode-back" href="../../api/modules.html#dire_rapids.DiRePyTorch">[docs]</a>
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DiRePyTorch</span><span class="p">(</span><span class="n">TransformerMixin</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Memory-efficient PyTorch/PyKeOps implementation of DiRe dimensionality reduction.</span>
@@ -202,7 +202,7 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
 <div class="viewcode-block" id="DiRePyTorch.__init__">
-<a class="viewcode-back" href="../../api/modules.html#dire_rapids.DiRePyTorch.__init__">[docs]</a>
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
             <span class="bp">self</span><span class="p">,</span>
             <span class="n">n_components</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
@@ -773,7 +773,7 @@
         <span class="k">return</span> <span class="n">positions</span>
 
 <div class="viewcode-block" id="DiRePyTorch.fit_transform">
-<a class="viewcode-back" href="../../api/modules.html#dire_rapids.DiRePyTorch.fit_transform">[docs]</a>
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch.fit_transform">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">fit_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,arguments-differ</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Fit the DiRe model and transform data to low-dimensional embedding.</span>
@@ -838,7 +838,7 @@
 
 
 <div class="viewcode-block" id="DiRePyTorch.fit">
-<a class="viewcode-back" href="../../api/modules.html#dire_rapids.DiRePyTorch.fit">[docs]</a>
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch.fit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># pylint: disable=unused-argument,arguments-differ</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Fit the DiRe model to data without transforming.</span>
@@ -869,7 +869,7 @@
 
 
 <div class="viewcode-block" id="DiRePyTorch.visualize">
-<a class="viewcode-back" href="../../api/modules.html#dire_rapids.DiRePyTorch.visualize">[docs]</a>
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch.visualize">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">visualize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Create an interactive visualization of the embedding.</span>
@@ -956,7 +956,7 @@
 
 
 <div class="viewcode-block" id="create_dire">
-<a class="viewcode-back" href="../../api/modules.html#dire_rapids.create_dire">[docs]</a>
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.create_dire">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">create_dire</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create DiRe instance with automatic backend selection.</span>
