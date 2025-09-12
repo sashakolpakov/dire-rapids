@@ -6,26 +6,12 @@ dire_rapids
    :undoc-members:
    :show-inheritance:
 
-dire_rapids.dire_pytorch
--------------------------
+Submodules
+----------
 
-.. automodule:: dire_rapids.dire_pytorch
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :maxdepth: 4
 
-dire_rapids.dire_pytorch_memory_efficient  
-------------------------------------------
-
-.. automodule:: dire_rapids.dire_pytorch_memory_efficient
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-dire_rapids.dire_cuvs
----------------------
-
-.. automodule:: dire_rapids.dire_cuvs
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   dire_rapids.dire_pytorch
+   dire_rapids.dire_pytorch_memory_efficient
+   dire_rapids.dire_cuvs

@@ -1,0 +1,509 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dire_rapids.dire_pytorch module &mdash; dire-rapids 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js?v=2389946f"></script>
+      <script src="../_static/doctools.js?v=888ff710"></script>
+      <script src="../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="dire_rapids.dire_pytorch_memory_efficient module" href="dire_rapids.dire_pytorch_memory_efficient.html" />
+    <link rel="prev" title="dire_rapids" href="modules.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search"  style="background: white" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            dire-rapids
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">dire_rapids</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorch"><code class="docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorchMemoryEfficient"><code class="docutils literal notranslate"><span class="pre">DiRePyTorchMemoryEfficient</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.create_dire"><code class="docutils literal notranslate"><span class="pre">create_dire()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiReCuVS"><code class="docutils literal notranslate"><span class="pre">DiReCuVS</span></code></a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="modules.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">dire_rapids.dire_pytorch module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.dire_pytorch.DiRePyTorch"><code class="docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.dire_pytorch.create_dire"><code class="docutils literal notranslate"><span class="pre">create_dire()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_pytorch_memory_efficient.html">dire_rapids.dire_pytorch_memory_efficient module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html">dire_rapids.dire_cuvs module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu"  style="background: white" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">dire-rapids</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">dire_rapids</a></li>
+      <li class="breadcrumb-item active">dire_rapids.dire_pytorch module</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/sashakolpakov/dire-rapids/blob/main/docs/api/dire_rapids.dire_pytorch.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-dire_rapids.dire_pytorch">
+<span id="dire-rapids-dire-pytorch-module"></span><h1>dire_rapids.dire_pytorch module<a class="headerlink" href="#module-dire_rapids.dire_pytorch" title="Permalink to this heading"></a></h1>
+<p>PyTorch/PyKeOps backend for DiRe dimensionality reduction.</p>
+<p>This implementation features:
+- Memory-efficient chunked k-NN computation for large datasets (&gt;100K points)
+- Attraction forces applied only between k-NN neighbors
+- Repulsion forces computed from random samples
+- Automatic GPU memory management with adaptive chunk sizing
+- Designed for high-performance processing on CUDA GPUs</p>
+<p>Performance characteristics:
+- Best for datasets &gt;50K points on CUDA GPUs
+- Memory-aware processing up to millions of points
+- Chunked computation prevents GPU out-of-memory errors</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.dire_pytorch.</span></span><span class="sig-name descname"><span class="pre">DiRePyTorch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'pca'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iter_layout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_dist</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spread</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_sample_dirs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neg_ratio</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_exact_repulsion</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.TransformerMixin.html#sklearn.base.TransformerMixin" title="(in scikit-learn v1.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformerMixin</span></code></a></p>
+<p>Memory-efficient PyTorch/PyKeOps implementation of DiRe dimensionality reduction.</p>
+<p>This class provides a high-performance implementation of the DiRe algorithm using PyTorch
+as the computational backend. It features adaptive memory management for large datasets
+and automatic GPU optimization.</p>
+<section id="features">
+<h2>Features<a class="headerlink" href="#features" title="Permalink to this heading"></a></h2>
+<ul class="simple">
+<li><p>Chunked k-NN computation prevents GPU out-of-memory errors</p></li>
+<li><p>Memory-aware force computation with automatic chunk sizing</p></li>
+<li><p>Attraction forces between k-NN neighbors only</p></li>
+<li><p>Repulsion forces from random sampling for efficiency</p></li>
+<li><p>Automatic FP16 optimization for memory and speed</p></li>
+<li><p>Optional PyKeOps integration for low-dimensional data</p></li>
+</ul>
+</section>
+<section id="best-suited-for">
+<h2>Best suited for<a class="headerlink" href="#best-suited-for" title="Permalink to this heading"></a></h2>
+<ul class="simple">
+<li><p>Large datasets (&gt;50K points) on CUDA GPUs</p></li>
+<li><p>Production environments requiring reliable memory usage</p></li>
+<li><p>High-performance dimensionality reduction workflows</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">param n_components<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Number of dimensions in the target embedding space.</p>
+</dd>
+<dt class="field-even">type n_components<span class="colon">:</span></dt>
+<dd class="field-even"><p>int, default=2</p>
+</dd>
+<dt class="field-odd">param n_neighbors<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Number of nearest neighbors to use for attraction forces.</p>
+</dd>
+<dt class="field-even">type n_neighbors<span class="colon">:</span></dt>
+<dd class="field-even"><p>int, default=16</p>
+</dd>
+<dt class="field-odd">param init<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Method for initializing the embedding. ‘pca’ uses PCA initialization,
+‘random’ uses random projection.</p>
+</dd>
+<dt class="field-even">type init<span class="colon">:</span></dt>
+<dd class="field-even"><p>{‘pca’, ‘random’}, default=’pca’</p>
+</dd>
+<dt class="field-odd">param max_iter_layout<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Maximum number of optimization iterations.</p>
+</dd>
+<dt class="field-even">type max_iter_layout<span class="colon">:</span></dt>
+<dd class="field-even"><p>int, default=128</p>
+</dd>
+<dt class="field-odd">param min_dist<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Minimum distance between points in the embedding.</p>
+</dd>
+<dt class="field-even">type min_dist<span class="colon">:</span></dt>
+<dd class="field-even"><p>float, default=1e-2</p>
+</dd>
+<dt class="field-odd">param spread<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Controls how tightly points are packed in the embedding.</p>
+</dd>
+<dt class="field-even">type spread<span class="colon">:</span></dt>
+<dd class="field-even"><p>float, default=1.0</p>
+</dd>
+<dt class="field-odd">param cutoff<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Distance cutoff for repulsion forces.</p>
+</dd>
+<dt class="field-even">type cutoff<span class="colon">:</span></dt>
+<dd class="field-even"><p>float, default=42.0</p>
+</dd>
+<dt class="field-odd">param n_sample_dirs<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Number of sampling directions (used by derived classes).</p>
+</dd>
+<dt class="field-even">type n_sample_dirs<span class="colon">:</span></dt>
+<dd class="field-even"><p>int, default=8</p>
+</dd>
+<dt class="field-odd">param sample_size<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Size of samples for force computation (used by derived classes).</p>
+</dd>
+<dt class="field-even">type sample_size<span class="colon">:</span></dt>
+<dd class="field-even"><p>int, default=16</p>
+</dd>
+<dt class="field-odd">param neg_ratio<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Ratio of negative samples to positive samples for repulsion.</p>
+</dd>
+<dt class="field-even">type neg_ratio<span class="colon">:</span></dt>
+<dd class="field-even"><p>int, default=8</p>
+</dd>
+<dt class="field-odd">param verbose<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether to print progress information.</p>
+</dd>
+<dt class="field-even">type verbose<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool, default=True</p>
+</dd>
+<dt class="field-odd">param random_state<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Random seed for reproducible results.</p>
+</dd>
+<dt class="field-even">type random_state<span class="colon">:</span></dt>
+<dd class="field-even"><p>int or None, default=None</p>
+</dd>
+<dt class="field-odd">param use_exact_repulsion<span class="colon">:</span></dt>
+<dd class="field-odd"><p>If True, use exact all-pairs repulsion (memory intensive, for testing only).</p>
+</dd>
+<dt class="field-even">type use_exact_repulsion<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool, default=False</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch.device">
+<span class="sig-name descname"><span class="pre">device</span></span><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch.device" title="Permalink to this definition"></a></dt>
+<dd><p>The PyTorch device being used (CPU or CUDA).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="(in PyTorch v2.8)">torch.device</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch.logger">
+<span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch.logger" title="Permalink to this definition"></a></dt>
+<dd><p>Instance-specific logger for this reducer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>loguru.Logger</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Examples</p>
+<p>Basic usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># Create sample data</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+
+<span class="c1"># Create and fit reducer</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+<span class="c1"># Visualize results</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">visualize</span><span class="p">()</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>With custom parameters:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span>
+    <span class="n">n_components</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="n">max_iter_layout</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">min_dist</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span>
+<span class="p">)</span>
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'pca'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iter_layout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_dist</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spread</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_sample_dirs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neg_ratio</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_exact_repulsion</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch.__init__" title="Permalink to this definition"></a></dt>
+<dd><p>Initialize DiRePyTorch reducer with specified parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_components</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=2</em>) – Number of dimensions in the target embedding space.</p></li>
+<li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=16</em>) – Number of nearest neighbors to use for attraction forces.</p></li>
+<li><p><strong>init</strong> (<em>{'pca'</em><em>, </em><em>'random'}</em><em>, </em><em>default='pca'</em>) – Method for initializing the embedding.</p></li>
+<li><p><strong>max_iter_layout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=128</em>) – Maximum number of optimization iterations.</p></li>
+<li><p><strong>min_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1e-2</em>) – Minimum distance between points in the embedding.</p></li>
+<li><p><strong>spread</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Controls how tightly points are packed in the embedding.</p></li>
+<li><p><strong>cutoff</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=42.0</em>) – Distance cutoff for repulsion forces.</p></li>
+<li><p><strong>n_sample_dirs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=8</em>) – Number of sampling directions (reserved for future use).</p></li>
+<li><p><strong>sample_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=16</em>) – Size of samples for force computation (reserved for future use).</p></li>
+<li><p><strong>neg_ratio</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=8</em>) – Ratio of negative samples to positive samples for repulsion.</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to print progress information.</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random seed for reproducible results.</p></li>
+<li><p><strong>use_exact_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, use exact all-pairs repulsion (memory intensive, testing only).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch.fit_transform">
+<span class="sig-name descname"><span class="pre">fit_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch.fit_transform"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch.fit_transform" title="Permalink to this definition"></a></dt>
+<dd><p>Fit the DiRe model and transform data to low-dimensional embedding.</p>
+<p>This method performs the complete dimensionality reduction pipeline:
+1. Computes k-nearest neighbors graph
+2. Fits kernel parameters
+3. Initializes embedding with PCA or random projection
+4. Optimizes layout using force-directed algorithm</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – High-dimensional input data to transform.</p></li>
+<li><p><strong>y</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em><em>, </em><em>optional</em>) – Ignored. Present for scikit-learn API compatibility.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Low-dimensional embedding of the input data.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a> of shape (n_samples, n_components)</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Transform high-dimensional data:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>
+
+<span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">embedding</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>  <span class="c1"># (1000, 2)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch.fit">
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch.fit" title="Permalink to this definition"></a></dt>
+<dd><p>Fit the DiRe model to data without transforming.</p>
+<p>This method fits the model by computing the k-NN graph, kernel parameters,
+and optimized embedding, but primarily serves for scikit-learn compatibility.
+For practical use, fit_transform() is recommended.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – High-dimensional data to fit the model to.</p></li>
+<li><p><strong>y</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em><em>, </em><em>optional</em>) – Ignored. Present for scikit-learn API compatibility.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>self</strong> – The fitted DiRe instance.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#dire_rapids.dire_pytorch.DiRePyTorch" title="dire_rapids.dire_pytorch.DiRePyTorch">DiRePyTorch</a></p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>This method calls fit_transform() internally. The embedding result
+is stored in self._layout and can be accessed after fitting.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch.visualize">
+<span class="sig-name descname"><span class="pre">visualize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch.visualize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch.visualize" title="Permalink to this definition"></a></dt>
+<dd><p>Create an interactive visualization of the embedding.</p>
+<p>This method creates a 2D or 3D scatter plot of the embedding using Plotly,
+with optional color coding by labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>labels</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em><em>, </em><em>optional</em>) – Labels for coloring points in the visualization.</p></li>
+<li><p><strong>point_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=2</em>) – Size of points in the scatter plot.</p></li>
+<li><p><strong>title</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Title for the plot. If None, a default title is generated.</p></li>
+<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Additional keyword arguments passed to plotly.express plotting functions.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Interactive Plotly figure, or None if no embedding is available.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://plotly.com/python-api-reference/generated/plotly.graph_objects.html#plotly.graph_objects.Figure" title="(in )">plotly.graph_objects.Figure</a> or None</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Basic visualization:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">visualize</span><span class="p">()</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>With labels and custom styling:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">fig</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span>
+    <span class="n">labels</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
+    <span class="n">point_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;My Embedding&quot;</span><span class="p">,</span>
+    <span class="n">width</span><span class="o">=</span><span class="mi">800</span><span class="p">,</span>
+    <span class="n">height</span><span class="o">=</span><span class="mi">600</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+</div>
+<p class="rubric">Notes</p>
+<p>Requires a fitted model with available embedding (self._layout).
+Only supports 2D and 3D visualizations.</p>
+</dd></dl>
+
+</section>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.create_dire">
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.dire_pytorch.</span></span><span class="sig-name descname"><span class="pre">create_dire</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memory_efficient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#create_dire"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_pytorch.create_dire" title="Permalink to this definition"></a></dt>
+<dd><p>Create DiRe instance with automatic backend selection.</p>
+<p>This factory function automatically selects the optimal DiRe implementation
+based on available hardware and software, or allows manual backend selection.
+It provides a convenient interface for creating DiRe instances without
+importing specific backend classes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>backend</strong> (<em>{'auto'</em><em>, </em><em>'cuvs'</em><em>, </em><em>'pytorch'</em><em>, </em><em>'pytorch_gpu'</em><em>, </em><em>'pytorch_cpu'}</em><em>, </em><em>default='auto'</em>) – <p>Backend selection strategy:</p>
+<ul>
+<li><p>’auto’: Automatically select best available backend based on hardware</p></li>
+<li><p>’cuvs’: Force RAPIDS cuVS backend (requires RAPIDS installation)</p></li>
+<li><p>’pytorch’: Force PyTorch backend with automatic device selection</p></li>
+<li><p>’pytorch_gpu’: Force PyTorch backend on GPU (requires CUDA)</p></li>
+<li><p>’pytorch_cpu’: Force PyTorch backend on CPU only</p></li>
+</ul>
+</p></li>
+<li><p><strong>memory_efficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – <p>If True, use memory-efficient PyTorch implementation which provides:</p>
+<ul>
+<li><p>Reduced memory usage for large datasets</p></li>
+<li><p>FP16 support for additional memory savings</p></li>
+<li><p>Enhanced chunking strategies</p></li>
+<li><p>More aggressive memory cleanup</p></li>
+</ul>
+</p></li>
+<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Additional keyword arguments passed to the DiRe constructor.
+See individual backend documentation for available parameters.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>An instance of the selected DiRe backend (DiRePyTorch, DiRePyTorchMemoryEfficient,
+or DiReCuVS) configured with the specified parameters.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>DiRe instance</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.13)"><strong>RuntimeError</strong></a> – If a specific backend is requested but requirements are not met
+    (e.g., requesting cuVS without RAPIDS, or GPU without CUDA).</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If an unknown backend name is specified.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Auto-select optimal backend:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
+
+<span class="c1"># Will use cuVS if available, otherwise PyTorch with GPU if available</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Force memory-efficient mode for large datasets:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span>
+    <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="n">max_iter_layout</span><span class="o">=</span><span class="mi">200</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Force specific backend:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># CPU-only processing</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s1">&#39;pytorch_cpu&#39;</span><span class="p">)</span>
+
+<span class="c1"># GPU processing with cuVS acceleration</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s1">&#39;cuvs&#39;</span><span class="p">,</span> <span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Notes</p>
+<p>Backend Selection Priority (when backend=’auto’):
+1. RAPIDS cuVS (if available and CUDA GPU present)
+2. PyTorch with CUDA (if CUDA GPU available)
+3. PyTorch with CPU (fallback)</p>
+<p>The function automatically handles import errors and missing dependencies,
+falling back to available alternatives when possible.</p>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="modules.html" class="btn btn-neutral float-left" title="dire_rapids" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="dire_rapids.dire_pytorch_memory_efficient.html" class="btn btn-neutral float-right" title="dire_rapids.dire_pytorch_memory_efficient module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
