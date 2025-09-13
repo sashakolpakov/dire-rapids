@@ -687,8 +687,9 @@ class DiRePyTorch(TransformerMixin):
             # Update positions
             positions += forces
 
-            # Log progress
-            self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}")
+            # Log progress every 20th iteration
+            if iteration % 20 == 0:
+                self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}")
 
         # Final normalization
         positions -= positions.mean(dim=0)
