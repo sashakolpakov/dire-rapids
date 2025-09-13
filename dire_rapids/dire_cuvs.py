@@ -469,8 +469,7 @@ class DiReCuVS(DiRePyTorch):
         elif index_type == 'ivf_pq':
             # IVF-PQ search
             search_params = ivf_pq.SearchParams(
-                n_probes=min(index.n_lists // 10, 200),
-                internal_distance_dtype='float32'
+                n_probes=min(index.n_lists // 10, 200)
             )
             
             if self.cuvs_search_params:
