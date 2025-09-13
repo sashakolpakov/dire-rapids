@@ -714,9 +714,9 @@
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Regular PCA for lower dimensions</span>
+                <span class="c1"># Note: cuPCA doesn&#39;t support random_state parameter</span>
                 <span class="n">pca</span> <span class="o">=</span> <span class="n">cuPCA</span><span class="p">(</span>
-                    <span class="n">n_components</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">,</span>
-                    <span class="n">random_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span>
+                    <span class="n">n_components</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span>
                 <span class="p">)</span>
             
             <span class="c1"># Fit and transform on GPU</span>
