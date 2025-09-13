@@ -545,8 +545,7 @@
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
             <span class="c1"># IVF-PQ search</span>
             <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
-                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span>
-                <span class="n">internal_distance_dtype</span><span class="o">=</span><span class="s1">&#39;float32&#39;</span>
+                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
             <span class="p">)</span>
             
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
