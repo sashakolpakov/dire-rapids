@@ -638,9 +638,9 @@ class DiReCuVS(DiRePyTorch):
                 )
             else:
                 # Regular PCA for lower dimensions
+                # Note: cuPCA doesn't support random_state parameter
                 pca = cuPCA(
-                    n_components=self.n_components,
-                    random_state=self.random_state
+                    n_components=self.n_components
                 )
             
             # Fit and transform on GPU
