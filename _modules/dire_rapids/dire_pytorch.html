@@ -109,6 +109,33 @@
     <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;PyKeOps not available. Install with: pip install pykeops&quot;</span><span class="p">)</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_compile_metric</span><span class="p">(</span><span class="n">spec</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Turn a metric spec into a callable metric(x, y) that returns a distance-like</span>
+<span class="sd">    matrix with broadcasting:</span>
+<span class="sd">      - Torch path:  x: (A, 1, D), y: (1, B, D)  -&gt; (A, B) torch.Tensor</span>
+<span class="sd">      - KeOps path:  x: LazyTensor(A,1,D), y: LazyTensor(1,B,D) -&gt; LazyTensor(A,B)</span>
+
+<span class="sd">    If spec is None or &#39;euclidean&#39;/&#39;l2&#39;, return None (fast-path Euclidean stays in backend).</span>
+<span class="sd">    If spec is str, it&#39;s eval&#39;ed with {&#39;x&#39;: x, &#39;y&#39;: y} and no builtins.</span>
+<span class="sd">    If spec is callable, it&#39;s returned unchanged.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">expr</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">expr</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;euclidean&quot;</span><span class="p">,</span> <span class="s2">&quot;l2&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># use built-in fast Euclidean</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_expr_metric</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">_expr</span><span class="o">=</span><span class="n">spec</span><span class="p">):</span>
+            <span class="c1"># Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.</span>
+            <span class="c1"># Works for both torch.Tensor and KeOps LazyTensor.</span>
+            <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">_expr</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;__builtins__&quot;</span><span class="p">:</span> <span class="p">{}},</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">_expr_metric</span>
+    <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">spec</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">spec</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;metric must be None, a string expression, or a callable&quot;</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="DiRePyTorch">
 <a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DiRePyTorch</span><span class="p">(</span><span class="n">TransformerMixin</span><span class="p">):</span>
@@ -163,6 +190,14 @@
 <span class="sd">        Random seed for reproducible results.</span>
 <span class="sd">    use_exact_repulsion : bool, default=False</span>
 <span class="sd">        If True, use exact all-pairs repulsion (memory intensive, for testing only).</span>
+<span class="sd">    metric : str, callable, or None, default=None</span>
+<span class="sd">        Custom distance metric for k-NN computation only (layout forces remain Euclidean):</span>
+
+<span class="sd">        - None or &#39;euclidean&#39;/&#39;l2&#39;: Use fast built-in Euclidean distance</span>
+<span class="sd">        - str: String expression evaluated with x and y tensors (e.g., &#39;(x - y).abs().sum(-1)&#39; for L1)</span>
+<span class="sd">        - callable: Custom function taking (x, y) tensors and returning distance matrix</span>
+
+<span class="sd">        Examples: &#39;(x - y).abs().sum(-1)&#39; (L1), &#39;1 - (x*y).sum(-1)/(x.norm()*y.norm() + 1e-8)&#39; (cosine).</span>
 <span class="sd">        </span>
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -190,7 +225,7 @@
 <span class="sd">        fig.show()</span>
 <span class="sd">    </span>
 <span class="sd">    With custom parameters::</span>
-<span class="sd">    </span>
+
 <span class="sd">        reducer = DiRePyTorch(</span>
 <span class="sd">            n_components=3,</span>
 <span class="sd">            n_neighbors=50,</span>
@@ -198,6 +233,22 @@
 <span class="sd">            min_dist=0.1,</span>
 <span class="sd">            random_state=42</span>
 <span class="sd">        )</span>
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
+
+<span class="sd">    With custom distance metric::</span>
+
+<span class="sd">        # Using L1 (Manhattan) distance for k-NN</span>
+<span class="sd">        reducer = DiRePyTorch(</span>
+<span class="sd">            metric=&#39;(x - y).abs().sum(-1)&#39;,</span>
+<span class="sd">            n_neighbors=32</span>
+<span class="sd">        )</span>
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
+
+<span class="sd">        # Using custom callable metric</span>
+<span class="sd">        def cosine_distance(x, y):</span>
+<span class="sd">            return 1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)</span>
+
+<span class="sd">        reducer = DiRePyTorch(metric=cosine_distance)</span>
 <span class="sd">        embedding = reducer.fit_transform(X)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -218,6 +269,7 @@
             <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
             <span class="n">random_state</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">use_exact_repulsion</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># If True, use all-pairs repulsion (for testing)</span>
+            <span class="n">metric</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Initialize DiRePyTorch reducer with specified parameters.</span>
@@ -250,6 +302,8 @@
 <span class="sd">            Random seed for reproducible results.</span>
 <span class="sd">        use_exact_repulsion : bool, default=False</span>
 <span class="sd">            If True, use exact all-pairs repulsion (memory intensive, testing only).</span>
+<span class="sd">        metric : str, callable, or None, default=None</span>
+<span class="sd">            Custom distance metric for k-NN computation. See class docstring for details.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">n_components</span>
@@ -265,6 +319,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">random_state</span> <span class="o">=</span> <span class="n">random_state</span> <span class="k">if</span> <span class="n">random_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">**</span> <span class="mi">32</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_exact_repulsion</span> <span class="o">=</span> <span class="n">use_exact_repulsion</span>
+
+        <span class="c1"># Custom metric for k-NN only (layout forces remain Euclidean):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="o">=</span> <span class="n">metric</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="o">=</span> <span class="n">_compile_metric</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">)</span>
 
         <span class="c1"># Setup instance-specific logger</span>
         <span class="c1"># Create a completely new logger instance for this DiRe object</span>
@@ -989,6 +1047,8 @@
 <span class="sd">    **kwargs : dict</span>
 <span class="sd">        Additional keyword arguments passed to the DiRe constructor.</span>
 <span class="sd">        See individual backend documentation for available parameters.</span>
+<span class="sd">        Common parameters include: n_components, n_neighbors, metric,</span>
+<span class="sd">        max_iter_layout, min_dist, spread, verbose, random_state.</span>
 <span class="sd">    </span>
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -1026,6 +1086,13 @@
 <span class="sd">        </span>
 <span class="sd">        # GPU processing with cuVS acceleration</span>
 <span class="sd">        reducer = create_dire(backend=&#39;cuvs&#39;, use_cuvs=True)</span>
+
+<span class="sd">        # With custom distance metric</span>
+<span class="sd">        reducer = create_dire(</span>
+<span class="sd">            metric=&#39;(x - y).abs().sum(-1)&#39;,  # L1 distance</span>
+<span class="sd">            n_neighbors=32,</span>
+<span class="sd">            verbose=True</span>
+<span class="sd">        )</span>
 <span class="sd">        </span>
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>

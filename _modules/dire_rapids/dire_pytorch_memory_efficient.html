@@ -127,40 +127,25 @@
 <span class="sd">    </span>
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    n_components : int, default=2</span>
-<span class="sd">        Number of dimensions in the target embedding space.</span>
-<span class="sd">    n_neighbors : int, default=16</span>
-<span class="sd">        Number of nearest neighbors to use for attraction forces.</span>
-<span class="sd">    init : {&#39;pca&#39;, &#39;random&#39;}, default=&#39;pca&#39;</span>
-<span class="sd">        Method for initializing the embedding.</span>
-<span class="sd">    max_iter_layout : int, default=128</span>
-<span class="sd">        Maximum number of optimization iterations.</span>
-<span class="sd">    min_dist : float, default=1e-2</span>
-<span class="sd">        Minimum distance between points in the embedding.</span>
-<span class="sd">    spread : float, default=1.0</span>
-<span class="sd">        Controls how tightly points are packed in the embedding.</span>
-<span class="sd">    cutoff : float, default=42.0</span>
-<span class="sd">        Distance cutoff for repulsion forces.</span>
-<span class="sd">    n_sample_dirs : int, default=8</span>
-<span class="sd">        Number of sampling directions (reserved for future use).</span>
-<span class="sd">    sample_size : int, default=16</span>
-<span class="sd">        Size of samples for force computation (reserved for future use).</span>
-<span class="sd">    neg_ratio : int, default=8</span>
-<span class="sd">        Ratio of negative samples to positive samples for repulsion.</span>
-<span class="sd">    verbose : bool, default=True</span>
-<span class="sd">        Whether to print progress information.</span>
-<span class="sd">    random_state : int or None, default=None</span>
-<span class="sd">        Random seed for reproducible results.</span>
-<span class="sd">    use_exact_repulsion : bool, default=False</span>
-<span class="sd">        If True, use exact all-pairs repulsion (memory intensive).</span>
+<span class="sd">    *args</span>
+<span class="sd">        Positional arguments passed to DiRePyTorch parent class.</span>
 <span class="sd">    use_fp16 : bool, default=True</span>
 <span class="sd">        Enable FP16 precision for memory efficiency (recommended).</span>
+<span class="sd">        Provides 2x memory reduction and significant speed improvements.</span>
 <span class="sd">    use_pykeops_repulsion : bool, default=True</span>
 <span class="sd">        Use PyKeOps LazyTensors for repulsion when beneficial.</span>
+<span class="sd">        Automatically disabled if PyKeOps unavailable or dataset too large.</span>
 <span class="sd">    pykeops_threshold : int, default=50000</span>
 <span class="sd">        Maximum dataset size for PyKeOps all-pairs computation.</span>
+<span class="sd">        Above this threshold, random sampling is used instead.</span>
 <span class="sd">    memory_fraction : float, default=0.25</span>
 <span class="sd">        Fraction of available memory to use for computations.</span>
+<span class="sd">        Lower values are more conservative but may be slower.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Additional keyword arguments passed to DiRePyTorch parent class.</span>
+<span class="sd">        Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,</span>
+<span class="sd">        spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,</span>
+<span class="sd">        metric (custom distance function for k-NN computation).</span>
 <span class="sd">        </span>
 <span class="sd">    Examples</span>
 <span class="sd">    --------</span>
@@ -182,67 +167,44 @@
 <span class="sd">        embedding = reducer.fit_transform(X)</span>
 <span class="sd">        </span>
 <span class="sd">    Custom memory settings::</span>
-<span class="sd">    </span>
+
 <span class="sd">        reducer = DiRePyTorchMemoryEfficient(</span>
 <span class="sd">            use_pykeops_repulsion=False,  # Disable PyKeOps</span>
 <span class="sd">            memory_fraction=0.15,         # Use less memory</span>
 <span class="sd">            pykeops_threshold=20000       # Lower PyKeOps threshold</span>
 <span class="sd">        )</span>
+
+<span class="sd">    With custom distance metric::</span>
+
+<span class="sd">        # L1 metric for k-NN with memory efficiency</span>
+<span class="sd">        reducer = DiRePyTorchMemoryEfficient(</span>
+<span class="sd">            metric=&#39;(x - y).abs().sum(-1)&#39;,</span>
+<span class="sd">            n_neighbors=32,</span>
+<span class="sd">            use_fp16=True,</span>
+<span class="sd">            memory_fraction=0.2</span>
+<span class="sd">        )</span>
+
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     
 <div class="viewcode-block" id="DiRePyTorchMemoryEfficient.__init__">
 <a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch_memory_efficient.DiRePyTorchMemoryEfficient.__init__">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">n_components</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
-        <span class="n">init</span><span class="o">=</span><span class="s2">&quot;pca&quot;</span><span class="p">,</span>
-        <span class="n">max_iter_layout</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span>
-        <span class="n">min_dist</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">,</span>
-        <span class="n">spread</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
-        <span class="n">cutoff</span><span class="o">=</span><span class="mf">42.0</span><span class="p">,</span>
-        <span class="n">n_sample_dirs</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
-        <span class="n">sample_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
-        <span class="n">neg_ratio</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
-        <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">random_state</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">use_exact_repulsion</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">,</span>
         <span class="n">use_fp16</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Enable FP16 by default for memory efficiency</span>
         <span class="n">use_pykeops_repulsion</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Use PyKeOps for repulsion when possible</span>
         <span class="n">pykeops_threshold</span><span class="o">=</span><span class="mi">50000</span><span class="p">,</span>     <span class="c1"># Max points for PyKeOps all-pairs</span>
         <span class="n">memory_fraction</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Initialize memory-efficient DiRe reducer.</span>
-<span class="sd">        </span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        n_components : int, default=2</span>
-<span class="sd">            Number of dimensions in the target embedding space.</span>
-<span class="sd">        n_neighbors : int, default=16</span>
-<span class="sd">            Number of nearest neighbors to use for attraction forces.</span>
-<span class="sd">        init : {&#39;pca&#39;, &#39;random&#39;}, default=&#39;pca&#39;</span>
-<span class="sd">            Method for initializing the embedding.</span>
-<span class="sd">        max_iter_layout : int, default=128</span>
-<span class="sd">            Maximum number of optimization iterations.</span>
-<span class="sd">        min_dist : float, default=1e-2</span>
-<span class="sd">            Minimum distance between points in the embedding.</span>
-<span class="sd">        spread : float, default=1.0</span>
-<span class="sd">            Controls how tightly points are packed in the embedding.</span>
-<span class="sd">        cutoff : float, default=42.0</span>
-<span class="sd">            Distance cutoff for repulsion forces.</span>
-<span class="sd">        n_sample_dirs : int, default=8</span>
-<span class="sd">            Number of sampling directions (reserved for future use).</span>
-<span class="sd">        sample_size : int, default=16</span>
-<span class="sd">            Size of samples for force computation (reserved for future use).</span>
-<span class="sd">        neg_ratio : int, default=8</span>
-<span class="sd">            Ratio of negative samples to positive samples for repulsion.</span>
-<span class="sd">        verbose : bool, default=True</span>
-<span class="sd">            Whether to print progress information.</span>
-<span class="sd">        random_state : int or None, default=None</span>
-<span class="sd">            Random seed for reproducible results.</span>
-<span class="sd">        use_exact_repulsion : bool, default=False</span>
-<span class="sd">            If True, use exact all-pairs repulsion (memory intensive).</span>
+<span class="sd">        *args</span>
+<span class="sd">            Positional arguments passed to DiRePyTorch parent class.</span>
 <span class="sd">        use_fp16 : bool, default=True</span>
 <span class="sd">            Enable FP16 precision for memory efficiency. Provides 2x memory</span>
 <span class="sd">            reduction and significant speed improvements on modern GPUs.</span>
@@ -255,24 +217,17 @@
 <span class="sd">        memory_fraction : float, default=0.25</span>
 <span class="sd">            Fraction of available memory to use for computations.</span>
 <span class="sd">            Lower values are more conservative but may be slower.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional keyword arguments passed to DiRePyTorch parent class.</span>
+<span class="sd">            See DiRePyTorch documentation for available parameters including:</span>
+
+<span class="sd">            - n_components, n_neighbors, init, max_iter_layout, min_dist, spread</span>
+<span class="sd">            - cutoff, neg_ratio, verbose, random_state, use_exact_repulsion</span>
+<span class="sd">            - metric: Custom distance metric for k-NN (str, callable, or None)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         
         <span class="c1"># Call parent constructor</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
-            <span class="n">n_components</span><span class="o">=</span><span class="n">n_components</span><span class="p">,</span>
-            <span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span><span class="p">,</span>
-            <span class="n">init</span><span class="o">=</span><span class="n">init</span><span class="p">,</span>
-            <span class="n">max_iter_layout</span><span class="o">=</span><span class="n">max_iter_layout</span><span class="p">,</span>
-            <span class="n">min_dist</span><span class="o">=</span><span class="n">min_dist</span><span class="p">,</span>
-            <span class="n">spread</span><span class="o">=</span><span class="n">spread</span><span class="p">,</span>
-            <span class="n">cutoff</span><span class="o">=</span><span class="n">cutoff</span><span class="p">,</span>
-            <span class="n">n_sample_dirs</span><span class="o">=</span><span class="n">n_sample_dirs</span><span class="p">,</span>
-            <span class="n">sample_size</span><span class="o">=</span><span class="n">sample_size</span><span class="p">,</span>
-            <span class="n">neg_ratio</span><span class="o">=</span><span class="n">neg_ratio</span><span class="p">,</span>
-            <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span>
-            <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span>
-            <span class="n">use_exact_repulsion</span><span class="o">=</span><span class="n">use_exact_repulsion</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         
         <span class="c1"># Additional memory-efficient parameters</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_fp16</span> <span class="o">=</span> <span class="n">use_fp16</span>

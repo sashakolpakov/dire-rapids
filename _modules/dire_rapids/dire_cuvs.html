@@ -156,6 +156,9 @@
 <span class="sd">        Custom parameters for cuVS search. Overrides defaults.</span>
 <span class="sd">    *args, **kwargs</span>
 <span class="sd">        Additional arguments passed to DiRePyTorch parent class.</span>
+<span class="sd">        Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,</span>
+<span class="sd">        spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,</span>
+<span class="sd">        metric (custom distance function for k-NN computation).</span>
 <span class="sd">        </span>
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -201,7 +204,19 @@
 <span class="sd">        )</span>
 <span class="sd">        </span>
 <span class="sd">        embedding = reducer.fit_transform(X)</span>
-<span class="sd">        </span>
+
+<span class="sd">    With custom distance metric::</span>
+
+<span class="sd">        # cuVS with L1 distance for k-NN computation</span>
+<span class="sd">        reducer = DiReCuVS(</span>
+<span class="sd">            use_cuvs=True,</span>
+<span class="sd">            metric=&#39;(x - y).abs().sum(-1)&#39;,  # L1/Manhattan distance</span>
+<span class="sd">            n_neighbors=32,</span>
+<span class="sd">            cuvs_index_type=&#39;ivf_flat&#39;</span>
+<span class="sd">        )</span>
+
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
+
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
 <span class="sd">    **Requirements:**</span>
@@ -266,7 +281,10 @@
 <span class="sd">            index-specific search parameters.</span>
 <span class="sd">        **kwargs</span>
 <span class="sd">            Additional keyword arguments passed to DiRePyTorch parent class.</span>
-<span class="sd">            See DiRePyTorch documentation for available parameters.</span>
+<span class="sd">            See DiRePyTorch documentation for available parameters including:</span>
+<span class="sd">            n_components, n_neighbors, init, max_iter_layout, min_dist, spread,</span>
+<span class="sd">            cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,</span>
+<span class="sd">            metric (custom distance function for k-NN computation).</span>
 <span class="sd">            </span>
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
