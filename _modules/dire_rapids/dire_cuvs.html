@@ -78,7 +78,7 @@
 <span class="sd">Falls back to PyTorch if cuVS is not available.</span>
 
 <span class="sd">Requirements:</span>
-<span class="sd">    pip install rapids-25.08  # or conda install -c rapidsai -c conda-forge rapids=25.08</span>
+<span class="sd">    Follow the installation instructions at https://docs.rapids.ai/install/</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -97,7 +97,7 @@
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS not available. Install RAPIDS for GPU-accelerated k-NN: &quot;</span>
-                  <span class="s2">&quot;conda install -c rapidsai -c conda-forge rapids=25.08&quot;</span><span class="p">)</span>
+                  <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span><span class="p">)</span>
 
 <span class="c1"># Try to import cuML for GPU-accelerated PCA</span>
 <span class="k">try</span><span class="p">:</span>
@@ -220,7 +220,7 @@
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
 <span class="sd">    **Requirements:**</span>
-<span class="sd">    - RAPIDS cuVS: ``conda install -c rapidsai rapids=25.08``</span>
+<span class="sd">    - RAPIDS cuVS: Follow the installation instructions at https://docs.rapids.ai/install/</span>
 <span class="sd">    - CUDA-capable GPU with compute capability &gt;= 6.0</span>
 <span class="sd">    </span>
 <span class="sd">    **Index Selection Guidelines:**</span>

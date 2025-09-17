@@ -1146,7 +1146,7 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;cuVS backend requested but RAPIDS not installed. &quot;</span>
-                <span class="s2">&quot;Install with: conda install -c rapidsai rapids&quot;</span>
+                <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cuVS backend requires CUDA GPU&quot;</span><span class="p">)</span>

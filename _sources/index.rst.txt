@@ -37,7 +37,7 @@ For GPU acceleration with RAPIDS:
 
 .. code-block:: bash
 
-   conda install -c rapidsai -c conda-forge rapids=25.08
+   # Follow the installation instructions at https://docs.rapids.ai/install/
 
 Quick Start
 -----------
