@@ -83,6 +83,9 @@ class DiReCuVS(DiRePyTorch):
         Custom parameters for cuVS search. Overrides defaults.
     *args, **kwargs
         Additional arguments passed to DiRePyTorch parent class.
+        Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
+        spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
+        metric (custom distance function for k-NN computation).
         
     Attributes
     ----------
@@ -128,7 +131,19 @@ class DiReCuVS(DiRePyTorch):
         )
         
         embedding = reducer.fit_transform(X)
-        
+
+    With custom distance metric::
+
+        # cuVS with L1 distance for k-NN computation
+        reducer = DiReCuVS(
+            use_cuvs=True,
+            metric='(x - y).abs().sum(-1)',  # L1/Manhattan distance
+            n_neighbors=32,
+            cuvs_index_type='ivf_flat'
+        )
+
+        embedding = reducer.fit_transform(X)
+
     Notes
     -----
     **Requirements:**
@@ -191,7 +206,10 @@ class DiReCuVS(DiRePyTorch):
             index-specific search parameters.
         **kwargs
             Additional keyword arguments passed to DiRePyTorch parent class.
-            See DiRePyTorch documentation for available parameters.
+            See DiRePyTorch documentation for available parameters including:
+            n_components, n_neighbors, init, max_iter_layout, min_dist, spread,
+            cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
+            metric (custom distance function for k-NN computation).
             
         Raises
         ------

@@ -96,6 +96,29 @@ def add_custom_features(data):
 analyzer.feature_extractor = add_custom_features
 ```
 
+### Custom Distance Metrics
+
+DiRe now supports custom distance metrics for k-NN computation, useful for domain-specific similarity measures:
+
+```python
+# Financial example: Using correlation-based distance
+def correlation_distance(x, y):
+    # Compute 1 - correlation coefficient as distance
+    x_centered = x - x.mean(dim=-1, keepdim=True)
+    y_centered = y - y.mean(dim=-1, keepdim=True)
+    correlation = (x_centered * y_centered).sum(-1) / (x_centered.norm(dim=-1) * y_centered.norm(dim=-1) + 1e-8)
+    return 1 - correlation.abs()  # Distance based on absolute correlation
+
+# Use with financial data analyzer
+analyzer = HierarchicalTickEmbedder(metric=correlation_distance)
+embedding = analyzer.analyze_trading_session("SPY")
+
+# Or use string expressions for simple metrics
+analyzer = HierarchicalTickEmbedder(
+    metric='(x - y).abs().sum(-1)'  # L1 distance for robust outlier handling
+)
+```
+
 ### Multi-Asset Analysis
 
 ```python

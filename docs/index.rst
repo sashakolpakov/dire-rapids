@@ -11,6 +11,7 @@ Features
 
 * **Multiple backends**: PyTorch, memory-efficient PyTorch, and RAPIDS cuVS
 * **Automatic backend selection** based on hardware and dataset characteristics
+* **Custom distance metrics** for k-NN computation (string expressions or callables)
 * **GPU acceleration** with CUDA support
 * **Memory-efficient processing** for large datasets (>100K points)
 * **Interactive visualizations** with Plotly
@@ -50,8 +51,8 @@ Quick Start
    X = np.random.randn(10000, 100)
    
    # Create reducer with automatic backend selection
-   reducer = create_dire()
-   
+   reducer = create_dire(n_neighbors=32)
+
    # Fit and transform data
    embedding = reducer.fit_transform(X)
    
@@ -137,6 +138,45 @@ Automatic Backend Selection
        memory_efficient=True  # Use memory-efficient variant if needed
    )
    embedding = reducer.fit_transform(X)
+
+Custom Distance Metrics
+~~~~~~~~~~~~~~~~~~~~~~~
+
+DiRe supports custom distance metrics for k-nearest neighbor computation:
+
+.. code-block:: python
+
+   # Using L1 (Manhattan) distance
+   reducer = DiRePyTorch(
+       metric='(x - y).abs().sum(-1)',
+       n_neighbors=32
+   )
+   embedding = reducer.fit_transform(X)
+
+   # Using custom callable metric
+   def cosine_distance(x, y):
+       return 1 - (x * y).sum(-1) / (
+           x.norm(dim=-1, keepdim=True) *
+           y.norm(dim=-1, keepdim=True) + 1e-8
+       )
+
+   reducer = DiRePyTorch(metric=cosine_distance)
+   embedding = reducer.fit_transform(X)
+
+   # Custom metrics work with all backends
+   reducer = create_dire(
+       metric='(x - y).abs().sum(-1)',  # L1 distance
+       memory_efficient=True
+   )
+   embedding = reducer.fit_transform(X)
+
+**Supported metric types:**
+
+* ``None`` or ``'euclidean'``/``'l2'``: Fast built-in Euclidean (default)
+* **String expressions**: Evaluated tensor expressions using ``x`` and ``y``
+* **Callable functions**: Custom Python functions taking ``(x, y)`` tensors
+
+Note: Layout forces remain Euclidean regardless of k-NN metric for optimal performance.
 
 Indices and tables
 ==================

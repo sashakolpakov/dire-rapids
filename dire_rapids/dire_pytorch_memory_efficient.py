@@ -54,40 +54,25 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
     
     Parameters
     ----------
-    n_components : int, default=2
-        Number of dimensions in the target embedding space.
-    n_neighbors : int, default=16
-        Number of nearest neighbors to use for attraction forces.
-    init : {'pca', 'random'}, default='pca'
-        Method for initializing the embedding.
-    max_iter_layout : int, default=128
-        Maximum number of optimization iterations.
-    min_dist : float, default=1e-2
-        Minimum distance between points in the embedding.
-    spread : float, default=1.0
-        Controls how tightly points are packed in the embedding.
-    cutoff : float, default=42.0
-        Distance cutoff for repulsion forces.
-    n_sample_dirs : int, default=8
-        Number of sampling directions (reserved for future use).
-    sample_size : int, default=16
-        Size of samples for force computation (reserved for future use).
-    neg_ratio : int, default=8
-        Ratio of negative samples to positive samples for repulsion.
-    verbose : bool, default=True
-        Whether to print progress information.
-    random_state : int or None, default=None
-        Random seed for reproducible results.
-    use_exact_repulsion : bool, default=False
-        If True, use exact all-pairs repulsion (memory intensive).
+    *args
+        Positional arguments passed to DiRePyTorch parent class.
     use_fp16 : bool, default=True
         Enable FP16 precision for memory efficiency (recommended).
+        Provides 2x memory reduction and significant speed improvements.
     use_pykeops_repulsion : bool, default=True
         Use PyKeOps LazyTensors for repulsion when beneficial.
+        Automatically disabled if PyKeOps unavailable or dataset too large.
     pykeops_threshold : int, default=50000
         Maximum dataset size for PyKeOps all-pairs computation.
+        Above this threshold, random sampling is used instead.
     memory_fraction : float, default=0.25
         Fraction of available memory to use for computations.
+        Lower values are more conservative but may be slower.
+    **kwargs
+        Additional keyword arguments passed to DiRePyTorch parent class.
+        Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
+        spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
+        metric (custom distance function for k-NN computation).
         
     Examples
     --------
@@ -109,65 +94,42 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         embedding = reducer.fit_transform(X)
         
     Custom memory settings::
-    
+
         reducer = DiRePyTorchMemoryEfficient(
             use_pykeops_repulsion=False,  # Disable PyKeOps
             memory_fraction=0.15,         # Use less memory
             pykeops_threshold=20000       # Lower PyKeOps threshold
         )
+
+    With custom distance metric::
+
+        # L1 metric for k-NN with memory efficiency
+        reducer = DiRePyTorchMemoryEfficient(
+            metric='(x - y).abs().sum(-1)',
+            n_neighbors=32,
+            use_fp16=True,
+            memory_fraction=0.2
+        )
+
+        embedding = reducer.fit_transform(X)
     """
     
     def __init__(
         self,
-        n_components=2,
-        n_neighbors=16,
-        init="pca",
-        max_iter_layout=128,
-        min_dist=1e-2,
-        spread=1.0,
-        cutoff=42.0,
-        n_sample_dirs=8,
-        sample_size=16,
-        neg_ratio=8,
-        verbose=True,
-        random_state=None,
-        use_exact_repulsion=False,
+        *args,
         use_fp16=True,  # Enable FP16 by default for memory efficiency
         use_pykeops_repulsion=True,  # Use PyKeOps for repulsion when possible
         pykeops_threshold=50000,     # Max points for PyKeOps all-pairs
         memory_fraction=0.25,
+        **kwargs
     ):
         """
         Initialize memory-efficient DiRe reducer.
-        
+
         Parameters
         ----------
-        n_components : int, default=2
-            Number of dimensions in the target embedding space.
-        n_neighbors : int, default=16
-            Number of nearest neighbors to use for attraction forces.
-        init : {'pca', 'random'}, default='pca'
-            Method for initializing the embedding.
-        max_iter_layout : int, default=128
-            Maximum number of optimization iterations.
-        min_dist : float, default=1e-2
-            Minimum distance between points in the embedding.
-        spread : float, default=1.0
-            Controls how tightly points are packed in the embedding.
-        cutoff : float, default=42.0
-            Distance cutoff for repulsion forces.
-        n_sample_dirs : int, default=8
-            Number of sampling directions (reserved for future use).
-        sample_size : int, default=16
-            Size of samples for force computation (reserved for future use).
-        neg_ratio : int, default=8
-            Ratio of negative samples to positive samples for repulsion.
-        verbose : bool, default=True
-            Whether to print progress information.
-        random_state : int or None, default=None
-            Random seed for reproducible results.
-        use_exact_repulsion : bool, default=False
-            If True, use exact all-pairs repulsion (memory intensive).
+        *args
+            Positional arguments passed to DiRePyTorch parent class.
         use_fp16 : bool, default=True
             Enable FP16 precision for memory efficiency. Provides 2x memory
             reduction and significant speed improvements on modern GPUs.
@@ -180,24 +142,17 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         memory_fraction : float, default=0.25
             Fraction of available memory to use for computations.
             Lower values are more conservative but may be slower.
+        **kwargs
+            Additional keyword arguments passed to DiRePyTorch parent class.
+            See DiRePyTorch documentation for available parameters including:
+
+            - n_components, n_neighbors, init, max_iter_layout, min_dist, spread
+            - cutoff, neg_ratio, verbose, random_state, use_exact_repulsion
+            - metric: Custom distance metric for k-NN (str, callable, or None)
         """
         
         # Call parent constructor
-        super().__init__(
-            n_components=n_components,
-            n_neighbors=n_neighbors,
-            init=init,
-            max_iter_layout=max_iter_layout,
-            min_dist=min_dist,
-            spread=spread,
-            cutoff=cutoff,
-            n_sample_dirs=n_sample_dirs,
-            sample_size=sample_size,
-            neg_ratio=neg_ratio,
-            verbose=verbose,
-            random_state=random_state,
-            use_exact_repulsion=use_exact_repulsion,
-        )
+        super().__init__(*args, **kwargs)
         
         # Additional memory-efficient parameters
         self.use_fp16 = use_fp16

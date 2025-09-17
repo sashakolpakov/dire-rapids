@@ -328,9 +328,174 @@ class TestDiRePyTorchGPU:
     def test_gpu_computation(self):
         """Test that computation works on GPU."""
         X = np.random.randn(100, 10).astype(np.float32)
-        
+
         model = DiRePyTorch(n_components=2, max_iter_layout=10, verbose=False)
         X_embedded = model.fit_transform(X)
-        
+
         assert X_embedded.shape == (100, 2)
         assert np.all(np.isfinite(X_embedded))
+
+
+class TestDiRePyTorchCustomMetrics:
+    """Test custom metric functionality."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Set up test fixtures."""
+        np.random.seed(42)
+        torch.manual_seed(42)
+        # Force CPU for tests
+        self.device = torch.device('cpu')  # pylint: disable=attribute-defined-outside-init
+
+    def test_default_metric_none(self):
+        """Test that default metric=None works (uses Euclidean)."""
+        X, _ = make_blobs(n_samples=50, n_features=10, centers=3, random_state=42)
+
+        model = DiRePyTorch(metric=None, max_iter_layout=10, verbose=False)
+        X_embedded = model.fit_transform(X)
+
+        assert X_embedded.shape == (50, 2)
+        assert np.all(np.isfinite(X_embedded))
+        assert model.metric_spec is None
+        assert model._metric_fn is None
+
+    def test_euclidean_metric_string(self):
+        """Test that metric='euclidean' works (should be same as None)."""
+        X, _ = make_blobs(n_samples=50, n_features=10, centers=3, random_state=42)
+
+        model = DiRePyTorch(metric='euclidean', max_iter_layout=10, verbose=False)
+        X_embedded = model.fit_transform(X)
+
+        assert X_embedded.shape == (50, 2)
+        assert np.all(np.isfinite(X_embedded))
+        assert model.metric_spec == 'euclidean'
+        assert model._metric_fn is None  # Should use fast path
+
+    def test_l2_metric_string(self):
+        """Test that metric='l2' works (should be same as euclidean)."""
+        X, _ = make_blobs(n_samples=50, n_features=10, centers=3, random_state=42)
+
+        model = DiRePyTorch(metric='l2', max_iter_layout=10, verbose=False)
+        X_embedded = model.fit_transform(X)
+
+        assert X_embedded.shape == (50, 2)
+        assert np.all(np.isfinite(X_embedded))
+        assert model.metric_spec == 'l2'
+        assert model._metric_fn is None  # Should use fast path
+
+    def test_l1_metric_string(self):
+        """Test L1 (Manhattan) distance metric using string expression."""
+        X, _ = make_blobs(n_samples=50, n_features=10, centers=3, random_state=42)
+
+        # L1 distance: sum of absolute differences
+        l1_expr = "(x - y).abs().sum(-1)"
+        model = DiRePyTorch(metric=l1_expr, max_iter_layout=10, verbose=False)
+        X_embedded = model.fit_transform(X)
+
+        assert X_embedded.shape == (50, 2)
+        assert np.all(np.isfinite(X_embedded))
+        assert model.metric_spec == l1_expr
+        assert model._metric_fn is not None
+        assert callable(model._metric_fn)
+
+    def test_cosine_metric_string(self):
+        """Test cosine distance metric using string expression."""
+        X, _ = make_blobs(n_samples=50, n_features=10, centers=3, random_state=42)
+
+        # Cosine distance: 1 - cosine similarity
+        # cosine_sim = (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True))
+        cosine_expr = "1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)"
+        model = DiRePyTorch(metric=cosine_expr, max_iter_layout=10, verbose=False)
+        X_embedded = model.fit_transform(X)
+
+        assert X_embedded.shape == (50, 2)
+        assert np.all(np.isfinite(X_embedded))
+        assert model.metric_spec == cosine_expr
+        assert model._metric_fn is not None
+        assert callable(model._metric_fn)
+
+    def test_callable_metric(self):
+        """Test custom callable metric function."""
+        X, _ = make_blobs(n_samples=50, n_features=10, centers=3, random_state=42)
+
+        # Define custom L1 metric as callable
+        def l1_metric(x, y):
+            return (x - y).abs().sum(-1)
+
+        model = DiRePyTorch(metric=l1_metric, max_iter_layout=10, verbose=False)
+        X_embedded = model.fit_transform(X)
+
+        assert X_embedded.shape == (50, 2)
+        assert np.all(np.isfinite(X_embedded))
+        assert model.metric_spec is l1_metric
+        assert model._metric_fn is l1_metric
+
+    def test_different_metrics_produce_different_results(self):
+        """Test that different metrics produce different embeddings."""
+        X, _ = make_blobs(n_samples=50, n_features=10, centers=3, random_state=42)
+
+        # Euclidean (default)
+        model_euclidean = DiRePyTorch(metric=None, max_iter_layout=20, verbose=False, random_state=42)
+        X_euclidean = model_euclidean.fit_transform(X)
+
+        # L1 metric
+        l1_expr = "(x - y).abs().sum(-1)"
+        model_l1 = DiRePyTorch(metric=l1_expr, max_iter_layout=20, verbose=False, random_state=42)
+        X_l1 = model_l1.fit_transform(X)
+
+        # Results should be different (different distance metrics should produce different k-NN graphs)
+        # Note: Due to randomness in optimization, we check they're not identical rather than exact differences
+        assert not np.allclose(X_euclidean, X_l1, atol=1e-3)
+
+        # Both should still be valid embeddings
+        assert np.all(np.isfinite(X_euclidean))
+        assert np.all(np.isfinite(X_l1))
+
+    def test_compile_metric_function_directly(self):
+        """Test the _compile_metric function directly."""
+        from dire_rapids.dire_pytorch import _compile_metric
+
+        # Test None
+        assert _compile_metric(None) is None
+
+        # Test euclidean string
+        assert _compile_metric('euclidean') is None
+        assert _compile_metric('l2') is None
+        assert _compile_metric('  L2  ') is None  # Case insensitive and strips
+
+        # Test custom string
+        l1_fn = _compile_metric('(x - y).abs().sum(-1)')
+        assert callable(l1_fn)
+
+        # Test callable
+        def custom_fn(x, y):
+            return x + y
+        assert _compile_metric(custom_fn) is custom_fn
+
+        # Test invalid input
+        with pytest.raises(ValueError, match="metric must be"):
+            _compile_metric(123)  # Invalid type
+
+    def test_metric_function_broadcasting(self):
+        """Test that custom metric functions work with proper broadcasting."""
+        import torch
+        from dire_rapids.dire_pytorch import _compile_metric
+
+        # Create test tensors with broadcasting shapes
+        x = torch.randn(3, 1, 5)  # (A, 1, D)
+        y = torch.randn(1, 4, 5)  # (1, B, D)
+
+        # Test L1 metric
+        l1_fn = _compile_metric('(x - y).abs().sum(-1)')
+        result = l1_fn(x, y)
+
+        # Should broadcast to (A, B) = (3, 4)
+        assert result.shape == (3, 4)
+        assert torch.all(torch.isfinite(result))
+
+        # Test cosine metric (simplified for broadcasting)
+        cosine_fn = _compile_metric('((x - y) ** 2).sum(-1)')  # Use squared euclidean instead for broadcasting test
+        result = cosine_fn(x, y)
+
+        assert result.shape == (3, 4)
+        assert torch.all(torch.isfinite(result))

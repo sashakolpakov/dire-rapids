@@ -38,6 +38,33 @@ except ImportError:
     logger.warning("PyKeOps not available. Install with: pip install pykeops")
 
 
+def _compile_metric(spec):
+    """
+    Turn a metric spec into a callable metric(x, y) that returns a distance-like
+    matrix with broadcasting:
+      - Torch path:  x: (A, 1, D), y: (1, B, D)  -> (A, B) torch.Tensor
+      - KeOps path:  x: LazyTensor(A,1,D), y: LazyTensor(1,B,D) -> LazyTensor(A,B)
+
+    If spec is None or 'euclidean'/'l2', return None (fast-path Euclidean stays in backend).
+    If spec is str, it's eval'ed with {'x': x, 'y': y} and no builtins.
+    If spec is callable, it's returned unchanged.
+    """
+    if spec is None:
+        return None
+    if isinstance(spec, str):
+        expr = spec.strip().lower()
+        if expr in ("euclidean", "l2"):
+            return None  # use built-in fast Euclidean
+        def _expr_metric(x, y, _expr=spec):
+            # Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.
+            # Works for both torch.Tensor and KeOps LazyTensor.
+            return eval(_expr, {"__builtins__": {}}, {"x": x, "y": y})
+        return _expr_metric
+    if callable(spec):
+        return spec
+    raise ValueError("metric must be None, a string expression, or a callable")
+
+
 class DiRePyTorch(TransformerMixin):
     """
     Memory-efficient PyTorch/PyKeOps implementation of DiRe dimensionality reduction.
@@ -90,6 +117,14 @@ class DiRePyTorch(TransformerMixin):
         Random seed for reproducible results.
     use_exact_repulsion : bool, default=False
         If True, use exact all-pairs repulsion (memory intensive, for testing only).
+    metric : str, callable, or None, default=None
+        Custom distance metric for k-NN computation only (layout forces remain Euclidean):
+
+        - None or 'euclidean'/'l2': Use fast built-in Euclidean distance
+        - str: String expression evaluated with x and y tensors (e.g., '(x - y).abs().sum(-1)' for L1)
+        - callable: Custom function taking (x, y) tensors and returning distance matrix
+
+        Examples: '(x - y).abs().sum(-1)' (L1), '1 - (x*y).sum(-1)/(x.norm()*y.norm() + 1e-8)' (cosine).
         
     Attributes
     ----------
@@ -117,7 +152,7 @@ class DiRePyTorch(TransformerMixin):
         fig.show()
     
     With custom parameters::
-    
+
         reducer = DiRePyTorch(
             n_components=3,
             n_neighbors=50,
@@ -125,6 +160,22 @@ class DiRePyTorch(TransformerMixin):
             min_dist=0.1,
             random_state=42
         )
+        embedding = reducer.fit_transform(X)
+
+    With custom distance metric::
+
+        # Using L1 (Manhattan) distance for k-NN
+        reducer = DiRePyTorch(
+            metric='(x - y).abs().sum(-1)',
+            n_neighbors=32
+        )
+        embedding = reducer.fit_transform(X)
+
+        # Using custom callable metric
+        def cosine_distance(x, y):
+            return 1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)
+
+        reducer = DiRePyTorch(metric=cosine_distance)
         embedding = reducer.fit_transform(X)
     """
 
@@ -143,6 +194,7 @@ class DiRePyTorch(TransformerMixin):
             verbose=True,
             random_state=None,
             use_exact_repulsion=False,  # If True, use all-pairs repulsion (for testing)
+            metric=None,
     ):
         """
         Initialize DiRePyTorch reducer with specified parameters.
@@ -175,6 +227,8 @@ class DiRePyTorch(TransformerMixin):
             Random seed for reproducible results.
         use_exact_repulsion : bool, default=False
             If True, use exact all-pairs repulsion (memory intensive, testing only).
+        metric : str, callable, or None, default=None
+            Custom distance metric for k-NN computation. See class docstring for details.
         """
 
         self.n_components = n_components
@@ -190,6 +244,10 @@ class DiRePyTorch(TransformerMixin):
         self.verbose = verbose
         self.random_state = random_state if random_state is not None else np.random.randint(0, 2 ** 32)
         self.use_exact_repulsion = use_exact_repulsion
+
+        # Custom metric for k-NN only (layout forces remain Euclidean):
+        self.metric_spec = metric
+        self._metric_fn = _compile_metric(self.metric_spec)
 
         # Setup instance-specific logger
         # Create a completely new logger instance for this DiRe object
@@ -901,6 +959,8 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
     **kwargs : dict
         Additional keyword arguments passed to the DiRe constructor.
         See individual backend documentation for available parameters.
+        Common parameters include: n_components, n_neighbors, metric,
+        max_iter_layout, min_dist, spread, verbose, random_state.
     
     Returns
     -------
@@ -938,6 +998,13 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         
         # GPU processing with cuVS acceleration
         reducer = create_dire(backend='cuvs', use_cuvs=True)
+
+        # With custom distance metric
+        reducer = create_dire(
+            metric='(x - y).abs().sum(-1)',  # L1 distance
+            n_neighbors=32,
+            verbose=True
+        )
         
     Notes
     -----

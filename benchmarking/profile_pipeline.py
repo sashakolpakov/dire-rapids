@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Profile the entire DIRE pipeline to identify bottlenecks.
+Profile the entire DiRe pipeline to identify bottlenecks.
 Compare k-NN, PCA initialization, and force layout times.
 """
 

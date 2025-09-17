@@ -91,6 +91,43 @@ reducer = DiRePyTorchMemoryEfficient(n_components=2, n_neighbors=16, verbose=Tru
 X_embedded = reducer.fit_transform(X)
 ```
 
+### Custom Distance Metrics
+
+DiRe Rapids now supports custom distance metrics for k-nearest neighbor computation, while keeping the layout forces Euclidean for optimal embedding quality:
+
+```python
+# Using L1 (Manhattan) distance for k-NN
+reducer = DiRePyTorch(
+    metric='(x - y).abs().sum(-1)',
+    n_neighbors=32,
+    verbose=True
+)
+X_embedded = reducer.fit_transform(X)
+
+# Using cosine distance for k-NN
+def cosine_distance(x, y):
+    return 1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)
+
+reducer = DiRePyTorch(
+    metric=cosine_distance,
+    n_neighbors=32
+)
+X_embedded = reducer.fit_transform(X)
+
+# Custom metrics work with all backends
+reducer = DiRePyTorchMemoryEfficient(
+    metric='(x - y).abs().sum(-1)',  # L1 distance
+    use_fp16=True,
+    n_neighbors=32
+)
+X_embedded = reducer.fit_transform(X)
+```
+
+**Supported Metric Types:**
+- **None** or `'euclidean'`/`'l2'`: Fast built-in Euclidean distance (default)
+- **String expressions**: Evaluated tensor expressions (e.g., `'(x - y).abs().sum(-1)'` for L1)
+- **Callable functions**: Custom Python functions taking (x, y) tensors
+
 After starting the above example, you should see a verbose output similar to the below:
 
 ```python
@@ -143,6 +180,30 @@ The final result is the expected image of 2D blobs
   - More aggressive memory management
   - PyKeOps LazyTensors for efficient repulsion (when available)
 - **DiReCuVS**: RAPIDS cuVS backend for massive-scale datasets
+
+### Auto Backend Selection
+
+Use the `create_dire()` function for automatic backend selection based on available hardware:
+
+```python
+from dire_rapids import create_dire
+
+# Auto-select optimal backend
+reducer = create_dire(
+    n_neighbors=32,
+    metric='(x - y).abs().sum(-1)',  # Custom L1 metric
+    verbose=True
+)
+X_embedded = reducer.fit_transform(X)
+
+# Force memory-efficient backend
+reducer = create_dire(
+    memory_efficient=True,
+    use_fp16=True,
+    metric=cosine_distance  # Custom callable metric
+)
+X_embedded = reducer.fit_transform(X)
+```
 
 ## Testing
 
