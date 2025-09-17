@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dire-rapids"
+version = "0.1.0"
+description = "PyTorch and RAPIDS (cuVS/cuML) accelerated dimensionality reduction"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Alexander Kolpakov (UATX)", email = "akolpakov@uaustin.org"},
+    {name = "Igor Rivin (Temple University)", email = "rivin@temple.edu"}
+]
+maintainers = [
+    {name = "Alexander Kolpakov", email = "akolpakov@uaustin.org"}
+]
+keywords = ["dimensionality-reduction", "machine-learning", "gpu", "cuda", "rapids", "pytorch", "visualization", "embedding", "umap", "tsne"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.21.0",
+    "torch>=2.0.0",
+    "pykeops>=2.1.0",
+    "loguru>=0.6.0",
+    "tqdm>=4.62.0",
+    "scipy>=1.7.0",
+    "scikit-learn>=1.0.0",
+    "pandas>=1.3.0",
+    "plotly>=5.0.0",
+    "psutil>=5.8.0",
+]
+
+[project.optional-dependencies]
+cuda = [
+    "cupy-cuda12x>=10.0.0",
+]
+rapids = [
+    "cuml-cu12>=23.0.0",
+    "cuvs-cu12>=23.0.0",
+    "cudf-cu12>=23.0.0",
+    "cupy-cuda12x>=10.0.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+    "matplotlib>=3.5.0",
+    "seaborn>=0.11.0",
+    "ipython>=8.0.0",
+    "jupyter>=1.0.0",
+    "notebook>=6.4.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "flake8>=4.0.0",
+    "pylint>=2.15.0",
+    "mypy>=0.950",
+    "memory_profiler>=0.60.0",
+    "line_profiler>=3.5.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-timeout>=2.1.0",
+]
+docs = [
+    "sphinx>=4.5.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "nbsphinx>=0.8.0",
+    "myst-parser>=0.17.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/sashakolpakov/dire-rapids"
+"Bug Reports" = "https://github.com/sashakolpakov/dire-rapids/issues"
+Source = "https://github.com/sashakolpakov/dire-rapids"
+Documentation = "https://github.com/sashakolpakov/dire-rapids#readme"
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "tests.*", "examples", "examples.*", "benchmarking", "benchmarking.*"]
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = false

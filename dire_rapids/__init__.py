@@ -49,7 +49,7 @@ except ImportError:
     import warnings
     warnings.warn(
         "cuVS backend not available. "
-        "Install RAPIDS for GPU acceleration: pip install rapids-25.08",
+        "Install RAPIDS for GPU acceleration: Follow the installation instructions at https://docs.rapids.ai/install/",
         UserWarning
     )
 

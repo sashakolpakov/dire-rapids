@@ -206,7 +206,7 @@ if __name__ == "__main__":
     if not CUVS_AVAILABLE:
         print("\n⚠️  cuVS not available!")
         print("To enable cuVS backend, install RAPIDS:")
-        print("  conda install -c rapidsai -c conda-forge rapids=25.08")
+        print("  Follow the installation instructions at https://docs.rapids.ai/install/")
         print("\nFalling back to PyTorch-only tests...")
     
     # Basic functionality test

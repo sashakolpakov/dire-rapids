@@ -7,7 +7,7 @@ This module provides optional cuVS integration for massive datasets.
 Falls back to PyTorch if cuVS is not available.
 
 Requirements:
-    pip install rapids-25.08  # or conda install -c rapidsai -c conda-forge rapids=25.08
+    Follow the installation instructions at https://docs.rapids.ai/install/
 """
 
 import numpy as np
@@ -26,7 +26,7 @@ try:
 except ImportError:
     CUVS_AVAILABLE = False
     logger.warning("cuVS not available. Install RAPIDS for GPU-accelerated k-NN: "
-                  "conda install -c rapidsai -c conda-forge rapids=25.08")
+                  "Follow the installation instructions at https://docs.rapids.ai/install/")
 
 # Try to import cuML for GPU-accelerated PCA
 try:
@@ -147,7 +147,7 @@ class DiReCuVS(DiRePyTorch):
     Notes
     -----
     **Requirements:**
-    - RAPIDS cuVS: ``conda install -c rapidsai rapids=25.08``
+    - RAPIDS cuVS: Follow the installation instructions at https://docs.rapids.ai/install/
     - CUDA-capable GPU with compute capability >= 6.0
     
     **Index Selection Guidelines:**

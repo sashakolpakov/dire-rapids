@@ -78,7 +78,7 @@
 <span class="sd">Falls back to PyTorch if cuVS is not available.</span>
 
 <span class="sd">Requirements:</span>
-<span class="sd">    pip install rapids-25.08  # or conda install -c rapidsai -c conda-forge rapids=25.08</span>
+<span class="sd">    Follow the installation instructions at https://docs.rapids.ai/install/</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -97,7 +97,7 @@
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS not available. Install RAPIDS for GPU-accelerated k-NN: &quot;</span>
-                  <span class="s2">&quot;conda install -c rapidsai -c conda-forge rapids=25.08&quot;</span><span class="p">)</span>
+                  <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span><span class="p">)</span>
 
 <span class="c1"># Try to import cuML for GPU-accelerated PCA</span>
 <span class="k">try</span><span class="p">:</span>
@@ -154,6 +154,9 @@
 <span class="sd">        Custom parameters for cuVS search. Overrides defaults.</span>
 <span class="sd">    *args, **kwargs</span>
 <span class="sd">        Additional arguments passed to DiRePyTorch parent class.</span>
+<span class="sd">        Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,</span>
+<span class="sd">        spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,</span>
+<span class="sd">        metric (custom distance function for k-NN computation).</span>
 <span class="sd">        </span>
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -199,11 +202,23 @@
 <span class="sd">        )</span>
 <span class="sd">        </span>
 <span class="sd">        embedding = reducer.fit_transform(X)</span>
-<span class="sd">        </span>
+
+<span class="sd">    With custom distance metric::</span>
+
+<span class="sd">        # cuVS with L1 distance for k-NN computation</span>
+<span class="sd">        reducer = DiReCuVS(</span>
+<span class="sd">            use_cuvs=True,</span>
+<span class="sd">            metric=&#39;(x - y).abs().sum(-1)&#39;,  # L1/Manhattan distance</span>
+<span class="sd">            n_neighbors=32,</span>
+<span class="sd">            cuvs_index_type=&#39;ivf_flat&#39;</span>
+<span class="sd">        )</span>
+
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
+
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
 <span class="sd">    **Requirements:**</span>
-<span class="sd">    - RAPIDS cuVS: ``conda install -c rapidsai rapids=25.08``</span>
+<span class="sd">    - RAPIDS cuVS: Follow the installation instructions at https://docs.rapids.ai/install/</span>
 <span class="sd">    - CUDA-capable GPU with compute capability &gt;= 6.0</span>
 <span class="sd">    </span>
 <span class="sd">    **Index Selection Guidelines:**</span>
@@ -262,7 +277,10 @@
 <span class="sd">            index-specific search parameters.</span>
 <span class="sd">        **kwargs</span>
 <span class="sd">            Additional keyword arguments passed to DiRePyTorch parent class.</span>
-<span class="sd">            See DiRePyTorch documentation for available parameters.</span>
+<span class="sd">            See DiRePyTorch documentation for available parameters including:</span>
+<span class="sd">            n_components, n_neighbors, init, max_iter_layout, min_dist, spread,</span>
+<span class="sd">            cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,</span>
+<span class="sd">            metric (custom distance function for k-NN computation).</span>
 <span class="sd">            </span>
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -540,8 +558,7 @@
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
             <span class="c1"># IVF-PQ search</span>
             <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
-                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">),</span>
-                <span class="n">internal_distance_dtype</span><span class="o">=</span><span class="s1">&#39;float32&#39;</span>
+                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
             <span class="p">)</span>
             
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
@@ -709,9 +726,9 @@
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Regular PCA for lower dimensions</span>
+                <span class="c1"># Note: cuPCA doesn&#39;t support random_state parameter</span>
                 <span class="n">pca</span> <span class="o">=</span> <span class="n">cuPCA</span><span class="p">(</span>
-                    <span class="n">n_components</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">,</span>
-                    <span class="n">random_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span>
+                    <span class="n">n_components</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span>
                 <span class="p">)</span>
             
             <span class="c1"># Fit and transform on GPU</span>

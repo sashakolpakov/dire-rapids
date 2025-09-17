@@ -80,6 +80,7 @@ with multiple backend implementations optimized for different scales and hardwar
 <ul class="simple">
 <li><p><strong>Multiple backends</strong>: PyTorch, memory-efficient PyTorch, and RAPIDS cuVS</p></li>
 <li><p><strong>Automatic backend selection</strong> based on hardware and dataset characteristics</p></li>
+<li><p><strong>Custom distance metrics</strong> for k-NN computation (string expressions or callables)</p></li>
 <li><p><strong>GPU acceleration</strong> with CUDA support</p></li>
 <li><p><strong>Memory-efficient processing</strong> for large datasets (&gt;100K points)</p></li>
 <li><p><strong>Interactive visualizations</strong> with Plotly</p></li>
@@ -101,7 +102,7 @@ with multiple backend implementations optimized for different scales and hardwar
 </pre></div>
 </div>
 <p>For GPU acceleration with RAPIDS:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>rapidsai<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span><span class="nv">rapids</span><span class="o">=</span><span class="m">25</span>.08
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Follow the installation instructions at https://docs.rapids.ai/install/</span>
 </pre></div>
 </div>
 </section>
@@ -114,7 +115,7 @@ with multiple backend implementations optimized for different scales and hardwar
 <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
 
 <span class="c1"># Create reducer with automatic backend selection</span>
-<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">()</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
 
 <span class="c1"># Fit and transform data</span>
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
@@ -205,6 +206,42 @@ with multiple backend implementations optimized for different scales and hardwar
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="custom-distance-metrics">
+<h3>Custom Distance Metrics<a class="headerlink" href="#custom-distance-metrics" title="Permalink to this heading"></a></h3>
+<p>DiRe supports custom distance metrics for k-nearest neighbor computation:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Using L1 (Manhattan) distance</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span>
+    <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;(x - y).abs().sum(-1)&#39;</span><span class="p">,</span>
+    <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span>
+<span class="p">)</span>
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+<span class="c1"># Using custom callable metric</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cosine_distance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span>
+        <span class="n">x</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">*</span>
+        <span class="n">y</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span>
+    <span class="p">)</span>
+
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">metric</span><span class="o">=</span><span class="n">cosine_distance</span><span class="p">)</span>
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+<span class="c1"># Custom metrics work with all backends</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span>
+    <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;(x - y).abs().sum(-1)&#39;</span><span class="p">,</span>  <span class="c1"># L1 distance</span>
+    <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Supported metric types:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> or <code class="docutils literal notranslate"><span class="pre">'euclidean'</span></code>/<code class="docutils literal notranslate"><span class="pre">'l2'</span></code>: Fast built-in Euclidean (default)</p></li>
+<li><p><strong>String expressions</strong>: Evaluated tensor expressions using <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code></p></li>
+<li><p><strong>Callable functions</strong>: Custom Python functions taking <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y)</span></code> tensors</p></li>
+</ul>
+<p>Note: Layout forces remain Euclidean regardless of k-NN metric for optimal performance.</p>
 </section>
 </section>
 </section>

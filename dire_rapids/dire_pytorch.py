@@ -1058,7 +1058,7 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         if not CUVS_AVAILABLE:
             raise RuntimeError(
                 "cuVS backend requested but RAPIDS not installed. "
-                "Install with: conda install -c rapidsai rapids"
+                "Follow the installation instructions at https://docs.rapids.ai/install/"
             )
         if not torch.cuda.is_available():
             raise RuntimeError("cuVS backend requires CUDA GPU")

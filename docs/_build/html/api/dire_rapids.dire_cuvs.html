@@ -92,7 +92,7 @@
 <p>This module provides optional cuVS integration for massive datasets.
 Falls back to PyTorch if cuVS is not available.</p>
 <dl class="simple">
-<dt>Requirements:</dt><dd><p>pip install rapids-25.08  # or conda install -c rapidsai -c conda-forge rapids=25.08</p>
+<dt>Requirements:</dt><dd><p>Follow the installation instructions at <a class="reference external" href="https://docs.rapids.ai/install/">https://docs.rapids.ai/install/</a></p>
 </dd>
 </dl>
 <dl class="py class">
@@ -157,10 +157,16 @@ detected based on availability and hardware.</p>
 <dd class="field-even"><p>dict, optional</p>
 </dd>
 <dt class="field-odd">param *args<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Additional arguments passed to DiRePyTorch parent class.</p>
+<dd class="field-odd"><p>Additional arguments passed to DiRePyTorch parent class.
+Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
+spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
+metric (custom distance function for k-NN computation).</p>
 </dd>
 <dt class="field-even">param **kwargs<span class="colon">:</span></dt>
-<dd class="field-even"><p>Additional arguments passed to DiRePyTorch parent class.</p>
+<dd class="field-even"><p>Additional arguments passed to DiRePyTorch parent class.
+Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
+spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
+metric (custom distance function for k-NN computation).</p>
 </dd>
 </dl>
 <dl class="py attribute">
@@ -231,9 +237,21 @@ detected based on availability and hardware.</p>
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>With custom distance metric:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># cuVS with L1 distance for k-NN computation</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiReCuVS</span><span class="p">(</span>
+    <span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;(x - y).abs().sum(-1)&#39;</span><span class="p">,</span>  <span class="c1"># L1/Manhattan distance</span>
+    <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+    <span class="n">cuvs_index_type</span><span class="o">=</span><span class="s1">&#39;ivf_flat&#39;</span>
+<span class="p">)</span>
+
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
 <p class="rubric">Notes</p>
 <p><strong>Requirements:</strong>
-- RAPIDS cuVS: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-c</span> <span class="pre">rapidsai</span> <span class="pre">rapids=25.08</span></code>
+- RAPIDS cuVS: Follow the installation instructions at <a class="reference external" href="https://docs.rapids.ai/install/">https://docs.rapids.ai/install/</a>
 - CUDA-capable GPU with compute capability &gt;= 6.0</p>
 <p><strong>Index Selection Guidelines:</strong>
 - &lt; 50K points: ‘flat’ (exact search)
@@ -273,7 +291,10 @@ index-specific parameters.</p></li>
 automatically determined parameters. See cuVS documentation for
 index-specific search parameters.</p></li>
 <li><p><strong>**kwargs</strong> – Additional keyword arguments passed to DiRePyTorch parent class.
-See DiRePyTorch documentation for available parameters.</p></li>
+See DiRePyTorch documentation for available parameters including:
+n_components, n_neighbors, init, max_iter_layout, min_dist, spread,
+cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
+metric (custom distance function for k-NN computation).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
