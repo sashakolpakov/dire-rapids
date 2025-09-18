@@ -8,7 +8,7 @@ def read_readme():
 
 setup(
     name="dire-rapids",
-    version="0.1.0",
+    version="0.1.5",
     packages=find_packages(exclude=["tests", "tests.*", "examples", "examples.*", "benchmarking", "benchmarking.*"]),
     
     # Core dependencies
