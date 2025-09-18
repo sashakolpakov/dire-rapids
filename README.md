@@ -13,7 +13,7 @@
     <img alt="PyPI" src="https://img.shields.io/pypi/v/dire-rapids.svg">
   </a>
   <a href="https://pepy.tech/projects/dire-rapids">
-    <img src="https://static.pepy.tech/badge/dire-rapids" alt="PyPI Downloads">
+    <img src="https://static.pepy.tech/personalized-badge/dire-rapids?period=total&units=ABBREVIATION&left_color=BLACK&right_color=BLUE&left_text=downloads" alt="PyPI Downloads">
   </a>
 </p>
 <p align="center">
