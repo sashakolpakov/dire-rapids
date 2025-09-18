@@ -223,3 +223,13 @@ pytest tests/ -v
 - NumPy, SciPy, scikit-learn
 - (Optional) CUDA 12.x+ for GPU acceleration
 - (Optional) RAPIDS 23.08+ for cuVS backend
+
+<p align="center">
+  <a href="https://submitaitools.org/github-com-sashakolpakov-dire-rapids/">
+    <img src="https://submitaitools.org/static_submitaitools/images/submitaitools.png"
+         alt="DiRe-RAPIDS: Fast Dimensionality Reduction on the GPU" height="60" />
+  </a>
+</p>
+
+                                       
+            
