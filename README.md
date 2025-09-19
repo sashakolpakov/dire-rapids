@@ -66,7 +66,7 @@ pip install -e .[rapids]
 pip install dire-rapids[options]
 ```
 
-## Quick Start
+## Quick Start [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sashakolpakov/dire-rapids/blob/main/benchmarking/dire_rapids_benchmarks.ipynb)
 
 You can import the standard or memory-efficient backend for DiRe. Also, some datasets is needed: we shall use higher-dimensional Blobs as a simple visual test. 
 
