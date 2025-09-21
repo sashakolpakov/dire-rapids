@@ -215,6 +215,22 @@ pytest tests/test_cpu_basic.py -v
 pytest tests/ -v
 ```
 
+## Citation
+
+**BibTeX:**
+```bibtex
+@misc{kolpakov2025dimensionality,
+  title={Dimensionality reduction for homological stability and global structure preservation},
+  author={Kolpakov, Alexander and Rivin, Igor},
+  year={2025},
+  doi={10.48550/arXiv.2503.03156},
+  url={https://arxiv.org/abs/2503.03156}
+}
+```
+
+**APA:**
+Kolpakov, A., & Rivin, I. (2025). Dimensionality reduction for homological stability and global structure preservation. *arXiv preprint arXiv:2503.03156*. https://doi.org/10.48550/arXiv.2503.03156
+
 ## Requirements
 
 - Python 3.8-3.12
