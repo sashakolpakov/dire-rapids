@@ -7,7 +7,7 @@ name = "dire-rapids"
 version = "0.1.5"
 description = "PyTorch and RAPIDS (cuVS/cuML) accelerated dimensionality reduction"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 authors = [
     {name = "Alexander Kolpakov (UATX)", email = "akolpakov@uaustin.org"},
     {name = "Igor Rivin (Temple University)", email = "rivin@temple.edu"}
