@@ -41,3 +41,6 @@ ENV/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Documentation builds
+docs/_build/
