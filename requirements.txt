@@ -10,6 +10,7 @@ scipy>=1.7.0
 scikit-learn>=1.0.0
 pandas>=1.3.0
 plotly>=5.0.0
+psutil>=5.8.0
 
 # Network dependencies (compatible with google-adk)
 websockets>=10.3,<16.0.0

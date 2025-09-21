@@ -8,7 +8,7 @@ def read_readme():
 
 setup(
     name="dire-rapids",
-    version="0.1.5",
+    version="0.2.0",
     packages=find_packages(exclude=["tests", "tests.*", "examples", "examples.*", "benchmarking", "benchmarking.*"]),
     
     # Core dependencies
@@ -23,6 +23,7 @@ setup(
         "pandas>=1.3.0",
         "plotly>=5.0.0",
         "psutil>=5.8.0",
+        "websockets>=10.3,<16.0.0",
     ],
 
     # Python versioning
@@ -108,7 +109,7 @@ setup(
     keywords="dimensionality-reduction machine-learning gpu cuda rapids pytorch visualization embedding umap tsne",
     
     # License
-    license="MIT",
+    license="Apache-2.0",
     
     # Include additional files
     include_package_data=True,
