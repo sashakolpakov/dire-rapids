@@ -33,6 +33,7 @@ ENV/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+benchmarking/dire_rapids_benchmarks.ipynb
 
 # pytest
 .pytest_cache/

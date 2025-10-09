@@ -4,7 +4,38 @@ This directory contains example applications demonstrating the power and versati
 
 ## Available Examples
 
-### 1. Financial Market Microstructure Analysis
+### 1. ReducerRunner & Comparison [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sashakolpakov/dire-rapids/blob/main/benchmarking/dire_rapids_benchmarks.ipynb)
+
+See `../benchmarking/dire_rapids_benchmarks.ipynb` for complete examples.
+
+**Files:**
+- `reducer_runner_demo.py`, `reducer_runner_dire_datasets.py`, `compare_reducers_demo.py`
+- `../benchmarking/compare_reducers.py` - Use with `%run` in notebooks
+
+### 2. Metrics Evaluation
+
+Comprehensive evaluation of dimensionality reduction quality with GPU acceleration.
+
+**Files:**
+- `metrics_simple_test.py` - Basic functionality test
+- `metrics_evaluation.py` - Full demo of all metrics (distortion, context, topology)
+
+**Features:**
+- Distortion metrics: stress, neighborhood preservation
+- Context metrics: SVM/kNN classification accuracy
+- Topological metrics: persistence diagrams, Betti curves, distances
+- Multiple persistence backends (giotto-ph, ripser++, ripser)
+
+**Quick Start:**
+```python
+from dire_rapids.metrics import evaluate_embedding
+
+results = evaluate_embedding(data, layout, labels)
+print(f"Stress: {results['local']['stress']:.4f}")
+print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
+```
+
+### 3. Financial Market Microstructure Analysis
 
 A comprehensive demonstration of using DiRe's PyTorch/PyKeOps backend for analyzing financial tick data and revealing market microstructure patterns through dimensionality reduction.
 

@@ -15,3 +15,4 @@ Submodules
    dire_rapids.dire_pytorch
    dire_rapids.dire_pytorch_memory_efficient
    dire_rapids.dire_cuvs
+   dire_rapids.metrics

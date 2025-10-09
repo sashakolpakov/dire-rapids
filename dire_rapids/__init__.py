@@ -13,27 +13,43 @@ with multiple backend implementations:
 The package automatically selects the best available backend based on system capabilities
 and dataset characteristics.
 
+Additionally, the package provides comprehensive metrics for evaluating dimensionality
+reduction quality through the **metrics** module, which includes:
+
+- **Distortion metrics**: stress, neighborhood preservation
+- **Context metrics**: SVM/kNN classification accuracy preservation
+- **Topological metrics**: persistence homology, Betti curves, Wasserstein/bottleneck distances
+
 Examples
 --------
 Basic usage with automatic backend selection::
 
     from dire_rapids import create_dire
-    
+
     # Create reducer with optimal backend
     reducer = create_dire()
-    
+
     # Fit and transform data
     embedding = reducer.fit_transform(X)
 
 Force a specific backend::
 
     from dire_rapids import DiRePyTorch, DiReCuVS
-    
+
     # Use PyTorch backend
     reducer = DiRePyTorch(n_neighbors=32)
-    
+
     # Use RAPIDS backend (requires RAPIDS installation)
     reducer = DiReCuVS(use_cuvs=True)
+
+Evaluate embedding quality::
+
+    from dire_rapids.metrics import evaluate_embedding
+
+    # Comprehensive evaluation
+    results = evaluate_embedding(data, embedding, labels)
+    print(f"Stress: {results['local']['stress']:.4f}")
+    print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
 """
 
 # Import PyTorch backends

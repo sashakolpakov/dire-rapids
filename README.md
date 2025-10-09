@@ -205,6 +205,24 @@ reducer = create_dire(
 X_embedded = reducer.fit_transform(X)
 ```
 
+## Metrics Module
+
+Comprehensive evaluation metrics for dimensionality reduction quality with GPU acceleration:
+
+```python
+from dire_rapids.metrics import evaluate_embedding
+
+results = evaluate_embedding(data, layout, labels)
+print(f"Stress: {results['local']['stress']:.4f}")
+print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
+```
+
+**Available metrics:** distortion (stress, neighborhood preservation), context (SVM/kNN classification), topology (persistence diagrams, Betti curves, Wasserstein/bottleneck distances).
+
+**Persistence backends:** giotto-ph (recommended), ripser++ (GPU), ripser (CPU). Auto-selected.
+
+See [METRICS_README.md](dire_rapids/METRICS_README.md) and [full documentation](https://sashakolpakov.github.io/dire-rapids/).
+
 ## Testing
 
 ```bash
@@ -213,6 +231,9 @@ pytest tests/test_cpu_basic.py -v
 
 # Run all tests
 pytest tests/ -v
+
+# Test metrics module
+python examples/metrics_simple_test.py
 ```
 
 ### Citation
