@@ -19,6 +19,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="dire_rapids.metrics module" href="dire_rapids.metrics.html" />
     <link rel="prev" title="dire_rapids.dire_pytorch_memory_efficient module" href="dire_rapids.dire_pytorch_memory_efficient.html" /> 
 </head>
 
@@ -55,6 +56,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.dire_cuvs.DiReCuVS"><code class="docutils literal notranslate"><span class="pre">DiReCuVS</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a></li>
 </ul>
 </li>
 </ul>
@@ -175,7 +177,7 @@ metric (custom distance function for k-NN computation).</p>
 <dd><p>Whether cuVS backend is enabled and available.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)">bool</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -186,7 +188,7 @@ metric (custom distance function for k-NN computation).</p>
 <dd><p>Whether cuML backend is enabled and available.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)">bool</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -197,7 +199,7 @@ metric (custom distance function for k-NN computation).</p>
 <dd><p>Built cuVS index for k-NN search.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)">object</a> or None</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a> or None</p>
 </dd>
 </dl>
 </dd></dl>
@@ -270,11 +272,11 @@ metric (custom distance function for k-NN computation).</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>*args</strong> – Positional arguments passed to DiRePyTorch parent class.</p></li>
-<li><p><strong>use_cuvs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuVS for k-NN computation:
+<li><p><strong>use_cuvs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuVS for k-NN computation:
 - None: Auto-detect based on availability and GPU presence
 - True: Force cuVS usage (raises error if unavailable)
 - False: Disable cuVS, use PyTorch backend</p></li>
-<li><p><strong>use_cuml</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuML for PCA initialization:
+<li><p><strong>use_cuml</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuML for PCA initialization:
 - None: Auto-detect based on availability and GPU presence
 - True: Force cuML usage (raises error if unavailable)
 - False: Disable cuML, use sklearn backend</p></li>
@@ -284,10 +286,10 @@ metric (custom distance function for k-NN computation).</p>
 - ‘ivf_pq’: Inverted file with product quantization (memory efficient)
 - ‘cagra’: Graph-based index (best for very large datasets)
 - ‘flat’: Brute-force exact search (small datasets only)</p></li>
-<li><p><strong>cuvs_build_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS index building. These override the
+<li><p><strong>cuvs_build_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS index building. These override the
 automatically determined parameters. See cuVS documentation for
 index-specific parameters.</p></li>
-<li><p><strong>cuvs_search_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS search operations. These override the
+<li><p><strong>cuvs_search_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS search operations. These override the
 automatically determined parameters. See cuVS documentation for
 index-specific search parameters.</p></li>
 <li><p><strong>**kwargs</strong> – Additional keyword arguments passed to DiRePyTorch parent class.
@@ -299,8 +301,8 @@ metric (custom distance function for k-NN computation).</p></li>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If cuVS or cuML are requested but not available.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.13)"><strong>RuntimeError</strong></a> – If GPU is required but not available.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><strong>ImportError</strong></a> – If cuVS or cuML are requested but not available.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If GPU is required but not available.</p></li>
 </ul>
 </dd>
 </dl>
@@ -359,6 +361,7 @@ selection and logging to inform users about the acceleration being used.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="dire_rapids.dire_pytorch_memory_efficient.html" class="btn btn-neutral float-left" title="dire_rapids.dire_pytorch_memory_efficient module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="dire_rapids.metrics.html" class="btn btn-neutral float-right" title="dire_rapids.metrics module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

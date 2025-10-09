@@ -57,6 +57,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_pytorch_memory_efficient.html">dire_rapids.dire_pytorch_memory_efficient module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html">dire_rapids.dire_cuvs module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a></li>
 </ul>
 </li>
 </ul>
@@ -293,20 +294,20 @@ and automatic GPU optimization.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>n_components</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=2</em>) – Number of dimensions in the target embedding space.</p></li>
-<li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=16</em>) – Number of nearest neighbors to use for attraction forces.</p></li>
+<li><p><strong>n_components</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=2</em>) – Number of dimensions in the target embedding space.</p></li>
+<li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=16</em>) – Number of nearest neighbors to use for attraction forces.</p></li>
 <li><p><strong>init</strong> (<em>{'pca'</em><em>, </em><em>'random'}</em><em>, </em><em>default='pca'</em>) – Method for initializing the embedding.</p></li>
-<li><p><strong>max_iter_layout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=128</em>) – Maximum number of optimization iterations.</p></li>
-<li><p><strong>min_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1e-2</em>) – Minimum distance between points in the embedding.</p></li>
-<li><p><strong>spread</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Controls how tightly points are packed in the embedding.</p></li>
-<li><p><strong>cutoff</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=42.0</em>) – Distance cutoff for repulsion forces.</p></li>
-<li><p><strong>n_sample_dirs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=8</em>) – Number of sampling directions (reserved for future use).</p></li>
-<li><p><strong>sample_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=16</em>) – Size of samples for force computation (reserved for future use).</p></li>
-<li><p><strong>neg_ratio</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=8</em>) – Ratio of negative samples to positive samples for repulsion.</p></li>
-<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to print progress information.</p></li>
-<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random seed for reproducible results.</p></li>
-<li><p><strong>use_exact_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, use exact all-pairs repulsion (memory intensive, testing only).</p></li>
-<li><p><strong>metric</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>callable</em><em>, or </em><em>None</em><em>, </em><em>default=None</em>) – Custom distance metric for k-NN computation. See class docstring for details.</p></li>
+<li><p><strong>max_iter_layout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=128</em>) – Maximum number of optimization iterations.</p></li>
+<li><p><strong>min_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1e-2</em>) – Minimum distance between points in the embedding.</p></li>
+<li><p><strong>spread</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Controls how tightly points are packed in the embedding.</p></li>
+<li><p><strong>cutoff</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=42.0</em>) – Distance cutoff for repulsion forces.</p></li>
+<li><p><strong>n_sample_dirs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=8</em>) – Number of sampling directions (reserved for future use).</p></li>
+<li><p><strong>sample_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=16</em>) – Size of samples for force computation (reserved for future use).</p></li>
+<li><p><strong>neg_ratio</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=8</em>) – Ratio of negative samples to positive samples for repulsion.</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to print progress information.</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random seed for reproducible results.</p></li>
+<li><p><strong>use_exact_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, use exact all-pairs repulsion (memory intensive, testing only).</p></li>
+<li><p><strong>metric</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>callable</em><em>, or </em><em>None</em><em>, </em><em>default=None</em>) – Custom distance metric for k-NN computation. See class docstring for details.</p></li>
 </ul>
 </dd>
 </dl>
@@ -384,9 +385,9 @@ with optional color coding by labels.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>labels</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em><em>, </em><em>optional</em>) – Labels for coloring points in the visualization.</p></li>
-<li><p><strong>point_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=2</em>) – Size of points in the scatter plot.</p></li>
-<li><p><strong>title</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Title for the plot. If None, a default title is generated.</p></li>
-<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Additional keyword arguments passed to plotly.express plotting functions.</p></li>
+<li><p><strong>point_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=2</em>) – Size of points in the scatter plot.</p></li>
+<li><p><strong>title</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Title for the plot. If None, a default title is generated.</p></li>
+<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Additional keyword arguments passed to plotly.express plotting functions.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -441,7 +442,7 @@ importing specific backend classes.</p>
 <li><p>’pytorch_cpu’: Force PyTorch backend on CPU only</p></li>
 </ul>
 </p></li>
-<li><p><strong>memory_efficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – <p>If True, use memory-efficient PyTorch implementation which provides:</p>
+<li><p><strong>memory_efficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – <p>If True, use memory-efficient PyTorch implementation which provides:</p>
 <ul>
 <li><p>Reduced memory usage for large datasets</p></li>
 <li><p>FP16 support for additional memory savings</p></li>
@@ -449,7 +450,7 @@ importing specific backend classes.</p>
 <li><p>More aggressive memory cleanup</p></li>
 </ul>
 </p></li>
-<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Additional keyword arguments passed to the DiRe constructor.
+<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Additional keyword arguments passed to the DiRe constructor.
 See individual backend documentation for available parameters.
 Common parameters include: n_components, n_neighbors, metric,
 max_iter_layout, min_dist, spread, verbose, random_state.</p></li>
@@ -464,9 +465,9 @@ or DiReCuVS) configured with the specified parameters.</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.13)"><strong>RuntimeError</strong></a> – If a specific backend is requested but requirements are not met
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If a specific backend is requested but requirements are not met
     (e.g., requesting cuVS without RAPIDS, or GPU without CUDA).</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If an unknown backend name is specified.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If an unknown backend name is specified.</p></li>
 </ul>
 </dd>
 </dl>

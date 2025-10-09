@@ -207,6 +207,29 @@ with multiple backend implementations optimized for different scales and hardwar
 </pre></div>
 </div>
 </section>
+<section id="metrics-module">
+<h3>Metrics Module<a class="headerlink" href="#metrics-module" title="Link to this heading"></a></h3>
+<p>Comprehensive evaluation metrics for dimensionality reduction quality:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">evaluate_embedding</span>
+
+<span class="c1"># Comprehensive evaluation</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">evaluate_embedding</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+
+<span class="c1"># Access metrics</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stress: </span><span class="si">{</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;local&#39;</span><span class="p">][</span><span class="s1">&#39;stress&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SVM accuracy: </span><span class="si">{</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;context&#39;</span><span class="p">][</span><span class="s1">&#39;svm&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Wasserstein: </span><span class="si">{</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;topology&#39;</span><span class="p">][</span><span class="s1">&#39;metrics&#39;</span><span class="p">][</span><span class="s1">&#39;wass&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Available metrics:</strong></p>
+<ul class="simple">
+<li><p><strong>Distortion</strong>: stress, neighborhood preservation</p></li>
+<li><p><strong>Context</strong>: SVM/kNN classification accuracy preservation</p></li>
+<li><p><strong>Topology</strong>: persistence diagrams, Betti curves, Wasserstein/bottleneck distances</p></li>
+</ul>
+<p><strong>Persistence backends</strong> (auto-selected): giotto-ph, ripser++, ripser</p>
+<p>See <a class="reference internal" href="api/dire_rapids.metrics.html"><span class="doc">dire_rapids.metrics module</span></a> for full API reference.</p>
+</section>
 <section id="custom-distance-metrics">
 <h3>Custom Distance Metrics<a class="headerlink" href="#custom-distance-metrics" title="Link to this heading"></a></h3>
 <p>DiRe supports custom distance metrics for k-nearest neighbor computation:</p>
@@ -242,6 +265,34 @@ with multiple backend implementations optimized for different scales and hardwar
 <li><p><strong>Callable functions</strong>: Custom Python functions taking <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y)</span></code> tensors</p></li>
 </ul>
 <p>Note: Layout forces remain Euclidean regardless of k-NN metric for optimal performance.</p>
+</section>
+<section id="reducerrunner-framework">
+<h3>ReducerRunner Framework<a class="headerlink" href="#reducerrunner-framework" title="Link to this heading"></a></h3>
+<p>General-purpose framework for running any dimensionality reduction algorithm with automatic data loading. See <code class="docutils literal notranslate"><span class="pre">benchmarking/dire_rapids_benchmarks.ipynb</span></code> for complete examples.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">benchmarking.reducer_runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReducerRunner</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
+
+<span class="n">runner</span> <span class="o">=</span> <span class="n">ReducerRunner</span><span class="p">(</span><span class="n">reducer_class</span><span class="o">=</span><span class="n">create_dire</span><span class="p">,</span> <span class="n">reducer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;n_neighbors&quot;</span><span class="p">:</span> <span class="mi">16</span><span class="p">})</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;sklearn:blobs&quot;</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;dire:sphere_uniform&quot;</span><span class="p">,</span> <span class="n">dataset_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;n_features&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">&quot;n_samples&quot;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">})</span>
+</pre></div>
+</div>
+<p><strong>Data sources:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sklearn:name</span></code> - sklearn datasets</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">openml:name</span></code> - OpenML datasets</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cytof:name</span></code> - CyTOF datasets</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dire:name</span></code> - DiRe geometric datasets (<code class="docutils literal notranslate"><span class="pre">disk_uniform</span></code>, <code class="docutils literal notranslate"><span class="pre">sphere_uniform</span></code>, <code class="docutils literal notranslate"><span class="pre">ellipsoid_uniform</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">file:path</span></code> - Local files</p></li>
+</ul>
+<p><strong>Reducer comparison:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># In notebooks: %run benchmarking/compare_reducers.py</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">benchmarking.compare_reducers</span><span class="w"> </span><span class="kn">import</span> <span class="n">compare_reducers</span><span class="p">,</span> <span class="n">print_comparison_summary</span>
+
+<span class="n">results</span> <span class="o">=</span> <span class="n">compare_reducers</span><span class="p">(</span><span class="s2">&quot;sklearn:blobs&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;distortion&#39;</span><span class="p">,</span> <span class="s1">&#39;context&#39;</span><span class="p">])</span>
+<span class="n">print_comparison_summary</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+</pre></div>
+</div>
 </section>
 </section>
 </section>

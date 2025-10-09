@@ -139,6 +139,33 @@ Automatic Backend Selection
    )
    embedding = reducer.fit_transform(X)
 
+Metrics Module
+~~~~~~~~~~~~~~
+
+Comprehensive evaluation metrics for dimensionality reduction quality:
+
+.. code-block:: python
+
+   from dire_rapids.metrics import evaluate_embedding
+
+   # Comprehensive evaluation
+   results = evaluate_embedding(data, layout, labels)
+
+   # Access metrics
+   print(f"Stress: {results['local']['stress']:.4f}")
+   print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
+   print(f"Wasserstein: {results['topology']['metrics']['wass'][0]:.6f}")
+
+**Available metrics:**
+
+* **Distortion**: stress, neighborhood preservation
+* **Context**: SVM/kNN classification accuracy preservation
+* **Topology**: persistence diagrams, Betti curves, Wasserstein/bottleneck distances
+
+**Persistence backends** (auto-selected): giotto-ph, ripser++, ripser
+
+See :doc:`api/dire_rapids.metrics` for full API reference.
+
 Custom Distance Metrics
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -177,6 +204,38 @@ DiRe supports custom distance metrics for k-nearest neighbor computation:
 * **Callable functions**: Custom Python functions taking ``(x, y)`` tensors
 
 Note: Layout forces remain Euclidean regardless of k-NN metric for optimal performance.
+
+ReducerRunner Framework
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+General-purpose framework for running any dimensionality reduction algorithm with automatic data loading. See ``benchmarking/dire_rapids_benchmarks.ipynb`` for complete examples.
+
+.. code-block:: python
+
+   from benchmarking.reducer_runner import ReducerRunner
+   from dire_rapids import create_dire
+
+   runner = ReducerRunner(reducer_class=create_dire, reducer_kwargs={"n_neighbors": 16})
+   result = runner.run("sklearn:blobs")
+   result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_samples": 1000})
+
+**Data sources:**
+
+* ``sklearn:name`` - sklearn datasets
+* ``openml:name`` - OpenML datasets
+* ``cytof:name`` - CyTOF datasets
+* ``dire:name`` - DiRe geometric datasets (``disk_uniform``, ``sphere_uniform``, ``ellipsoid_uniform``)
+* ``file:path`` - Local files
+
+**Reducer comparison:**
+
+.. code-block:: python
+
+   # In notebooks: %run benchmarking/compare_reducers.py
+   from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
+
+   results = compare_reducers("sklearn:blobs", metrics=['distortion', 'context'])
+   print_comparison_summary(results)
 
 Indices and tables
 ==================

@@ -72,6 +72,7 @@
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_pytorch.html">dire_rapids.dire_pytorch module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_pytorch_memory_efficient.html">dire_rapids.dire_pytorch_memory_efficient module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html">dire_rapids.dire_cuvs module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a></li>
 </ul>
 </li>
 </ul>
@@ -114,6 +115,13 @@ with multiple backend implementations:</p>
 </ul>
 <p>The package automatically selects the best available backend based on system capabilities
 and dataset characteristics.</p>
+<p>Additionally, the package provides comprehensive metrics for evaluating dimensionality
+reduction quality through the <strong>metrics</strong> module, which includes:</p>
+<ul class="simple">
+<li><p><strong>Distortion metrics</strong>: stress, neighborhood preservation</p></li>
+<li><p><strong>Context metrics</strong>: SVM/kNN classification accuracy preservation</p></li>
+<li><p><strong>Topological metrics</strong>: persistence homology, Betti curves, Wasserstein/bottleneck distances</p></li>
+</ul>
 <p class="rubric">Examples</p>
 <p>Basic usage with automatic backend selection:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
@@ -133,6 +141,15 @@ and dataset characteristics.</p>
 
 <span class="c1"># Use RAPIDS backend (requires RAPIDS installation)</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiReCuVS</span><span class="p">(</span><span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Evaluate embedding quality:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">evaluate_embedding</span>
+
+<span class="c1"># Comprehensive evaluation</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">evaluate_embedding</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">embedding</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Stress: </span><span class="si">{</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;local&#39;</span><span class="p">][</span><span class="s1">&#39;stress&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SVM accuracy: </span><span class="si">{</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;context&#39;</span><span class="p">][</span><span class="s1">&#39;svm&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 <dl class="py class">
@@ -327,20 +344,20 @@ and automatic GPU optimization.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>n_components</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=2</em>) – Number of dimensions in the target embedding space.</p></li>
-<li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=16</em>) – Number of nearest neighbors to use for attraction forces.</p></li>
+<li><p><strong>n_components</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=2</em>) – Number of dimensions in the target embedding space.</p></li>
+<li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=16</em>) – Number of nearest neighbors to use for attraction forces.</p></li>
 <li><p><strong>init</strong> (<em>{'pca'</em><em>, </em><em>'random'}</em><em>, </em><em>default='pca'</em>) – Method for initializing the embedding.</p></li>
-<li><p><strong>max_iter_layout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=128</em>) – Maximum number of optimization iterations.</p></li>
-<li><p><strong>min_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1e-2</em>) – Minimum distance between points in the embedding.</p></li>
-<li><p><strong>spread</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Controls how tightly points are packed in the embedding.</p></li>
-<li><p><strong>cutoff</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=42.0</em>) – Distance cutoff for repulsion forces.</p></li>
-<li><p><strong>n_sample_dirs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=8</em>) – Number of sampling directions (reserved for future use).</p></li>
-<li><p><strong>sample_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=16</em>) – Size of samples for force computation (reserved for future use).</p></li>
-<li><p><strong>neg_ratio</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=8</em>) – Ratio of negative samples to positive samples for repulsion.</p></li>
-<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to print progress information.</p></li>
-<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random seed for reproducible results.</p></li>
-<li><p><strong>use_exact_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, use exact all-pairs repulsion (memory intensive, testing only).</p></li>
-<li><p><strong>metric</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>callable</em><em>, or </em><em>None</em><em>, </em><em>default=None</em>) – Custom distance metric for k-NN computation. See class docstring for details.</p></li>
+<li><p><strong>max_iter_layout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=128</em>) – Maximum number of optimization iterations.</p></li>
+<li><p><strong>min_dist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1e-2</em>) – Minimum distance between points in the embedding.</p></li>
+<li><p><strong>spread</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=1.0</em>) – Controls how tightly points are packed in the embedding.</p></li>
+<li><p><strong>cutoff</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=42.0</em>) – Distance cutoff for repulsion forces.</p></li>
+<li><p><strong>n_sample_dirs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=8</em>) – Number of sampling directions (reserved for future use).</p></li>
+<li><p><strong>sample_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=16</em>) – Size of samples for force computation (reserved for future use).</p></li>
+<li><p><strong>neg_ratio</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=8</em>) – Ratio of negative samples to positive samples for repulsion.</p></li>
+<li><p><strong>verbose</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Whether to print progress information.</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Random seed for reproducible results.</p></li>
+<li><p><strong>use_exact_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – If True, use exact all-pairs repulsion (memory intensive, testing only).</p></li>
+<li><p><strong>metric</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>callable</em><em>, or </em><em>None</em><em>, </em><em>default=None</em>) – Custom distance metric for k-NN computation. See class docstring for details.</p></li>
 </ul>
 </dd>
 </dl>
@@ -418,9 +435,9 @@ with optional color coding by labels.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>labels</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em><em>, </em><em>optional</em>) – Labels for coloring points in the visualization.</p></li>
-<li><p><strong>point_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=2</em>) – Size of points in the scatter plot.</p></li>
-<li><p><strong>title</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><em>optional</em>) – Title for the plot. If None, a default title is generated.</p></li>
-<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Additional keyword arguments passed to plotly.express plotting functions.</p></li>
+<li><p><strong>point_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=2</em>) – Size of points in the scatter plot.</p></li>
+<li><p><strong>title</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Title for the plot. If None, a default title is generated.</p></li>
+<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Additional keyword arguments passed to plotly.express plotting functions.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -567,13 +584,13 @@ metric (custom distance function for k-NN computation).</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>*args</strong> – Positional arguments passed to DiRePyTorch parent class.</p></li>
-<li><p><strong>use_fp16</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Enable FP16 precision for memory efficiency. Provides 2x memory
+<li><p><strong>use_fp16</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Enable FP16 precision for memory efficiency. Provides 2x memory
 reduction and significant speed improvements on modern GPUs.</p></li>
-<li><p><strong>use_pykeops_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Use PyKeOps LazyTensors for memory-efficient repulsion computation
+<li><p><strong>use_pykeops_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Use PyKeOps LazyTensors for memory-efficient repulsion computation
 when dataset size is below pykeops_threshold.</p></li>
-<li><p><strong>pykeops_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=50000</em>) – Maximum dataset size for PyKeOps all-pairs computation.
+<li><p><strong>pykeops_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=50000</em>) – Maximum dataset size for PyKeOps all-pairs computation.
 Above this threshold, random sampling is used instead.</p></li>
-<li><p><strong>memory_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=0.25</em>) – Fraction of available memory to use for computations.
+<li><p><strong>memory_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.25</em>) – Fraction of available memory to use for computations.
 Lower values are more conservative but may be slower.</p></li>
 <li><p><strong>**kwargs</strong> – <p>Additional keyword arguments passed to DiRePyTorch parent class.
 See DiRePyTorch documentation for available parameters including:</p>
@@ -656,7 +673,7 @@ importing specific backend classes.</p>
 <li><p>’pytorch_cpu’: Force PyTorch backend on CPU only</p></li>
 </ul>
 </p></li>
-<li><p><strong>memory_efficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=False</em>) – <p>If True, use memory-efficient PyTorch implementation which provides:</p>
+<li><p><strong>memory_efficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=False</em>) – <p>If True, use memory-efficient PyTorch implementation which provides:</p>
 <ul>
 <li><p>Reduced memory usage for large datasets</p></li>
 <li><p>FP16 support for additional memory savings</p></li>
@@ -664,7 +681,7 @@ importing specific backend classes.</p>
 <li><p>More aggressive memory cleanup</p></li>
 </ul>
 </p></li>
-<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>) – Additional keyword arguments passed to the DiRe constructor.
+<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Additional keyword arguments passed to the DiRe constructor.
 See individual backend documentation for available parameters.
 Common parameters include: n_components, n_neighbors, metric,
 max_iter_layout, min_dist, spread, verbose, random_state.</p></li>
@@ -679,9 +696,9 @@ or DiReCuVS) configured with the specified parameters.</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.13)"><strong>RuntimeError</strong></a> – If a specific backend is requested but requirements are not met
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If a specific backend is requested but requirements are not met
     (e.g., requesting cuVS without RAPIDS, or GPU without CUDA).</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If an unknown backend name is specified.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If an unknown backend name is specified.</p></li>
 </ul>
 </dd>
 </dl>
@@ -806,7 +823,7 @@ metric (custom distance function for k-NN computation).</p>
 <dd><p>Whether cuVS backend is enabled and available.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)">bool</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -817,7 +834,7 @@ metric (custom distance function for k-NN computation).</p>
 <dd><p>Whether cuML backend is enabled and available.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)">bool</a></p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -828,7 +845,7 @@ metric (custom distance function for k-NN computation).</p>
 <dd><p>Built cuVS index for k-NN search.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)">object</a> or None</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a> or None</p>
 </dd>
 </dl>
 </dd></dl>
@@ -901,11 +918,11 @@ metric (custom distance function for k-NN computation).</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>*args</strong> – Positional arguments passed to DiRePyTorch parent class.</p></li>
-<li><p><strong>use_cuvs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuVS for k-NN computation:
+<li><p><strong>use_cuvs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuVS for k-NN computation:
 - None: Auto-detect based on availability and GPU presence
 - True: Force cuVS usage (raises error if unavailable)
 - False: Disable cuVS, use PyTorch backend</p></li>
-<li><p><strong>use_cuml</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuML for PCA initialization:
+<li><p><strong>use_cuml</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Whether to use cuML for PCA initialization:
 - None: Auto-detect based on availability and GPU presence
 - True: Force cuML usage (raises error if unavailable)
 - False: Disable cuML, use sklearn backend</p></li>
@@ -915,10 +932,10 @@ metric (custom distance function for k-NN computation).</p>
 - ‘ivf_pq’: Inverted file with product quantization (memory efficient)
 - ‘cagra’: Graph-based index (best for very large datasets)
 - ‘flat’: Brute-force exact search (small datasets only)</p></li>
-<li><p><strong>cuvs_build_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS index building. These override the
+<li><p><strong>cuvs_build_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS index building. These override the
 automatically determined parameters. See cuVS documentation for
 index-specific parameters.</p></li>
-<li><p><strong>cuvs_search_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS search operations. These override the
+<li><p><strong>cuvs_search_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS search operations. These override the
 automatically determined parameters. See cuVS documentation for
 index-specific search parameters.</p></li>
 <li><p><strong>**kwargs</strong> – Additional keyword arguments passed to DiRePyTorch parent class.
@@ -930,8 +947,8 @@ metric (custom distance function for k-NN computation).</p></li>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.13)"><strong>ImportError</strong></a> – If cuVS or cuML are requested but not available.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.13)"><strong>RuntimeError</strong></a> – If GPU is required but not available.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><strong>ImportError</strong></a> – If cuVS or cuML are requested but not available.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If GPU is required but not available.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1017,6 +1034,35 @@ selection and logging to inform users about the acceleration being used.</p>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html#dire_rapids.dire_cuvs.DiReCuVS.fit_transform"><code class="docutils literal notranslate"><span class="pre">DiReCuVS.fit_transform()</span></code></a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.get_available_persistence_backends"><code class="docutils literal notranslate"><span class="pre">get_available_persistence_backends()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.set_persistence_backend"><code class="docutils literal notranslate"><span class="pre">set_persistence_backend()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.get_persistence_backend"><code class="docutils literal notranslate"><span class="pre">get_persistence_backend()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.welford_update_gpu"><code class="docutils literal notranslate"><span class="pre">welford_update_gpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.welford_finalize_gpu"><code class="docutils literal notranslate"><span class="pre">welford_finalize_gpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.welford_gpu"><code class="docutils literal notranslate"><span class="pre">welford_gpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.threshold_subsample_gpu"><code class="docutils literal notranslate"><span class="pre">threshold_subsample_gpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.make_knn_graph_gpu"><code class="docutils literal notranslate"><span class="pre">make_knn_graph_gpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.make_knn_graph_cpu"><code class="docutils literal notranslate"><span class="pre">make_knn_graph_cpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_stress"><code class="docutils literal notranslate"><span class="pre">compute_stress()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_neighbor_score"><code class="docutils literal notranslate"><span class="pre">compute_neighbor_score()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_local_metrics"><code class="docutils literal notranslate"><span class="pre">compute_local_metrics()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_svm_accuracy"><code class="docutils literal notranslate"><span class="pre">compute_svm_accuracy()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_knn_accuracy"><code class="docutils literal notranslate"><span class="pre">compute_knn_accuracy()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_svm_score"><code class="docutils literal notranslate"><span class="pre">compute_svm_score()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_knn_score"><code class="docutils literal notranslate"><span class="pre">compute_knn_score()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_context_measures"><code class="docutils literal notranslate"><span class="pre">compute_context_measures()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_persistence_diagrams"><code class="docutils literal notranslate"><span class="pre">compute_persistence_diagrams()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.betti_curve"><code class="docutils literal notranslate"><span class="pre">betti_curve()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_dtw"><code class="docutils literal notranslate"><span class="pre">compute_dtw()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_twed"><code class="docutils literal notranslate"><span class="pre">compute_twed()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_emd"><code class="docutils literal notranslate"><span class="pre">compute_emd()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_wasserstein"><code class="docutils literal notranslate"><span class="pre">compute_wasserstein()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_bottleneck"><code class="docutils literal notranslate"><span class="pre">compute_bottleneck()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.compute_global_metrics"><code class="docutils literal notranslate"><span class="pre">compute_global_metrics()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.evaluate_embedding"><code class="docutils literal notranslate"><span class="pre">evaluate_embedding()</span></code></a></li>
 </ul>
 </li>
 </ul>

@@ -56,6 +56,7 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html">dire_rapids.dire_cuvs module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a></li>
 </ul>
 </li>
 </ul>
@@ -207,13 +208,13 @@ metric (custom distance function for k-NN computation).</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>*args</strong> – Positional arguments passed to DiRePyTorch parent class.</p></li>
-<li><p><strong>use_fp16</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Enable FP16 precision for memory efficiency. Provides 2x memory
+<li><p><strong>use_fp16</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Enable FP16 precision for memory efficiency. Provides 2x memory
 reduction and significant speed improvements on modern GPUs.</p></li>
-<li><p><strong>use_pykeops_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a><em>, </em><em>default=True</em>) – Use PyKeOps LazyTensors for memory-efficient repulsion computation
+<li><p><strong>use_pykeops_repulsion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – Use PyKeOps LazyTensors for memory-efficient repulsion computation
 when dataset size is below pykeops_threshold.</p></li>
-<li><p><strong>pykeops_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em>, </em><em>default=50000</em>) – Maximum dataset size for PyKeOps all-pairs computation.
+<li><p><strong>pykeops_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=50000</em>) – Maximum dataset size for PyKeOps all-pairs computation.
 Above this threshold, random sampling is used instead.</p></li>
-<li><p><strong>memory_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><em>default=0.25</em>) – Fraction of available memory to use for computations.
+<li><p><strong>memory_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=0.25</em>) – Fraction of available memory to use for computations.
 Lower values are more conservative but may be slower.</p></li>
 <li><p><strong>**kwargs</strong> – <p>Additional keyword arguments passed to DiRePyTorch parent class.
 See DiRePyTorch documentation for available parameters including:</p>
