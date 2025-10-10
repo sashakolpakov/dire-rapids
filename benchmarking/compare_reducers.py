@@ -252,8 +252,8 @@ def print_comparison_summary(results: Dict[str, Dict[str, Any]]) -> None:
     print(f"{'='*80}\n")
 
     # Print table header
-    print(f"{'Reducer':<15} {'Time(s)':<10} {'Stress':<10} {'SVM Test':<12} {'Wasserstein':<12}")
-    print("-" * 80)
+    print(f"{'Reducer':<15} {'Time(s)':<10} {'Stress':<10} {'SVM Score':<12} {'kNN Score':<12} {'Wasserstein':<12}")
+    print("-" * 95)
 
     for name, result in results.items():
         if 'error' in result:
@@ -268,11 +268,15 @@ def print_comparison_summary(results: Dict[str, Dict[str, Any]]) -> None:
 
         svm_str = "-"
         if 'context' in result.get('metrics', {}) and 'svm' in result['metrics']['context']:
-            svm_str = f"{result['metrics']['context']['svm'][1]:.4f}"  # LD accuracy
+            svm_str = f"{result['metrics']['context']['svm'][2]:.4f}"  # Context score (log ratio)
+
+        knn_str = "-"
+        if 'context' in result.get('metrics', {}) and 'knn' in result['metrics']['context']:
+            knn_str = f"{result['metrics']['context']['knn'][2]:.4f}"  # Context score (log ratio)
 
         wass_str = "-"
         if 'topology' in result.get('metrics', {}):
             if 'metrics' in result['metrics']['topology'] and 'wass' in result['metrics']['topology']['metrics']:
                 wass_str = f"{result['metrics']['topology']['metrics']['wass'][0]:.6f}"
 
-        print(f"{name:<15} {time_str:<10} {stress_str:<10} {svm_str:<12} {wass_str:<12}")
+        print(f"{name:<15} {time_str:<10} {stress_str:<10} {svm_str:<12} {knn_str:<12} {wass_str:<12}")
