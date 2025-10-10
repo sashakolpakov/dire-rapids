@@ -106,7 +106,7 @@ def compare_reducers(
             # Store original data from first reducer
             if X_orig is None:
                 # Load data again to get original
-                from reducer_runner import _parse_selector, _load_sklearn_any, _load_file, _load_cytof, _load_dire_dataset
+                from reducer_runner import _parse_selector, _load_sklearn_any, _load_file, _load_cytof, _load_dire_dataset, _coerce_Xy
                 scheme, name = _parse_selector(dataset)
                 dkwargs = dataset_kwargs or {}
 
@@ -121,7 +121,7 @@ def compare_reducers(
                         ds = fetch_openml(data_id=data_id, return_X_y=True, **dkwargs)
                     except Exception:
                         ds = fetch_openml(name=name, return_X_y=True, **dkwargs)
-                    X_orig, y_orig = ds[0], ds[1]
+                    X_orig, y_orig = _coerce_Xy(ds[0], ds[1])
                 elif scheme == "cytof":
                     X_orig, y_orig = _load_cytof(name, **dkwargs)
                 elif scheme == "dire":
@@ -129,12 +129,13 @@ def compare_reducers(
                 else:
                     raise ValueError(f"Unsupported scheme '{scheme}'")
 
-                # Convert to numpy arrays
-                if hasattr(X_orig, 'toarray'):
-                    X_orig = X_orig.toarray()
-                X_orig = np.asarray(X_orig, dtype=np.float32)
-                if y_orig is not None:
-                    y_orig = np.asarray(y_orig)
+                # Convert to numpy arrays (for non-openml schemes that didn't use _coerce_Xy)
+                if scheme != "openml":
+                    if hasattr(X_orig, 'toarray'):
+                        X_orig = X_orig.toarray()
+                    X_orig = np.asarray(X_orig, dtype=np.float32)
+                    if y_orig is not None:
+                        y_orig = np.asarray(y_orig)
 
             # Compute metrics
             result['metrics'] = {}
