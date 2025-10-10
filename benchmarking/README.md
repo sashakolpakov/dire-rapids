@@ -171,14 +171,90 @@ reducer = DiReCuVS(metric=cosine_distance)
 - Theoretical maximum: 5-10M points
 - Bottleneck: Search time (linear with N)
 
+## Using ReducerRunner
+
+The **ReducerRunner** framework provides a unified interface for running and comparing dimensionality reduction algorithms. It replaces the previous `DiReRunner` and supports any sklearn-compatible reducer.
+
+### Basic Usage
+
+```python
+from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids import create_dire
+
+# Create configuration
+config = ReducerConfig(
+    name="DiRe",
+    reducer_class=create_dire,
+    reducer_kwargs={"n_neighbors": 16, "n_components": 2},
+    visualize=True,
+    categorical_labels=True
+)
+
+# Run on dataset
+runner = ReducerRunner(config=config)
+
+# Try different datasets
+result = runner.run("sklearn:blobs")
+result = runner.run("sklearn:digits")
+result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_samples": 1000})
+result = runner.run("openml:mnist_784")
+result = runner.run("cytof:levine13")
+```
+
+### Comparing Reducers
+
+```python
+from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
+
+# Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
+results = compare_reducers(
+    "sklearn:blobs",
+    dataset_kwargs={"n_samples": 1000, "n_features": 50},
+    metrics=['distortion', 'context', 'topology']
+)
+print_comparison_summary(results)
+
+# Compare specific configurations
+from cuml import UMAP
+reducers = [
+    ReducerConfig("DiRe-16", create_dire, {"n_neighbors": 16}),
+    ReducerConfig("DiRe-32", create_dire, {"n_neighbors": 32}),
+    ReducerConfig("UMAP", UMAP, {"n_neighbors": 15})
+]
+results = compare_reducers("sklearn:digits", reducers=reducers)
+```
+
 ## Benchmark Scripts
 
-### dire_benchmarks.ipynb
+### dire_rapids_benchmarks.ipynb
 Comprehensive Jupyter notebook with benchmarking results:
-- Comparison with UMAP and t-SNE
+- **ReducerRunner** framework for easy data loading and algorithm execution
+- **compare_reducers** for comparing DiRe, UMAP, and t-SNE
 - Performance on various datasets (MNIST, Levine-13, etc.)
-- Visualization of embeddings
+- Visualization of embeddings with plotly
 - Global and local structure preservation analysis
+- Comprehensive metrics (distortion, context, topology)
+
+### reducer_runner.py
+General-purpose framework for dimensionality reduction:
+- **ReducerRunner** class for running any sklearn-compatible reducer
+- **ReducerConfig** dataclass for configuring reducers
+- Automatic data loading from multiple sources:
+  - sklearn datasets (blobs, digits, iris, wine, moons, swiss_roll, etc.)
+  - OpenML datasets (by name or ID)
+  - CyTOF datasets (levine13, levine32)
+  - DiRe geometric datasets (disk_uniform, sphere_uniform, ellipsoid_uniform)
+  - Local files (.csv, .npy, .npz, .parquet)
+- Built-in visualization with plotly
+- Supports both categorical and continuous labels
+
+### compare_reducers.py
+Framework for comparing multiple reducers:
+- Run multiple reducers on the same dataset
+- Automatic quality metrics computation
+- Summary table generation
+- Default set of reducers (DiRe, cuML UMAP, cuML TSNE)
+- Custom reducer configurations
 
 ### benchmark_mnist.py
 Tests DIRE performance on MNIST dataset with various configurations:

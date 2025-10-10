@@ -6,11 +6,34 @@ This directory contains example applications demonstrating the power and versati
 
 ### 1. ReducerRunner & Comparison [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sashakolpakov/dire-rapids/blob/main/benchmarking/dire_rapids_benchmarks.ipynb)
 
+**ReducerRunner** is a general-purpose framework for running dimensionality reduction algorithms with automatic data loading, visualization, and metrics computation. It replaces the previous `DiReRunner` and supports any sklearn-compatible reducer (DiRe, cuML UMAP/TSNE, etc.).
+
 See `../benchmarking/dire_rapids_benchmarks.ipynb` for complete examples.
 
 **Files:**
-- `reducer_runner_demo.py`, `reducer_runner_dire_datasets.py`, `compare_reducers_demo.py`
-- `../benchmarking/compare_reducers.py` - Use with `%run` in notebooks
+- `reducer_runner_demo.py` - Basic ReducerRunner usage with sklearn and OpenML datasets
+- `reducer_runner_dire_datasets.py` - Using DiRe geometric datasets (disk, sphere, ellipsoid)
+- `compare_reducers_demo.py` - Comparing multiple reducers with metrics
+- `../benchmarking/reducer_runner.py` - Main ReducerRunner implementation
+- `../benchmarking/compare_reducers.py` - Reducer comparison framework (use with `%run` in notebooks)
+
+**Quick Start:**
+```python
+from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids import create_dire
+
+# Create configuration
+config = ReducerConfig(
+    name="DiRe",
+    reducer_class=create_dire,
+    reducer_kwargs={"n_neighbors": 16},
+    visualize=True
+)
+
+# Run on dataset
+runner = ReducerRunner(config=config)
+result = runner.run("sklearn:blobs")
+```
 
 ### 2. Metrics Evaluation
 

@@ -205,6 +205,56 @@ reducer = create_dire(
 X_embedded = reducer.fit_transform(X)
 ```
 
+## ReducerRunner Framework
+
+General-purpose framework for running dimensionality reduction algorithms with automatic data loading and reducer comparison. See [benchmarking/dire_rapids_benchmarks.ipynb](benchmarking/dire_rapids_benchmarks.ipynb) for complete examples.
+
+### Quick Start with ReducerRunner
+
+```python
+from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids import create_dire
+
+# Create a configuration
+config = ReducerConfig(
+    name="DiRe",
+    reducer_class=create_dire,
+    reducer_kwargs={"n_neighbors": 16},
+    visualize=True
+)
+
+# Run on various datasets
+runner = ReducerRunner(config=config)
+result = runner.run("sklearn:blobs")
+result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_samples": 1000})
+```
+
+### Data Sources
+
+- `sklearn:name` - sklearn datasets (blobs, digits, iris, wine, moons, swiss_roll, etc.)
+- `openml:name` - OpenML datasets by name or ID
+- `cytof:name` - CyTOF datasets (levine13, levine32)
+- `dire:name` - DiRe geometric datasets (disk_uniform, sphere_uniform, ellipsoid_uniform)
+- `file:path` - Local files (.csv, .npy, .npz, .parquet)
+
+### Comparing Multiple Reducers
+
+```python
+from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
+
+# Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
+results = compare_reducers("sklearn:blobs", metrics=['distortion', 'context'])
+print_comparison_summary(results)
+
+# Compare specific reducers
+from cuml import UMAP
+reducers = [
+    ReducerConfig("DiRe", create_dire, {"n_neighbors": 16}),
+    ReducerConfig("UMAP", UMAP, {"n_neighbors": 15})
+]
+results = compare_reducers("digits", reducers=reducers)
+```
+
 ## Metrics Module
 
 Comprehensive evaluation metrics for dimensionality reduction quality with GPU acceleration:
