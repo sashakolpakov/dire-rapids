@@ -417,8 +417,9 @@ class DiRePyTorch(TransformerMixin):
             
             if use_pykeops:
                 # Use PyKeOps for LOW dimensional data
-                X_i = LazyTensor(X_chunk[:, None, :])  # (chunk_size, 1, D)
-                X_j = LazyTensor(X_torch[None, :, :])   # (1, N, D)
+                # Ensure contiguity for PyKeOps
+                X_i = LazyTensor(X_chunk[:, None, :].contiguous())  # (chunk_size, 1, D)
+                X_j = LazyTensor(X_torch[None, :, :].contiguous())   # (1, N, D)
                 
                 # Compute squared distances
                 D_ij = ((X_i - X_j) ** 2).sum(-1)  # (chunk_size, N) LazyTensor

@@ -411,9 +411,10 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         if use_pykeops:
             # Use PyKeOps LazyTensors for efficient all-pairs repulsion
             self.logger.debug("Using PyKeOps LazyTensors for repulsion")
-            
-            X_i = LazyTensor(positions[:, None, :])  # (N, 1, D)
-            X_j = LazyTensor(positions[None, :, :])  # (1, N, D)
+
+            # Ensure contiguity for PyKeOps
+            X_i = LazyTensor(positions[:, None, :].contiguous())  # (N, 1, D)
+            X_j = LazyTensor(positions[None, :, :].contiguous())  # (1, N, D)
             
             # Compute differences and distances
             diff = X_j - X_i  # (N, N, D) lazy
