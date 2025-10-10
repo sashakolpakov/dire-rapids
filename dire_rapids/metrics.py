@@ -296,14 +296,22 @@ def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_sta
     labels : array-like, optional
         Data labels
     threshold : float
-        Probability of keeping each sample
+        Probability of keeping each sample (must be between 0.0 and 1.0)
     random_state : int
         Random seed
 
     Returns
     -------
     tuple : Subsampled arrays
+
+    Raises
+    ------
+    ValueError
+        If threshold is not between 0.0 and 1.0
     """
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {threshold}")
+
     if HAS_CUPY:
         cp.random.seed(random_state)
 
@@ -567,7 +575,7 @@ def compute_neighbor_score(data, layout, n_neighbors, use_gpu=True):
     return [neighbor_mean, neighbor_std]
 
 
-def compute_local_metrics(data, layout, n_neighbors, memory_efficient=None, use_gpu=True):
+def compute_local_metrics(data, layout, n_neighbors, subsample_threshold=1.0, random_state=42, use_gpu=True):
     """
     Compute local quality metrics (stress and neighborhood preservation).
 
@@ -579,33 +587,45 @@ def compute_local_metrics(data, layout, n_neighbors, memory_efficient=None, use_
         Low-dimensional embedding
     n_neighbors : int
         Number of neighbors for kNN graph
-    memory_efficient : bool, optional
-        Whether to subsample for large datasets
+    subsample_threshold : float
+        Subsampling probability (must be between 0.0 and 1.0, default 1.0 = no subsampling)
+    random_state : int
+        Random seed for subsampling
     use_gpu : bool
         Whether to use GPU acceleration
 
     Returns
     -------
     dict : Dictionary containing 'stress' and 'neighbor' metrics
-    """
-    if memory_efficient is None:
-        memory_efficient = len(data) > 32768
 
-    if memory_efficient and len(data) > 131072:
-        sample_size = 32768
-        indices = np.random.choice(len(data), sample_size, replace=False)
-        data_sample = data[indices]
-        layout_sample = layout[indices]
+    Raises
+    ------
+    ValueError
+        If subsample_threshold is not between 0.0 and 1.0
+    """
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
+
+    # Apply subsampling if threshold < 1.0
+    if subsample_threshold < 1.0:
+        data_sub, layout_sub = threshold_subsample_gpu(
+            data, layout, threshold=subsample_threshold, random_state=random_state
+        )
+        # Convert back to numpy if needed
+        if HAS_CUPY and isinstance(data_sub, cp.ndarray):
+            data_sub = cp.asnumpy(data_sub)
+            layout_sub = cp.asnumpy(layout_sub)
 
         metrics = {
-            'stress': compute_stress(data_sample, layout_sample, n_neighbors, use_gpu=use_gpu),
-            'neighbor': compute_neighbor_score(data_sample, layout_sample, n_neighbors, use_gpu=use_gpu),
-            'note': f"Metrics computed on {sample_size} randomly sampled points"
+            'stress': compute_stress(data_sub, layout_sub, n_neighbors, use_gpu=use_gpu),
+            'neighbor': compute_neighbor_score(data_sub, layout_sub, n_neighbors, use_gpu=use_gpu),
+            'n_samples': len(data_sub)
         }
     else:
         metrics = {
             'stress': compute_stress(data, layout, n_neighbors, use_gpu=use_gpu),
-            'neighbor': compute_neighbor_score(data, layout, n_neighbors, use_gpu=use_gpu)
+            'neighbor': compute_neighbor_score(data, layout, n_neighbors, use_gpu=use_gpu),
+            'n_samples': len(data)
         }
 
     return metrics
@@ -778,7 +798,7 @@ def compute_svm_score(data, layout, labels, subsample_threshold=0.5, random_stat
     labels : array-like
         Class labels
     subsample_threshold : float
-        Subsampling probability
+        Subsampling probability (must be between 0.0 and 1.0)
     random_state : int
         Random seed
     use_gpu : bool
@@ -789,7 +809,15 @@ def compute_svm_score(data, layout, labels, subsample_threshold=0.5, random_stat
     Returns
     -------
     ndarray : [acc_hd, acc_ld, log_ratio]
+
+    Raises
+    ------
+    ValueError
+        If subsample_threshold is not between 0.0 and 1.0
     """
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
+
     # Subsample
     X_hd, X_ld, y = threshold_subsample_gpu(
         data, layout, labels, threshold=subsample_threshold, random_state=random_state
@@ -839,7 +867,7 @@ def compute_knn_score(data, layout, labels, n_neighbors=16, subsample_threshold=
     n_neighbors : int
         Number of neighbors for kNN
     subsample_threshold : float
-        Subsampling probability
+        Subsampling probability (must be between 0.0 and 1.0)
     random_state : int
         Random seed
     use_gpu : bool
@@ -850,7 +878,15 @@ def compute_knn_score(data, layout, labels, n_neighbors=16, subsample_threshold=
     Returns
     -------
     ndarray : [acc_hd, acc_ld, log_ratio]
+
+    Raises
+    ------
+    ValueError
+        If subsample_threshold is not between 0.0 and 1.0
     """
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
+
     # Subsample
     X_hd, X_ld, y = threshold_subsample_gpu(
         data, layout, labels, threshold=subsample_threshold, random_state=random_state
@@ -893,7 +929,7 @@ def compute_context_measures(data, layout, labels, subsample_threshold=0.5, n_ne
     labels : array-like
         Class labels
     subsample_threshold : float
-        Subsampling probability
+        Subsampling probability (must be between 0.0 and 1.0)
     n_neighbors : int
         Number of neighbors for kNN
     random_state : int
@@ -906,7 +942,14 @@ def compute_context_measures(data, layout, labels, subsample_threshold=0.5, n_ne
     Returns
     -------
     dict : Dictionary with 'svm' and 'knn' scores
+
+    Raises
+    ------
+    ValueError
+        If subsample_threshold is not between 0.0 and 1.0
     """
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
     measures = {
         'svm': compute_svm_score(
             data, layout, labels, subsample_threshold, random_state, use_gpu, **kwargs
@@ -938,7 +981,7 @@ def compute_persistence_diagrams(data, layout, max_dim=1, subsample_threshold=0.
     max_dim : int
         Maximum homology dimension
     subsample_threshold : float
-        Subsampling probability
+        Subsampling probability (must be between 0.0 and 1.0)
     random_state : int
         Random seed
     backend : str, optional
@@ -951,7 +994,15 @@ def compute_persistence_diagrams(data, layout, max_dim=1, subsample_threshold=0.
     Returns
     -------
     dict : {'data': diagrams_hd, 'layout': diagrams_ld, 'backend': backend_used}
+
+    Raises
+    ------
+    ValueError
+        If subsample_threshold is not between 0.0 and 1.0
     """
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
+
     # Select backend
     if backend is None:
         backend = get_persistence_backend()
@@ -1295,7 +1346,7 @@ def compute_global_metrics(data, layout, dimension=1, subsample_threshold=0.5, r
     dimension : int
         Maximum homology dimension
     subsample_threshold : float
-        Subsampling probability
+        Subsampling probability (must be between 0.0 and 1.0)
     random_state : int
         Random seed
     n_steps : int
@@ -1312,7 +1363,14 @@ def compute_global_metrics(data, layout, dimension=1, subsample_threshold=0.5, r
     Returns
     -------
     dict : Dictionary containing metrics (and optionally diagrams and betti curves)
+
+    Raises
+    ------
+    ValueError
+        If subsample_threshold is not between 0.0 and 1.0
     """
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
     metrics = {
         'dtw': [],
         'twed': [],
@@ -1380,7 +1438,8 @@ def compute_global_metrics(data, layout, dimension=1, subsample_threshold=0.5, r
 
 def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_threshold=0.5,
                       max_homology_dim=1, random_state=42, use_gpu=True,
-                      persistence_backend=None, n_threads=-1, **kwargs):
+                      persistence_backend=None, n_threads=-1, compute_distortion=True,
+                      compute_context=True, compute_topology=True, **kwargs):
     """
     Comprehensive evaluation of a dimensionality reduction embedding.
 
@@ -1397,7 +1456,7 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
     n_neighbors : int
         Number of neighbors for kNN metrics
     subsample_threshold : float
-        Subsampling probability for expensive metrics
+        Subsampling probability for all metrics (must be between 0.0 and 1.0, default 0.5)
     max_homology_dim : int
         Maximum homology dimension for persistence
     random_state : int
@@ -1408,23 +1467,39 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
         Persistence backend: 'giotto-ph', 'ripser++', 'ripser', or None for auto
     n_threads : int
         Number of threads for giotto-ph (-1 for all cores)
+    compute_distortion : bool
+        Whether to compute distortion metrics (default True)
+    compute_context : bool
+        Whether to compute context metrics (default True)
+    compute_topology : bool
+        Whether to compute topological metrics (default True)
     **kwargs : dict
         Additional parameters for specific metrics
 
     Returns
     -------
     dict : Dictionary with all computed metrics
+
+    Raises
+    ------
+    ValueError
+        If subsample_threshold is not between 0.0 and 1.0
     """
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
+
     results = {}
 
     # Local metrics (distortion)
-    print("Computing local metrics (stress, neighbor preservation)...")
-    results['local'] = compute_local_metrics(
-        data, layout, n_neighbors, use_gpu=use_gpu
-    )
+    if compute_distortion:
+        print("Computing local metrics (stress, neighbor preservation)...")
+        results['local'] = compute_local_metrics(
+            data, layout, n_neighbors, subsample_threshold=subsample_threshold,
+            random_state=random_state, use_gpu=use_gpu
+        )
 
     # Context metrics (if labels provided)
-    if labels is not None:
+    if compute_context and labels is not None:
         print("Computing context preservation metrics (SVM, kNN)...")
         results['context'] = compute_context_measures(
             data, layout, labels, subsample_threshold, n_neighbors,
@@ -1432,14 +1507,15 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
         )
 
     # Global topological metrics
-    if HAS_GIOTTO_PH or HAS_RIPSER_PP or HAS_RIPSER:
-        backend = persistence_backend or get_persistence_backend()
-        print(f"Computing topological metrics using backend: {backend}...")
-        results['topology'] = compute_global_metrics(
-            data, layout, max_homology_dim, subsample_threshold,
-            random_state, backend=backend, n_threads=n_threads
-        )
-    else:
-        warnings.warn("Skipping topological metrics (no persistence backend available)")
+    if compute_topology:
+        if HAS_GIOTTO_PH or HAS_RIPSER_PP or HAS_RIPSER:
+            backend = persistence_backend or get_persistence_backend()
+            print(f"Computing topological metrics using backend: {backend}...")
+            results['topology'] = compute_global_metrics(
+                data, layout, max_homology_dim, subsample_threshold,
+                random_state, backend=backend, n_threads=n_threads
+            )
+        else:
+            warnings.warn("Skipping topological metrics (no persistence backend available)")
 
     return results

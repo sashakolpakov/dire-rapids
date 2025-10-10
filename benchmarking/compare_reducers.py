@@ -19,6 +19,7 @@ def compare_reducers(
     reducers: Optional[List[ReducerConfig]] = None,
     dataset_kwargs: Optional[Dict[str, Any]] = None,
     metrics: Optional[List[str]] = None,
+    subsample_threshold: float = 0.5,
     verbose: bool = True
 ) -> Dict[str, Dict[str, Any]]:
     """
@@ -34,6 +35,9 @@ def compare_reducers(
         Arguments for dataset loader
     metrics : list of str, optional
         Metrics to compute: 'distortion', 'context', 'topology'. Default: all.
+    subsample_threshold : float
+        Subsampling probability for all metrics (must be between 0.0 and 1.0, default 0.5).
+        Lower values reduce RAM usage. For topological metrics with ripser, try 0.1-0.2 for large datasets.
     verbose : bool
         Print progress information
 
@@ -53,7 +57,7 @@ def compare_reducers(
     >>> results = compare_reducers("sklearn:blobs",
     ...                           dataset_kwargs={"n_samples": 1000, "n_features": 50})
 
-    >>> # Compare specific reducers with custom metrics
+    >>> # Compare specific reducers with custom metrics and subsampling
     >>> from dire_rapids import create_dire
     >>> from cuml import UMAP
     >>> reducers = [
@@ -61,7 +65,8 @@ def compare_reducers(
     ...     ReducerConfig("UMAP", UMAP, {"n_neighbors": 15}, visualize=True)
     ... ]
     >>> results = compare_reducers("digits", reducers=reducers,
-    ...                           metrics=['distortion', 'context'])
+    ...                           metrics=['distortion', 'context'],
+    ...                           subsample_threshold=0.2)
     """
     # Default reducers if none provided
     if reducers is None:
@@ -76,6 +81,10 @@ def compare_reducers(
     invalid = set(metrics) - valid_metrics
     if invalid:
         raise ValueError(f"Invalid metrics: {invalid}. Valid: {valid_metrics}")
+
+    # Validate subsample_threshold
+    if not 0.0 <= subsample_threshold <= 1.0:
+        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
 
     # Check if metrics module is available
     try:
@@ -142,11 +151,13 @@ def compare_reducers(
             if has_metrics and X_orig is not None:
                 if verbose:
                     print(f"Computing metrics for {config.name}...")
+                    print(f"  Using subsample_threshold={subsample_threshold}")
 
                 metric_results = evaluate_embedding(
                     X_orig,
                     result['embedding'],
                     y_orig,
+                    subsample_threshold=subsample_threshold,
                     compute_distortion='distortion' in metrics,
                     compute_context='context' in metrics,
                     compute_topology='topology' in metrics,
