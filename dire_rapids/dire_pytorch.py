@@ -846,13 +846,13 @@ class DiRePyTorch(TransformerMixin):
         self.fit_transform(X, y)
         return self
 
-    def visualize(self, labels=None, point_size=2, title=None, **kwargs):
+    def visualize(self, labels=None, point_size=2, title=None, max_points=10000, **kwargs):
         """
         Create an interactive visualization of the embedding.
-        
-        This method creates a 2D or 3D scatter plot of the embedding using Plotly,
-        with optional color coding by labels.
-        
+
+        Uses WebGL rendering (Scattergl) for performance and automatically
+        subsamples to max_points if dataset is larger.
+
         Parameters
         ----------
         labels : array-like of shape (n_samples,), optional
@@ -861,32 +861,35 @@ class DiRePyTorch(TransformerMixin):
             Size of points in the scatter plot.
         title : str, optional
             Title for the plot. If None, a default title is generated.
+        max_points : int, default=10000
+            Maximum number of points to display. Subsamples if larger.
         **kwargs : dict
             Additional keyword arguments passed to plotly.express plotting functions.
-            
+
         Returns
         -------
         plotly.graph_objects.Figure or None
             Interactive Plotly figure, or None if no embedding is available.
-            
+
         Examples
         --------
         Basic visualization::
-        
+
             fig = reducer.visualize()
             fig.show()
-            
+
         With labels and custom styling::
-        
+
             fig = reducer.visualize(
-                labels=y, 
-                point_size=3, 
+                labels=y,
+                point_size=3,
                 title="My Embedding",
-                width=800, 
+                max_points=20000,
+                width=800,
                 height=600
             )
             fig.show()
-            
+
         Notes
         -----
         Requires a fitted model with available embedding (self._layout).
@@ -899,32 +902,46 @@ class DiRePyTorch(TransformerMixin):
         if title is None:
             title = f"PyTorch {self.n_components}D Embedding"
 
+        # Subsample if needed
+        n_points = self._layout.shape[0]
+        if n_points > max_points:
+            rng = np.random.RandomState(42)
+            subsample_idx = rng.choice(n_points, max_points, replace=False)
+            layout_vis = self._layout[subsample_idx]
+            labels_vis = labels[subsample_idx] if labels is not None else None
+        else:
+            layout_vis = self._layout
+            labels_vis = labels
+
         # Create dataframe
         if self.n_components == 2:
-            df = pd.DataFrame(self._layout, columns=['x', 'y'])
+            df = pd.DataFrame(layout_vis, columns=['x', 'y'])
         elif self.n_components == 3:
-            df = pd.DataFrame(self._layout, columns=['x', 'y', 'z'])
+            df = pd.DataFrame(layout_vis, columns=['x', 'y', 'z'])
         else:
             self.logger.error(f"Cannot visualize {self.n_components}D embedding")
             return None
 
         # Add labels if provided
-        if labels is not None:
-            df['label'] = labels
+        if labels_vis is not None:
+            df['label'] = labels_vis
 
         # Create plot
         vis_params = {
-            'color': 'label' if labels is not None else None,
+            'color': 'label' if labels_vis is not None else None,
             'title': title,
         }
         vis_params.update(kwargs)
 
         if self.n_components == 2:
             fig = px.scatter(df, x='x', y='y', **vis_params)
+            # Convert to WebGL for performance
+            for trace in fig.data:
+                trace.type = 'scattergl'
         else:
             fig = px.scatter_3d(df, x='x', y='y', z='z', **vis_params)
 
-        fig.update_traces(marker={'size': point_size})
+        fig.update_traces(marker={'size': point_size, 'opacity': 0.7})
 
         return fig
 

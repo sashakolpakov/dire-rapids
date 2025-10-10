@@ -495,12 +495,14 @@ class ReducerConfig:
     All fields are mutable and can be changed after creation:
         config.visualize = True
         config.categorical_labels = False
+        config.max_points = 20000
     """
     name: str
     reducer_class: type
     reducer_kwargs: Dict[str, Any]
     visualize: bool = False
     categorical_labels: bool = True  # False for regression-style labels (swiss_roll, etc.)
+    max_points: int = 10000  # Max points for visualization (subsamples if larger)
 
 
 # --------- selector parsing ---------
@@ -543,14 +545,15 @@ class ReducerRunner:
         if self.config is None:
             raise ValueError("Must provide 'config' (ReducerConfig)")
 
-    def _get_reducer_info(self) -> Tuple[str, type, Dict[str, Any], bool, bool]:
+    def _get_reducer_info(self) -> Tuple[str, type, Dict[str, Any], bool, bool, int]:
         """Extract reducer info from config."""
         return (
             self.config.name,
             self.config.reducer_class,
             self.config.reducer_kwargs,
             self.config.visualize,
-            self.config.categorical_labels
+            self.config.categorical_labels,
+            self.config.max_points
         )
 
     def run(
@@ -583,7 +586,7 @@ class ReducerRunner:
             - dataset_info: dataset metadata
         """
         # Get reducer configuration
-        reducer_name, reducer_class, reducer_kwargs, should_visualize, categorical_labels = self._get_reducer_info()
+        reducer_name, reducer_class, reducer_kwargs, should_visualize, categorical_labels, max_points = self._get_reducer_info()
 
         scheme, name = _parse_selector(dataset)
         dataset_kwargs = dataset_kwargs or {}
@@ -626,7 +629,7 @@ class ReducerRunner:
             n_dims = embedding.shape[1] if len(embedding.shape) > 1 else 1
             if n_dims in (2, 3):
                 try:
-                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims, categorical_labels)
+                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims, categorical_labels, max_points)
                 except Exception as e:
                     print(f"[WARNING] plotly visualization failed: {e}")
 
@@ -648,9 +651,15 @@ class ReducerRunner:
         labels: Optional[np.ndarray],
         title: str,
         n_dims: int,
-        categorical_labels: bool = True
+        categorical_labels: bool = True,
+        max_points: int = 10000
     ):
-        """Create and display plotly visualization for 2D or 3D embeddings."""
+        """
+        Create and display plotly visualization for 2D or 3D embeddings.
+
+        Uses WebGL rendering (Scattergl) for performance. Automatically subsamples
+        to max_points if dataset is larger.
+        """
         try:
             import plotly.graph_objects as go
         except ImportError:
@@ -659,42 +668,73 @@ class ReducerRunner:
 
         _safe_init_plotly_renderer()
 
+        n_points = embedding.shape[0]
+
+        # Subsample if needed
+        if n_points > max_points:
+            rng = np.random.RandomState(42)
+            subsample_idx = rng.choice(n_points, max_points, replace=False)
+            embedding_vis = embedding[subsample_idx]
+            labels_vis = labels[subsample_idx] if labels is not None else None
+        else:
+            embedding_vis = embedding
+            labels_vis = labels
+
         if n_dims == 2:
-            # 2D scatter plot
-            if labels is not None:
+            # Use Scattergl for WebGL acceleration
+            if labels_vis is not None:
                 if not categorical_labels:
-                    # Use continuous color scale for regression-style labels
-                    fig = go.Figure(data=go.Scatter(
-                        x=embedding[:, 0],
-                        y=embedding[:, 1],
+                    fig = go.Figure(data=go.Scattergl(
+                        x=embedding_vis[:, 0],
+                        y=embedding_vis[:, 1],
                         mode='markers',
                         marker=dict(
-                            size=5,
-                            color=labels,
+                            size=4,
+                            color=labels_vis,
                             colorscale='Viridis',
                             colorbar=dict(title="Label Value"),
-                            showscale=True
+                            showscale=True,
+                            opacity=0.8
                         )
                     ))
                 else:
-                    # Use discrete traces for classification labels
-                    unique_labels = np.unique(labels)
-                    fig = go.Figure()
-                    for label in unique_labels:
-                        mask = labels == label
-                        fig.add_trace(go.Scatter(
-                            x=embedding[mask, 0],
-                            y=embedding[mask, 1],
+                    unique_labels = np.unique(labels_vis)
+
+                    if len(unique_labels) > 20:
+                        label_to_idx = {lbl: idx for idx, lbl in enumerate(unique_labels)}
+                        colors = np.array([label_to_idx[lbl] for lbl in labels_vis])
+
+                        fig = go.Figure(data=go.Scattergl(
+                            x=embedding_vis[:, 0],
+                            y=embedding_vis[:, 1],
                             mode='markers',
-                            name=str(label),
-                            marker=dict(size=5)
+                            marker=dict(
+                                size=4,
+                                color=colors,
+                                colorscale='Viridis',
+                                showscale=True,
+                                opacity=0.8
+                            ),
+                            text=[f"Label: {lbl}" for lbl in labels_vis],
+                            hovertemplate='%{text}<extra></extra>'
                         ))
+                    else:
+                        fig = go.Figure()
+                        for label in unique_labels:
+                            mask = labels_vis == label
+                            fig.add_trace(go.Scattergl(
+                                x=embedding_vis[mask, 0],
+                                y=embedding_vis[mask, 1],
+                                mode='markers',
+                                name=str(label),
+                                marker=dict(size=4, opacity=0.8)
+                            ))
             else:
-                fig = go.Figure(data=go.Scatter(
-                    x=embedding[:, 0],
-                    y=embedding[:, 1],
+                fig = go.Figure(data=go.Scattergl(
+                    x=embedding_vis[:, 0],
+                    y=embedding_vis[:, 1],
                     mode='markers',
-                    marker=dict(size=5)
+                    marker=dict(size=4, opacity=0.7)
                 ))
 
             fig.update_layout(
@@ -702,48 +742,68 @@ class ReducerRunner:
                 xaxis_title="Dimension 1",
                 yaxis_title="Dimension 2",
                 width=800,
-                height=600
+                height=600,
+                hovermode='closest'
             )
 
         elif n_dims == 3:
-            # 3D scatter plot
-            if labels is not None:
+            if labels_vis is not None:
                 if not categorical_labels:
-                    # Use continuous color scale for regression-style labels
                     fig = go.Figure(data=go.Scatter3d(
-                        x=embedding[:, 0],
-                        y=embedding[:, 1],
-                        z=embedding[:, 2],
+                        x=embedding_vis[:, 0],
+                        y=embedding_vis[:, 1],
+                        z=embedding_vis[:, 2],
                         mode='markers',
                         marker=dict(
-                            size=3,
-                            color=labels,
+                            size=2,
+                            color=labels_vis,
                             colorscale='Viridis',
                             colorbar=dict(title="Label Value"),
-                            showscale=True
+                            showscale=True,
+                            opacity=0.8
                         )
                     ))
                 else:
-                    # Use discrete traces for classification labels
-                    unique_labels = np.unique(labels)
-                    fig = go.Figure()
-                    for label in unique_labels:
-                        mask = labels == label
-                        fig.add_trace(go.Scatter3d(
-                            x=embedding[mask, 0],
-                            y=embedding[mask, 1],
-                            z=embedding[mask, 2],
+                    unique_labels = np.unique(labels_vis)
+
+                    if len(unique_labels) > 20:
+                        label_to_idx = {lbl: idx for idx, lbl in enumerate(unique_labels)}
+                        colors = np.array([label_to_idx[lbl] for lbl in labels_vis])
+
+                        fig = go.Figure(data=go.Scatter3d(
+                            x=embedding_vis[:, 0],
+                            y=embedding_vis[:, 1],
+                            z=embedding_vis[:, 2],
                             mode='markers',
-                            name=str(label),
-                            marker=dict(size=3)
+                            marker=dict(
+                                size=2,
+                                color=colors,
+                                colorscale='Viridis',
+                                showscale=True,
+                                opacity=0.8
+                            ),
+                            text=[f"Label: {lbl}" for lbl in labels_vis],
+                            hovertemplate='%{text}<extra></extra>'
                         ))
+                    else:
+                        fig = go.Figure()
+                        for label in unique_labels:
+                            mask = labels_vis == label
+                            fig.add_trace(go.Scatter3d(
+                                x=embedding_vis[mask, 0],
+                                y=embedding_vis[mask, 1],
+                                z=embedding_vis[mask, 2],
+                                mode='markers',
+                                name=str(label),
+                                marker=dict(size=2, opacity=0.8)
+                            ))
             else:
                 fig = go.Figure(data=go.Scatter3d(
-                    x=embedding[:, 0],
-                    y=embedding[:, 1],
-                    z=embedding[:, 2],
+                    x=embedding_vis[:, 0],
+                    y=embedding_vis[:, 1],
+                    z=embedding_vis[:, 2],
                     mode='markers',
-                    marker=dict(size=3)
+                    marker=dict(size=2, opacity=0.7)
                 ))
 
             fig.update_layout(
