@@ -10,7 +10,7 @@ import shutil
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
 from IPython.display import display, HTML  # for Colab/Notebook visualize
@@ -485,6 +485,17 @@ def _load_cytof(name: str, **kwargs) -> Tuple[np.ndarray, Optional[np.ndarray]]:
 
 
 
+# --------- ReducerConfig ---------
+
+@dataclass
+class ReducerConfig:
+    """Configuration for a dimensionality reduction algorithm."""
+    name: str
+    reducer_class: type
+    reducer_kwargs: Dict[str, Any]
+    visualize: bool = False
+
+
 # --------- selector parsing ---------
 
 def _parse_selector(selector: str) -> Tuple[str, str]:
@@ -512,19 +523,46 @@ class ReducerRunner:
 
     Parameters
     ----------
-    reducer_class : type or callable
-        Reducer class or factory function (e.g., create_dire, UMAP, TSNE)
-    reducer_kwargs : dict
-        Keyword arguments to pass to reducer constructor
+    config : ReducerConfig, optional
+        Configuration object containing reducer_class, reducer_kwargs, name, and visualize flag.
+        If provided, individual reducer_class/reducer_kwargs/call_visualize params are ignored.
+    reducer_class : type or callable, optional
+        Reducer class or factory function (e.g., create_dire, UMAP, TSNE).
+        Used only if config is not provided.
+    reducer_kwargs : dict, optional
+        Keyword arguments to pass to reducer constructor.
+        Used only if config is not provided.
     call_visualize : bool
-        Whether to call .visualize() method if available
+        Whether to call .visualize() method if available (legacy parameter).
+        Overridden by config.visualize if config is provided.
     default_transform : callable
         Default transform to apply to data before reduction
     """
-    reducer_class: type
+    config: Optional[ReducerConfig] = None
+    reducer_class: Optional[type] = None
     reducer_kwargs: Dict[str, Any] = field(default_factory=dict)
     call_visualize: bool = True
     default_transform: TransformFn = _identity_transform
+
+    def __post_init__(self):
+        """Validate that either config or reducer_class is provided."""
+        if self.config is None and self.reducer_class is None:
+            raise ValueError("Must provide either 'config' or 'reducer_class'")
+        if self.config is not None and self.reducer_class is not None:
+            raise ValueError("Cannot provide both 'config' and 'reducer_class'")
+
+    def _get_reducer_info(self) -> Tuple[str, type, Dict[str, Any], bool]:
+        """Extract reducer info from config or individual parameters."""
+        if self.config is not None:
+            return (
+                self.config.name,
+                self.config.reducer_class,
+                self.config.reducer_kwargs,
+                self.config.visualize
+            )
+        else:
+            name = getattr(self.reducer_class, '__name__', 'Unknown')
+            return (name, self.reducer_class, self.reducer_kwargs, self.call_visualize)
 
     def run(
         self,
@@ -555,6 +593,9 @@ class ReducerRunner:
             - fit_time_sec: time taken for fit_transform
             - dataset_info: dataset metadata
         """
+        # Get reducer configuration
+        reducer_name, reducer_class, reducer_kwargs, should_visualize = self._get_reducer_info()
+
         scheme, name = _parse_selector(dataset)
         dataset_kwargs = dataset_kwargs or {}
 
@@ -581,27 +622,38 @@ class ReducerRunner:
         X, y = T(X, y)
 
         # Instantiate reducer (handles both classes and factory functions)
-        if callable(self.reducer_class):
-            reducer = self.reducer_class(**self.reducer_kwargs)
+        if callable(reducer_class):
+            reducer = reducer_class(**reducer_kwargs)
         else:
-            raise TypeError(f"reducer_class must be callable, got {type(self.reducer_class)}")
+            raise TypeError(f"reducer_class must be callable, got {type(reducer_class)}")
 
         t0 = time.perf_counter()
         embedding = reducer.fit_transform(X)
         t1 = time.perf_counter()
 
-        if self.call_visualize and hasattr(reducer, "visualize"):
-            try:
-                vis = reducer.visualize(labels=y)
-                shown = _display_obj(vis)
-                if not shown:
-                    try:
-                        import matplotlib.pyplot as plt
-                        plt.show()
-                    except Exception:
-                        pass
-            except Exception as e:
-                print(f"[WARNING] .visualize failed: {e}")
+        # Handle visualization
+        if should_visualize:
+            # First try the reducer's built-in visualize method
+            if hasattr(reducer, "visualize"):
+                try:
+                    vis = reducer.visualize(labels=y)
+                    shown = _display_obj(vis)
+                    if not shown:
+                        try:
+                            import matplotlib.pyplot as plt
+                            plt.show()
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"[WARNING] .visualize failed: {e}")
+
+            # If embedding is 2D or 3D, create plotly visualization
+            n_dims = embedding.shape[1] if len(embedding.shape) > 1 else 1
+            if n_dims in (2, 3):
+                try:
+                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims)
+                except Exception as e:
+                    print(f"[WARNING] plotly visualization failed: {e}")
 
         return {
             "embedding": embedding,
@@ -614,6 +666,89 @@ class ReducerRunner:
                 "n_features": int(X.shape[1]),
             },
         }
+
+    def _visualize_with_plotly(
+        self,
+        embedding: np.ndarray,
+        labels: Optional[np.ndarray],
+        title: str,
+        n_dims: int
+    ):
+        """Create and display plotly visualization for 2D or 3D embeddings."""
+        try:
+            import plotly.graph_objects as go
+        except ImportError:
+            print("[WARNING] plotly not installed. Install with: pip install plotly")
+            return
+
+        _safe_init_plotly_renderer()
+
+        if n_dims == 2:
+            # 2D scatter plot
+            if labels is not None:
+                unique_labels = np.unique(labels)
+                fig = go.Figure()
+                for label in unique_labels:
+                    mask = labels == label
+                    fig.add_trace(go.Scatter(
+                        x=embedding[mask, 0],
+                        y=embedding[mask, 1],
+                        mode='markers',
+                        name=str(label),
+                        marker=dict(size=5)
+                    ))
+            else:
+                fig = go.Figure(data=go.Scatter(
+                    x=embedding[:, 0],
+                    y=embedding[:, 1],
+                    mode='markers',
+                    marker=dict(size=5)
+                ))
+
+            fig.update_layout(
+                title=f"{title} - 2D Embedding",
+                xaxis_title="Dimension 1",
+                yaxis_title="Dimension 2",
+                width=800,
+                height=600
+            )
+
+        elif n_dims == 3:
+            # 3D scatter plot
+            if labels is not None:
+                unique_labels = np.unique(labels)
+                fig = go.Figure()
+                for label in unique_labels:
+                    mask = labels == label
+                    fig.add_trace(go.Scatter3d(
+                        x=embedding[mask, 0],
+                        y=embedding[mask, 1],
+                        z=embedding[mask, 2],
+                        mode='markers',
+                        name=str(label),
+                        marker=dict(size=3)
+                    ))
+            else:
+                fig = go.Figure(data=go.Scatter3d(
+                    x=embedding[:, 0],
+                    y=embedding[:, 1],
+                    z=embedding[:, 2],
+                    mode='markers',
+                    marker=dict(size=3)
+                ))
+
+            fig.update_layout(
+                title=f"{title} - 3D Embedding",
+                scene=dict(
+                    xaxis_title="Dimension 1",
+                    yaxis_title="Dimension 2",
+                    zaxis_title="Dimension 3"
+                ),
+                width=900,
+                height=700
+            )
+
+        fig.show()
 
     @staticmethod
     def available_sklearn() -> Dict[str, Tuple[str, ...]]:

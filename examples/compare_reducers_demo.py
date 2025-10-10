@@ -11,7 +11,8 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'benchmarking'))
 
-from compare_reducers import compare_reducers, print_comparison_summary, ReducerConfig
+from compare_reducers import compare_reducers, print_comparison_summary
+from reducer_runner import ReducerConfig
 from dire_rapids import create_dire
 
 print("=" * 80)
@@ -28,12 +29,12 @@ results = compare_reducers(
 )
 print_comparison_summary(results)
 
-# Example 2: Custom reducer configurations
-print("\n\n2. Comparing DiRe with different neighbor settings...")
+# Example 2: Custom reducer configurations with visualization
+print("\n\n2. Comparing DiRe with different neighbor settings (with visualization)...")
 reducers = [
-    ReducerConfig("DiRe-n16", create_dire, {"n_neighbors": 16, "verbose": False}),
-    ReducerConfig("DiRe-n32", create_dire, {"n_neighbors": 32, "verbose": False}),
-    ReducerConfig("DiRe-n64", create_dire, {"n_neighbors": 64, "verbose": False}),
+    ReducerConfig("DiRe-n16", create_dire, {"n_neighbors": 16, "verbose": False}, visualize=True),
+    ReducerConfig("DiRe-n32", create_dire, {"n_neighbors": 32, "verbose": False}, visualize=True),
+    ReducerConfig("DiRe-n64", create_dire, {"n_neighbors": 64, "verbose": False}, visualize=False),
 ]
 
 results = compare_reducers(
@@ -50,13 +51,13 @@ print("\n\n3. Comparing on DiRe sphere dataset...")
 try:
     from cuml import UMAP, TSNE
     reducers = [
-        ReducerConfig("DiRe", create_dire, {"n_neighbors": 16, "verbose": False}),
-        ReducerConfig("UMAP", UMAP, {"n_neighbors": 15, "verbose": False}),
-        ReducerConfig("TSNE", TSNE, {"perplexity": 30, "verbose": False}),
+        ReducerConfig("DiRe", create_dire, {"n_neighbors": 16, "verbose": False}, visualize=False),
+        ReducerConfig("UMAP", UMAP, {"n_neighbors": 15, "verbose": False}, visualize=False),
+        ReducerConfig("TSNE", TSNE, {"perplexity": 30, "verbose": False}, visualize=False),
     ]
 except ImportError:
     reducers = [
-        ReducerConfig("DiRe", create_dire, {"n_neighbors": 16, "verbose": False}),
+        ReducerConfig("DiRe", create_dire, {"n_neighbors": 16, "verbose": False}, visualize=False),
     ]
 
 results = compare_reducers(

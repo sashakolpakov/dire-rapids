@@ -10,17 +10,8 @@ and other sklearn-compatible reducers on various quality metrics.
 import time
 import numpy as np
 from typing import Dict, List, Optional, Any, Tuple
-from dataclasses import dataclass
 
-from reducer_runner import ReducerRunner
-
-
-@dataclass
-class ReducerConfig:
-    """Configuration for a dimensionality reduction algorithm."""
-    name: str
-    reducer_class: type
-    reducer_kwargs: Dict[str, Any]
+from reducer_runner import ReducerRunner, ReducerConfig
 
 
 def compare_reducers(
@@ -66,8 +57,8 @@ def compare_reducers(
     >>> from dire_rapids import create_dire
     >>> from cuml import UMAP
     >>> reducers = [
-    ...     ReducerConfig("DiRe", create_dire, {"n_neighbors": 16}),
-    ...     ReducerConfig("UMAP", UMAP, {"n_neighbors": 15})
+    ...     ReducerConfig("DiRe", create_dire, {"n_neighbors": 16}, visualize=False),
+    ...     ReducerConfig("UMAP", UMAP, {"n_neighbors": 15}, visualize=True)
     ... ]
     >>> results = compare_reducers("digits", reducers=reducers,
     ...                           metrics=['distortion', 'context'])
@@ -105,12 +96,8 @@ def compare_reducers(
             print(f"Running {config.name} ({i+1}/{len(reducers)})...")
             print(f"{'='*80}")
 
-        # Create runner
-        runner = ReducerRunner(
-            reducer_class=config.reducer_class,
-            reducer_kwargs=config.reducer_kwargs,
-            call_visualize=False
-        )
+        # Create runner with ReducerConfig
+        runner = ReducerRunner(config=config)
 
         # Run reducer
         try:
@@ -191,9 +178,10 @@ def _get_default_reducers() -> List[ReducerConfig]:
     try:
         from dire_rapids import create_dire
         reducers.append(ReducerConfig(
-            "DiRe",
-            create_dire,
-            {"n_components": 2, "n_neighbors": 16, "verbose": False}
+            name="DiRe",
+            reducer_class=create_dire,
+            reducer_kwargs={"n_components": 2, "n_neighbors": 16, "verbose": False},
+            visualize=False
         ))
     except ImportError:
         pass
@@ -202,9 +190,10 @@ def _get_default_reducers() -> List[ReducerConfig]:
     try:
         from cuml import UMAP
         reducers.append(ReducerConfig(
-            "cuML-UMAP",
-            UMAP,
-            {"n_components": 2, "n_neighbors": 15, "min_dist": 0.1, "verbose": False}
+            name="cuML-UMAP",
+            reducer_class=UMAP,
+            reducer_kwargs={"n_components": 2, "n_neighbors": 15, "min_dist": 0.1, "verbose": False},
+            visualize=False
         ))
     except ImportError:
         pass
@@ -213,9 +202,10 @@ def _get_default_reducers() -> List[ReducerConfig]:
     try:
         from cuml import TSNE
         reducers.append(ReducerConfig(
-            "cuML-TSNE",
-            TSNE,
-            {"n_components": 2, "perplexity": 30, "verbose": False}
+            name="cuML-TSNE",
+            reducer_class=TSNE,
+            reducer_kwargs={"n_components": 2, "perplexity": 30, "verbose": False},
+            visualize=False
         ))
     except ImportError:
         pass
@@ -285,15 +275,3 @@ def print_comparison_summary(results: Dict[str, Dict[str, Any]]) -> None:
                 wass_str = f"{result['metrics']['topology']['metrics']['wass'][0]:.6f}"
 
         print(f"{name:<15} {time_str:<10} {stress_str:<10} {svm_str:<12} {wass_str:<12}")
-
-
-# Example usage (uncomment to run as standalone script):
-# if __name__ == "__main__":
-#     print("Comparing dimensionality reduction algorithms...\n")
-#     results = compare_reducers(
-#         "sklearn:blobs",
-#         dataset_kwargs={"n_samples": 1000, "n_features": 50, "centers": 5},
-#         metrics=['distortion', 'context'],
-#         verbose=True
-#     )
-#     print_comparison_summary(results)
