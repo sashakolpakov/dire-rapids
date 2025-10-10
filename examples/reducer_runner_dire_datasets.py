@@ -13,7 +13,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'benchmarking'))
 
-from reducer_runner import ReducerRunner
+from reducer_runner import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire
 
 print("=" * 80)
@@ -22,15 +22,17 @@ print("=" * 80)
 
 # Example 1: Disk uniform distribution
 print("\n1. DiRe disk_uniform dataset (5D disk, 1000 points)...")
-runner = ReducerRunner(
+config = ReducerConfig(
+    name="DiRe",
     reducer_class=create_dire,
     reducer_kwargs=dict(
         n_components=2,
         n_neighbors=16,
         verbose=False
     ),
-    call_visualize=False
+    visualize=False
 )
+runner = ReducerRunner(config=config)
 
 result = runner.run("dire:disk_uniform", dataset_kwargs={"n_features": 5, "n_samples": 1000})
 print(f"   Samples: {result['dataset_info']['n_samples']}")

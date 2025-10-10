@@ -523,46 +523,27 @@ class ReducerRunner:
 
     Parameters
     ----------
-    config : ReducerConfig, optional
+    config : ReducerConfig
         Configuration object containing reducer_class, reducer_kwargs, name, and visualize flag.
-        If provided, individual reducer_class/reducer_kwargs/call_visualize params are ignored.
-    reducer_class : type or callable, optional
-        Reducer class or factory function (e.g., create_dire, UMAP, TSNE).
-        Used only if config is not provided.
-    reducer_kwargs : dict, optional
-        Keyword arguments to pass to reducer constructor.
-        Used only if config is not provided.
-    call_visualize : bool
-        Whether to call .visualize() method if available (legacy parameter).
-        Overridden by config.visualize if config is provided.
     default_transform : callable
         Default transform to apply to data before reduction
     """
-    config: Optional[ReducerConfig] = None
-    reducer_class: Optional[type] = None
-    reducer_kwargs: Dict[str, Any] = field(default_factory=dict)
-    call_visualize: bool = True
+    config: ReducerConfig
     default_transform: TransformFn = _identity_transform
 
     def __post_init__(self):
-        """Validate that either config or reducer_class is provided."""
-        if self.config is None and self.reducer_class is None:
-            raise ValueError("Must provide either 'config' or 'reducer_class'")
-        if self.config is not None and self.reducer_class is not None:
-            raise ValueError("Cannot provide both 'config' and 'reducer_class'")
+        """Validate that config is provided."""
+        if self.config is None:
+            raise ValueError("Must provide 'config' (ReducerConfig)")
 
     def _get_reducer_info(self) -> Tuple[str, type, Dict[str, Any], bool]:
-        """Extract reducer info from config or individual parameters."""
-        if self.config is not None:
-            return (
-                self.config.name,
-                self.config.reducer_class,
-                self.config.reducer_kwargs,
-                self.config.visualize
-            )
-        else:
-            name = getattr(self.reducer_class, '__name__', 'Unknown')
-            return (name, self.reducer_class, self.reducer_kwargs, self.call_visualize)
+        """Extract reducer info from config."""
+        return (
+            self.config.name,
+            self.config.reducer_class,
+            self.config.reducer_kwargs,
+            self.config.visualize
+        )
 
     def run(
         self,

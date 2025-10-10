@@ -14,7 +14,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'benchmarking'))
 
-from reducer_runner import ReducerRunner
+from reducer_runner import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire, DiRePyTorch
 
 print("=" * 80)
@@ -23,7 +23,8 @@ print("=" * 80)
 
 # Example 1: DiRe with create_dire factory
 print("\n1. Running DiRe with create_dire...")
-runner = ReducerRunner(
+config = ReducerConfig(
+    name="DiRe",
     reducer_class=create_dire,
     reducer_kwargs=dict(
         memory_efficient=True,
@@ -32,8 +33,9 @@ runner = ReducerRunner(
         max_iter_layout=64,
         verbose=False
     ),
-    call_visualize=False
+    visualize=False
 )
+runner = ReducerRunner(config=config)
 
 result = runner.run("blobs", dataset_kwargs={"n_samples": 1000, "n_features": 50, "centers": 5})
 print(f"   Samples: {result['dataset_info']['n_samples']}")
@@ -43,15 +45,17 @@ print(f"   Time: {result['fit_time_sec']:.3f}s")
 
 # Example 2: DiRe with DiRePyTorch class
 print("\n2. Running DiRe with DiRePyTorch...")
-runner = ReducerRunner(
+config = ReducerConfig(
+    name="DiRePyTorch",
     reducer_class=DiRePyTorch,
     reducer_kwargs=dict(
         n_components=2,
         n_neighbors=20,
         verbose=False
     ),
-    call_visualize=False
+    visualize=False
 )
+runner = ReducerRunner(config=config)
 
 result = runner.run("swiss_roll", dataset_kwargs={"n_samples": 1000})
 print(f"   Samples: {result['dataset_info']['n_samples']}")
@@ -63,7 +67,8 @@ print("\n3. Running cuML UMAP...")
 try:
     from cuml import UMAP as cumlUMAP
 
-    runner = ReducerRunner(
+    config = ReducerConfig(
+        name="cuML-UMAP",
         reducer_class=cumlUMAP,
         reducer_kwargs=dict(
             n_components=2,
@@ -71,8 +76,9 @@ try:
             min_dist=0.1,
             verbose=False
         ),
-        call_visualize=False
+        visualize=False
     )
+    runner = ReducerRunner(config=config)
 
     result = runner.run("circles", dataset_kwargs={"n_samples": 1000, "noise": 0.05})
     print(f"   Samples: {result['dataset_info']['n_samples']}")
@@ -86,15 +92,17 @@ print("\n4. Running cuML TSNE...")
 try:
     from cuml import TSNE as cumlTSNE
 
-    runner = ReducerRunner(
+    config = ReducerConfig(
+        name="cuML-TSNE",
         reducer_class=cumlTSNE,
         reducer_kwargs=dict(
             n_components=2,
             perplexity=30,
             verbose=False
         ),
-        call_visualize=False
+        visualize=False
     )
+    runner = ReducerRunner(config=config)
 
     result = runner.run("moons", dataset_kwargs={"n_samples": 1000, "noise": 0.1})
     print(f"   Samples: {result['dataset_info']['n_samples']}")
@@ -108,7 +116,8 @@ print("\n5. Running sklearn-compatible UMAP...")
 try:
     from umap import UMAP
 
-    runner = ReducerRunner(
+    config = ReducerConfig(
+        name="UMAP",
         reducer_class=UMAP,
         reducer_kwargs=dict(
             n_components=2,
@@ -116,8 +125,9 @@ try:
             min_dist=0.1,
             verbose=False
         ),
-        call_visualize=False
+        visualize=False
     )
+    runner = ReducerRunner(config=config)
 
     result = runner.run("digits")
     print(f"   Samples: {result['dataset_info']['n_samples']}")
@@ -131,11 +141,13 @@ print("\n6. Testing different data sources...")
 
 # sklearn dataset
 print("\n   a) sklearn dataset (iris):")
-runner = ReducerRunner(
+config = ReducerConfig(
+    name="DiRe",
     reducer_class=create_dire,
     reducer_kwargs={"n_components": 2, "verbose": False},
-    call_visualize=False
+    visualize=False
 )
+runner = ReducerRunner(config=config)
 result = runner.run("sklearn:iris")
 print(f"      Loaded: {result['dataset_info']['n_samples']} samples, "
       f"{result['dataset_info']['n_features']} features")
