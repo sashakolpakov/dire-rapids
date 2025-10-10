@@ -208,24 +208,34 @@ Note: Layout forces remain Euclidean regardless of k-NN metric for optimal perfo
 ReducerRunner Framework
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-General-purpose framework for running any dimensionality reduction algorithm with automatic data loading. See ``benchmarking/dire_rapids_benchmarks.ipynb`` for complete examples.
+General-purpose framework for running any dimensionality reduction algorithm with automatic data loading, visualization, and metrics computation. Replaces the previous ``DiReRunner`` and supports any sklearn-compatible reducer. See ``benchmarking/dire_rapids_benchmarks.ipynb`` for complete examples.
 
 .. code-block:: python
 
-   from benchmarking.reducer_runner import ReducerRunner
+   from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
    from dire_rapids import create_dire
 
-   runner = ReducerRunner(reducer_class=create_dire, reducer_kwargs={"n_neighbors": 16})
+   # Create configuration
+   config = ReducerConfig(
+       name="DiRe",
+       reducer_class=create_dire,
+       reducer_kwargs={"n_neighbors": 16},
+       visualize=True,
+       categorical_labels=True
+   )
+
+   # Run on dataset
+   runner = ReducerRunner(config=config)
    result = runner.run("sklearn:blobs")
    result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_samples": 1000})
 
 **Data sources:**
 
-* ``sklearn:name`` - sklearn datasets
-* ``openml:name`` - OpenML datasets
-* ``cytof:name`` - CyTOF datasets
+* ``sklearn:name`` - sklearn datasets (blobs, digits, iris, wine, moons, swiss_roll, etc.)
+* ``openml:name`` - OpenML datasets by name or ID
+* ``cytof:name`` - CyTOF datasets (levine13, levine32)
 * ``dire:name`` - DiRe geometric datasets (``disk_uniform``, ``sphere_uniform``, ``ellipsoid_uniform``)
-* ``file:path`` - Local files
+* ``file:path`` - Local files (.csv, .npy, .npz, .parquet)
 
 **Reducer comparison:**
 
@@ -234,8 +244,17 @@ General-purpose framework for running any dimensionality reduction algorithm wit
    # In notebooks: %run benchmarking/compare_reducers.py
    from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
 
+   # Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
    results = compare_reducers("sklearn:blobs", metrics=['distortion', 'context'])
    print_comparison_summary(results)
+
+   # Compare specific reducers
+   from cuml import UMAP
+   reducers = [
+       ReducerConfig("DiRe", create_dire, {"n_neighbors": 16}),
+       ReducerConfig("UMAP", UMAP, {"n_neighbors": 15})
+   ]
+   results = compare_reducers("digits", reducers=reducers)
 
 Indices and tables
 ==================
