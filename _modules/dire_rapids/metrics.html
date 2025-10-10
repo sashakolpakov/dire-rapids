@@ -387,14 +387,22 @@
 <span class="sd">    labels : array-like, optional</span>
 <span class="sd">        Data labels</span>
 <span class="sd">    threshold : float</span>
-<span class="sd">        Probability of keeping each sample</span>
+<span class="sd">        Probability of keeping each sample (must be between 0.0 and 1.0)</span>
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    tuple : Subsampled arrays</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If threshold is not between 0.0 and 1.0</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">HAS_CUPY</span><span class="p">:</span>
         <span class="n">cp</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
 
@@ -673,7 +681,7 @@
 
 <div class="viewcode-block" id="compute_local_metrics">
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_local_metrics">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_local_metrics</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_local_metrics</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Compute local quality metrics (stress and neighborhood preservation).</span>
 
@@ -685,33 +693,45 @@
 <span class="sd">        Low-dimensional embedding</span>
 <span class="sd">    n_neighbors : int</span>
 <span class="sd">        Number of neighbors for kNN graph</span>
-<span class="sd">    memory_efficient : bool, optional</span>
-<span class="sd">        Whether to subsample for large datasets</span>
+<span class="sd">    subsample_threshold : float</span>
+<span class="sd">        Subsampling probability (must be between 0.0 and 1.0, default 1.0 = no subsampling)</span>
+<span class="sd">    random_state : int</span>
+<span class="sd">        Random seed for subsampling</span>
 <span class="sd">    use_gpu : bool</span>
 <span class="sd">        Whether to use GPU acceleration</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict : Dictionary containing &#39;stress&#39; and &#39;neighbor&#39; metrics</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">memory_efficient</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">memory_efficient</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">32768</span>
 
-    <span class="k">if</span> <span class="n">memory_efficient</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">131072</span><span class="p">:</span>
-        <span class="n">sample_size</span> <span class="o">=</span> <span class="mi">32768</span>
-        <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="n">sample_size</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="n">data_sample</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
-        <span class="n">layout_sample</span> <span class="o">=</span> <span class="n">layout</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Apply subsampling if threshold &lt; 1.0</span>
+    <span class="k">if</span> <span class="n">subsample_threshold</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
+            <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
+        <span class="p">)</span>
+        <span class="c1"># Convert back to numpy if needed</span>
+        <span class="k">if</span> <span class="n">HAS_CUPY</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_sub</span><span class="p">,</span> <span class="n">cp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">data_sub</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">data_sub</span><span class="p">)</span>
+            <span class="n">layout_sub</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">layout_sub</span><span class="p">)</span>
 
         <span class="n">metrics</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s1">&#39;stress&#39;</span><span class="p">:</span> <span class="n">compute_stress</span><span class="p">(</span><span class="n">data_sample</span><span class="p">,</span> <span class="n">layout_sample</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">),</span>
-            <span class="s1">&#39;neighbor&#39;</span><span class="p">:</span> <span class="n">compute_neighbor_score</span><span class="p">(</span><span class="n">data_sample</span><span class="p">,</span> <span class="n">layout_sample</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">),</span>
-            <span class="s1">&#39;note&#39;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Metrics computed on </span><span class="si">{</span><span class="n">sample_size</span><span class="si">}</span><span class="s2"> randomly sampled points&quot;</span>
+            <span class="s1">&#39;stress&#39;</span><span class="p">:</span> <span class="n">compute_stress</span><span class="p">(</span><span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">),</span>
+            <span class="s1">&#39;neighbor&#39;</span><span class="p">:</span> <span class="n">compute_neighbor_score</span><span class="p">(</span><span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">),</span>
+            <span class="s1">&#39;n_samples&#39;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_sub</span><span class="p">)</span>
         <span class="p">}</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">metrics</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s1">&#39;stress&#39;</span><span class="p">:</span> <span class="n">compute_stress</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">),</span>
-            <span class="s1">&#39;neighbor&#39;</span><span class="p">:</span> <span class="n">compute_neighbor_score</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
+            <span class="s1">&#39;neighbor&#39;</span><span class="p">:</span> <span class="n">compute_neighbor_score</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">),</span>
+            <span class="s1">&#39;n_samples&#39;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
         <span class="p">}</span>
 
     <span class="k">return</span> <span class="n">metrics</span></div>
@@ -893,7 +913,7 @@
 <span class="sd">    labels : array-like</span>
 <span class="sd">        Class labels</span>
 <span class="sd">    subsample_threshold : float</span>
-<span class="sd">        Subsampling probability</span>
+<span class="sd">        Subsampling probability (must be between 0.0 and 1.0)</span>
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
 <span class="sd">    use_gpu : bool</span>
@@ -904,7 +924,15 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    ndarray : [acc_hd, acc_ld, log_ratio]</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
     <span class="c1"># Subsample</span>
     <span class="n">X_hd</span><span class="p">,</span> <span class="n">X_ld</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
@@ -957,7 +985,7 @@
 <span class="sd">    n_neighbors : int</span>
 <span class="sd">        Number of neighbors for kNN</span>
 <span class="sd">    subsample_threshold : float</span>
-<span class="sd">        Subsampling probability</span>
+<span class="sd">        Subsampling probability (must be between 0.0 and 1.0)</span>
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
 <span class="sd">    use_gpu : bool</span>
@@ -968,7 +996,15 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    ndarray : [acc_hd, acc_ld, log_ratio]</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
     <span class="c1"># Subsample</span>
     <span class="n">X_hd</span><span class="p">,</span> <span class="n">X_ld</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
@@ -1014,7 +1050,7 @@
 <span class="sd">    labels : array-like</span>
 <span class="sd">        Class labels</span>
 <span class="sd">    subsample_threshold : float</span>
-<span class="sd">        Subsampling probability</span>
+<span class="sd">        Subsampling probability (must be between 0.0 and 1.0)</span>
 <span class="sd">    n_neighbors : int</span>
 <span class="sd">        Number of neighbors for kNN</span>
 <span class="sd">    random_state : int</span>
@@ -1027,7 +1063,14 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict : Dictionary with &#39;svm&#39; and &#39;knn&#39; scores</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">measures</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s1">&#39;svm&#39;</span><span class="p">:</span> <span class="n">compute_svm_score</span><span class="p">(</span>
             <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="p">,</span> <span class="n">use_gpu</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
@@ -1062,7 +1105,7 @@
 <span class="sd">    max_dim : int</span>
 <span class="sd">        Maximum homology dimension</span>
 <span class="sd">    subsample_threshold : float</span>
-<span class="sd">        Subsampling probability</span>
+<span class="sd">        Subsampling probability (must be between 0.0 and 1.0)</span>
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
 <span class="sd">    backend : str, optional</span>
@@ -1075,7 +1118,15 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict : {&#39;data&#39;: diagrams_hd, &#39;layout&#39;: diagrams_ld, &#39;backend&#39;: backend_used}</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
     <span class="c1"># Select backend</span>
     <span class="k">if</span> <span class="n">backend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">get_persistence_backend</span><span class="p">()</span>
@@ -1440,7 +1491,7 @@
 <span class="sd">    dimension : int</span>
 <span class="sd">        Maximum homology dimension</span>
 <span class="sd">    subsample_threshold : float</span>
-<span class="sd">        Subsampling probability</span>
+<span class="sd">        Subsampling probability (must be between 0.0 and 1.0)</span>
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
 <span class="sd">    n_steps : int</span>
@@ -1457,7 +1508,14 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict : Dictionary containing metrics (and optionally diagrams and betti curves)</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">metrics</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s1">&#39;dtw&#39;</span><span class="p">:</span> <span class="p">[],</span>
         <span class="s1">&#39;twed&#39;</span><span class="p">:</span> <span class="p">[],</span>
@@ -1528,7 +1586,8 @@
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.evaluate_embedding">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_embedding</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
                       <span class="n">max_homology_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                      <span class="n">persistence_backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+                      <span class="n">persistence_backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">compute_distortion</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                      <span class="n">compute_context</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_topology</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Comprehensive evaluation of a dimensionality reduction embedding.</span>
 
@@ -1545,7 +1604,7 @@
 <span class="sd">    n_neighbors : int</span>
 <span class="sd">        Number of neighbors for kNN metrics</span>
 <span class="sd">    subsample_threshold : float</span>
-<span class="sd">        Subsampling probability for expensive metrics</span>
+<span class="sd">        Subsampling probability for all metrics (must be between 0.0 and 1.0, default 0.5)</span>
 <span class="sd">    max_homology_dim : int</span>
 <span class="sd">        Maximum homology dimension for persistence</span>
 <span class="sd">    random_state : int</span>
@@ -1556,23 +1615,39 @@
 <span class="sd">        Persistence backend: &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
 <span class="sd">    n_threads : int</span>
 <span class="sd">        Number of threads for giotto-ph (-1 for all cores)</span>
+<span class="sd">    compute_distortion : bool</span>
+<span class="sd">        Whether to compute distortion metrics (default True)</span>
+<span class="sd">    compute_context : bool</span>
+<span class="sd">        Whether to compute context metrics (default True)</span>
+<span class="sd">    compute_topology : bool</span>
+<span class="sd">        Whether to compute topological metrics (default True)</span>
 <span class="sd">    **kwargs : dict</span>
 <span class="sd">        Additional parameters for specific metrics</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    dict : Dictionary with all computed metrics</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
     <span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="c1"># Local metrics (distortion)</span>
-    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing local metrics (stress, neighbor preservation)...&quot;</span><span class="p">)</span>
-    <span class="n">results</span><span class="p">[</span><span class="s1">&#39;local&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_local_metrics</span><span class="p">(</span>
-        <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span>
-    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">compute_distortion</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing local metrics (stress, neighbor preservation)...&quot;</span><span class="p">)</span>
+        <span class="n">results</span><span class="p">[</span><span class="s1">&#39;local&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_local_metrics</span><span class="p">(</span>
+            <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span>
+            <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span>
+        <span class="p">)</span>
 
     <span class="c1"># Context metrics (if labels provided)</span>
-    <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">compute_context</span> <span class="ow">and</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing context preservation metrics (SVM, kNN)...&quot;</span><span class="p">)</span>
         <span class="n">results</span><span class="p">[</span><span class="s1">&#39;context&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_context_measures</span><span class="p">(</span>
             <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span>
@@ -1580,15 +1655,16 @@
         <span class="p">)</span>
 
     <span class="c1"># Global topological metrics</span>
-    <span class="k">if</span> <span class="n">HAS_GIOTTO_PH</span> <span class="ow">or</span> <span class="n">HAS_RIPSER_PP</span> <span class="ow">or</span> <span class="n">HAS_RIPSER</span><span class="p">:</span>
-        <span class="n">backend</span> <span class="o">=</span> <span class="n">persistence_backend</span> <span class="ow">or</span> <span class="n">get_persistence_backend</span><span class="p">()</span>
-        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing topological metrics using backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
-        <span class="n">results</span><span class="p">[</span><span class="s1">&#39;topology&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_global_metrics</span><span class="p">(</span>
-            <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_homology_dim</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span>
-            <span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span>
-        <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Skipping topological metrics (no persistence backend available)&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">compute_topology</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">HAS_GIOTTO_PH</span> <span class="ow">or</span> <span class="n">HAS_RIPSER_PP</span> <span class="ow">or</span> <span class="n">HAS_RIPSER</span><span class="p">:</span>
+            <span class="n">backend</span> <span class="o">=</span> <span class="n">persistence_backend</span> <span class="ow">or</span> <span class="n">get_persistence_backend</span><span class="p">()</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing topological metrics using backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+            <span class="n">results</span><span class="p">[</span><span class="s1">&#39;topology&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_global_metrics</span><span class="p">(</span>
+                <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_homology_dim</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span>
+                <span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Skipping topological metrics (no persistence backend available)&quot;</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">results</span></div>
 

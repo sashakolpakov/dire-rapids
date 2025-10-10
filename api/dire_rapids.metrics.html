@@ -242,7 +242,7 @@ the quality of dimensionality reduction embeddings, including:</p>
 <li><p><strong>data</strong> (<em>array-like</em>) – High-dimensional data</p></li>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding</p></li>
 <li><p><strong>labels</strong> (<em>array-like</em><em>, </em><em>optional</em>) – Data labels</p></li>
-<li><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Probability of keeping each sample</p></li>
+<li><p><strong>threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Probability of keeping each sample (must be between 0.0 and 1.0)</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 </ul>
 </dd>
@@ -251,6 +251,9 @@ the quality of dimensionality reduction embeddings, including:</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Subsampled arrays</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If threshold is not between 0.0 and 1.0</p>
 </dd>
 </dl>
 </dd></dl>
@@ -348,7 +351,7 @@ from high-dimensional to low-dimensional space.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.compute_local_metrics">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_local_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memory_efficient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_local_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_local_metrics" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_local_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subsample_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_local_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_local_metrics" title="Link to this definition"></a></dt>
 <dd><p>Compute local quality metrics (stress and neighborhood preservation).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -356,7 +359,8 @@ from high-dimensional to low-dimensional space.</p>
 <li><p><strong>data</strong> (<em>array-like</em>) – High-dimensional data</p></li>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding</p></li>
 <li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of neighbors for kNN graph</p></li>
-<li><p><strong>memory_efficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – Whether to subsample for large datasets</p></li>
+<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability (must be between 0.0 and 1.0, default 1.0 = no subsampling)</p></li>
+<li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed for subsampling</p></li>
 <li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU acceleration</p></li>
 </ul>
 </dd>
@@ -365,6 +369,9 @@ from high-dimensional to low-dimensional space.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Dictionary containing ‘stress’ and ‘neighbor’ metrics</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If subsample_threshold is not between 0.0 and 1.0</p>
 </dd>
 </dl>
 </dd></dl>
@@ -430,7 +437,7 @@ vs low-dimensional embedding.</p>
 <li><p><strong>data</strong> (<em>array-like</em>) – High-dimensional data</p></li>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding</p></li>
 <li><p><strong>labels</strong> (<em>array-like</em>) – Class labels</p></li>
-<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability</p></li>
+<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability (must be between 0.0 and 1.0)</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 <li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU acceleration</p></li>
 <li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Additional parameters for SVM</p></li>
@@ -441,6 +448,9 @@ vs low-dimensional embedding.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>[acc_hd, acc_ld, log_ratio]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If subsample_threshold is not between 0.0 and 1.0</p>
 </dd>
 </dl>
 </dd></dl>
@@ -458,7 +468,7 @@ vs low-dimensional embedding.</p>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding</p></li>
 <li><p><strong>labels</strong> (<em>array-like</em>) – Class labels</p></li>
 <li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of neighbors for kNN</p></li>
-<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability</p></li>
+<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability (must be between 0.0 and 1.0)</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 <li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU acceleration</p></li>
 <li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Additional parameters</p></li>
@@ -469,6 +479,9 @@ vs low-dimensional embedding.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>[acc_hd, acc_ld, log_ratio]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If subsample_threshold is not between 0.0 and 1.0</p>
 </dd>
 </dl>
 </dd></dl>
@@ -483,7 +496,7 @@ vs low-dimensional embedding.</p>
 <li><p><strong>data</strong> (<em>array-like</em>) – High-dimensional data</p></li>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding</p></li>
 <li><p><strong>labels</strong> (<em>array-like</em>) – Class labels</p></li>
-<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability</p></li>
+<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability (must be between 0.0 and 1.0)</p></li>
 <li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of neighbors for kNN</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 <li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU acceleration</p></li>
@@ -495,6 +508,9 @@ vs low-dimensional embedding.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Dictionary with ‘svm’ and ‘knn’ scores</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If subsample_threshold is not between 0.0 and 1.0</p>
 </dd>
 </dl>
 </dd></dl>
@@ -509,7 +525,7 @@ vs low-dimensional embedding.</p>
 <li><p><strong>data</strong> (<em>array-like</em>) – High-dimensional data</p></li>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding</p></li>
 <li><p><strong>max_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Maximum homology dimension</p></li>
-<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability</p></li>
+<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability (must be between 0.0 and 1.0)</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 <li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Persistence backend: ‘giotto-ph’, ‘ripser++’, ‘ripser’, or None for auto</p></li>
 <li><p><strong>n_threads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of threads for giotto-ph (-1 for all cores)</p></li>
@@ -521,6 +537,9 @@ vs low-dimensional embedding.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>{‘data’: diagrams_hd, ‘layout’: diagrams_ld, ‘backend’: backend_used}</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If subsample_threshold is not between 0.0 and 1.0</p>
 </dd>
 </dl>
 </dd></dl>
@@ -678,7 +697,7 @@ at different filtration values.</p>
 <li><p><strong>data</strong> (<em>array-like</em>) – High-dimensional data</p></li>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding</p></li>
 <li><p><strong>dimension</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Maximum homology dimension</p></li>
-<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability</p></li>
+<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability (must be between 0.0 and 1.0)</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 <li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of points for Betti curves</p></li>
 <li><p><strong>metrics_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, return only metrics; otherwise include diagrams and curves</p></li>
@@ -693,12 +712,15 @@ at different filtration values.</p>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Dictionary containing metrics (and optionally diagrams and betti curves)</p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If subsample_threshold is not between 0.0 and 1.0</p>
+</dd>
 </dl>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.evaluate_embedding">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">evaluate_embedding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subsample_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_homology_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">persistence_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#evaluate_embedding"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.evaluate_embedding" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">evaluate_embedding</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subsample_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_homology_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">persistence_backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_distortion</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_context</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_topology</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#evaluate_embedding"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.evaluate_embedding" title="Link to this definition"></a></dt>
 <dd><p>Comprehensive evaluation of a dimensionality reduction embedding.</p>
 <p>Computes distortion, context preservation, and topological metrics.</p>
 <dl class="field-list simple">
@@ -708,12 +730,15 @@ at different filtration values.</p>
 <li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding (n_samples, n_components)</p></li>
 <li><p><strong>labels</strong> (<em>array-like</em><em>, </em><em>optional</em>) – Class labels for context metrics</p></li>
 <li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of neighbors for kNN metrics</p></li>
-<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability for expensive metrics</p></li>
+<li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability for all metrics (must be between 0.0 and 1.0, default 0.5)</p></li>
 <li><p><strong>max_homology_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Maximum homology dimension for persistence</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 <li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU acceleration</p></li>
 <li><p><strong>persistence_backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Persistence backend: ‘giotto-ph’, ‘ripser++’, ‘ripser’, or None for auto</p></li>
 <li><p><strong>n_threads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of threads for giotto-ph (-1 for all cores)</p></li>
+<li><p><strong>compute_distortion</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to compute distortion metrics (default True)</p></li>
+<li><p><strong>compute_context</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to compute context metrics (default True)</p></li>
+<li><p><strong>compute_topology</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to compute topological metrics (default True)</p></li>
 <li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a>) – Additional parameters for specific metrics</p></li>
 </ul>
 </dd>
@@ -722,6 +747,9 @@ at different filtration values.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Dictionary with all computed metrics</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If subsample_threshold is not between 0.0 and 1.0</p>
 </dd>
 </dl>
 </dd></dl>
