@@ -43,7 +43,7 @@ print(f"   Features: {result['dataset_info']['n_features']}")
 print(f"   Embedding shape: {result['embedding'].shape}")
 print(f"   Time: {result['fit_time_sec']:.3f}s")
 
-# Example 2: DiRe with DiRePyTorch class
+# Example 2: DiRe with DiRePyTorch class (swiss_roll has continuous labels)
 print("\n2. Running DiRe with DiRePyTorch...")
 config = ReducerConfig(
     name="DiRePyTorch",
@@ -53,7 +53,8 @@ config = ReducerConfig(
         n_neighbors=20,
         verbose=False
     ),
-    visualize=False
+    visualize=False,
+    continuous_labels=True  # swiss_roll has continuous labels (angle/position)
 )
 runner = ReducerRunner(config=config)
 

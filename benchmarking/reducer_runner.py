@@ -489,11 +489,18 @@ def _load_cytof(name: str, **kwargs) -> Tuple[np.ndarray, Optional[np.ndarray]]:
 
 @dataclass
 class ReducerConfig:
-    """Configuration for a dimensionality reduction algorithm."""
+    """
+    Configuration for a dimensionality reduction algorithm.
+
+    All fields are mutable and can be changed after creation:
+        config.visualize = True
+        config.continuous_labels = True
+    """
     name: str
     reducer_class: type
     reducer_kwargs: Dict[str, Any]
     visualize: bool = False
+    continuous_labels: bool = False  # True for regression-style labels (swiss_roll, etc.)
 
 
 # --------- selector parsing ---------
@@ -536,13 +543,14 @@ class ReducerRunner:
         if self.config is None:
             raise ValueError("Must provide 'config' (ReducerConfig)")
 
-    def _get_reducer_info(self) -> Tuple[str, type, Dict[str, Any], bool]:
+    def _get_reducer_info(self) -> Tuple[str, type, Dict[str, Any], bool, bool]:
         """Extract reducer info from config."""
         return (
             self.config.name,
             self.config.reducer_class,
             self.config.reducer_kwargs,
-            self.config.visualize
+            self.config.visualize,
+            self.config.continuous_labels
         )
 
     def run(
@@ -575,7 +583,7 @@ class ReducerRunner:
             - dataset_info: dataset metadata
         """
         # Get reducer configuration
-        reducer_name, reducer_class, reducer_kwargs, should_visualize = self._get_reducer_info()
+        reducer_name, reducer_class, reducer_kwargs, should_visualize, continuous_labels = self._get_reducer_info()
 
         scheme, name = _parse_selector(dataset)
         dataset_kwargs = dataset_kwargs or {}
@@ -618,7 +626,7 @@ class ReducerRunner:
             n_dims = embedding.shape[1] if len(embedding.shape) > 1 else 1
             if n_dims in (2, 3):
                 try:
-                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims)
+                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims, continuous_labels)
                 except Exception as e:
                     print(f"[WARNING] plotly visualization failed: {e}")
 
@@ -639,7 +647,8 @@ class ReducerRunner:
         embedding: np.ndarray,
         labels: Optional[np.ndarray],
         title: str,
-        n_dims: int
+        n_dims: int,
+        continuous_labels: bool = False
     ):
         """Create and display plotly visualization for 2D or 3D embeddings."""
         try:
@@ -653,17 +662,33 @@ class ReducerRunner:
         if n_dims == 2:
             # 2D scatter plot
             if labels is not None:
-                unique_labels = np.unique(labels)
-                fig = go.Figure()
-                for label in unique_labels:
-                    mask = labels == label
-                    fig.add_trace(go.Scatter(
-                        x=embedding[mask, 0],
-                        y=embedding[mask, 1],
+                if continuous_labels:
+                    # Use continuous color scale for regression-style labels
+                    fig = go.Figure(data=go.Scatter(
+                        x=embedding[:, 0],
+                        y=embedding[:, 1],
                         mode='markers',
-                        name=str(label),
-                        marker=dict(size=5)
+                        marker=dict(
+                            size=5,
+                            color=labels,
+                            colorscale='Viridis',
+                            colorbar=dict(title="Label Value"),
+                            showscale=True
+                        )
                     ))
+                else:
+                    # Use discrete traces for classification labels
+                    unique_labels = np.unique(labels)
+                    fig = go.Figure()
+                    for label in unique_labels:
+                        mask = labels == label
+                        fig.add_trace(go.Scatter(
+                            x=embedding[mask, 0],
+                            y=embedding[mask, 1],
+                            mode='markers',
+                            name=str(label),
+                            marker=dict(size=5)
+                        ))
             else:
                 fig = go.Figure(data=go.Scatter(
                     x=embedding[:, 0],
@@ -683,18 +708,35 @@ class ReducerRunner:
         elif n_dims == 3:
             # 3D scatter plot
             if labels is not None:
-                unique_labels = np.unique(labels)
-                fig = go.Figure()
-                for label in unique_labels:
-                    mask = labels == label
-                    fig.add_trace(go.Scatter3d(
-                        x=embedding[mask, 0],
-                        y=embedding[mask, 1],
-                        z=embedding[mask, 2],
+                if continuous_labels:
+                    # Use continuous color scale for regression-style labels
+                    fig = go.Figure(data=go.Scatter3d(
+                        x=embedding[:, 0],
+                        y=embedding[:, 1],
+                        z=embedding[:, 2],
                         mode='markers',
-                        name=str(label),
-                        marker=dict(size=3)
+                        marker=dict(
+                            size=3,
+                            color=labels,
+                            colorscale='Viridis',
+                            colorbar=dict(title="Label Value"),
+                            showscale=True
+                        )
                     ))
+                else:
+                    # Use discrete traces for classification labels
+                    unique_labels = np.unique(labels)
+                    fig = go.Figure()
+                    for label in unique_labels:
+                        mask = labels == label
+                        fig.add_trace(go.Scatter3d(
+                            x=embedding[mask, 0],
+                            y=embedding[mask, 1],
+                            z=embedding[mask, 2],
+                            mode='markers',
+                            name=str(label),
+                            marker=dict(size=3)
+                        ))
             else:
                 fig = go.Figure(data=go.Scatter3d(
                     x=embedding[:, 0],
