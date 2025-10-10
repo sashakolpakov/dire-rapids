@@ -493,8 +493,9 @@
             
             <span class="k">if</span> <span class="n">use_pykeops</span><span class="p">:</span>
                 <span class="c1"># Use PyKeOps for LOW dimensional data</span>
-                <span class="n">X_i</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_chunk</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:])</span>  <span class="c1"># (chunk_size, 1, D)</span>
-                <span class="n">X_j</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_torch</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>   <span class="c1"># (1, N, D)</span>
+                <span class="c1"># Ensure contiguity for PyKeOps</span>
+                <span class="n">X_i</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_chunk</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>  <span class="c1"># (chunk_size, 1, D)</span>
+                <span class="n">X_j</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_torch</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>   <span class="c1"># (1, N, D)</span>
                 
                 <span class="c1"># Compute squared distances</span>
                 <span class="n">D_ij</span> <span class="o">=</span> <span class="p">((</span><span class="n">X_i</span> <span class="o">-</span> <span class="n">X_j</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (chunk_size, N) LazyTensor</span>
