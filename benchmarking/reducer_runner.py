@@ -494,13 +494,13 @@ class ReducerConfig:
 
     All fields are mutable and can be changed after creation:
         config.visualize = True
-        config.continuous_labels = True
+        config.categorical_labels = False
     """
     name: str
     reducer_class: type
     reducer_kwargs: Dict[str, Any]
     visualize: bool = False
-    continuous_labels: bool = False  # True for regression-style labels (swiss_roll, etc.)
+    categorical_labels: bool = True  # False for regression-style labels (swiss_roll, etc.)
 
 
 # --------- selector parsing ---------
@@ -550,7 +550,7 @@ class ReducerRunner:
             self.config.reducer_class,
             self.config.reducer_kwargs,
             self.config.visualize,
-            self.config.continuous_labels
+            self.config.categorical_labels
         )
 
     def run(
@@ -583,7 +583,7 @@ class ReducerRunner:
             - dataset_info: dataset metadata
         """
         # Get reducer configuration
-        reducer_name, reducer_class, reducer_kwargs, should_visualize, continuous_labels = self._get_reducer_info()
+        reducer_name, reducer_class, reducer_kwargs, should_visualize, categorical_labels = self._get_reducer_info()
 
         scheme, name = _parse_selector(dataset)
         dataset_kwargs = dataset_kwargs or {}
@@ -626,7 +626,7 @@ class ReducerRunner:
             n_dims = embedding.shape[1] if len(embedding.shape) > 1 else 1
             if n_dims in (2, 3):
                 try:
-                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims, continuous_labels)
+                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims, categorical_labels)
                 except Exception as e:
                     print(f"[WARNING] plotly visualization failed: {e}")
 
@@ -648,7 +648,7 @@ class ReducerRunner:
         labels: Optional[np.ndarray],
         title: str,
         n_dims: int,
-        continuous_labels: bool = False
+        categorical_labels: bool = True
     ):
         """Create and display plotly visualization for 2D or 3D embeddings."""
         try:
@@ -662,7 +662,7 @@ class ReducerRunner:
         if n_dims == 2:
             # 2D scatter plot
             if labels is not None:
-                if continuous_labels:
+                if not categorical_labels:
                     # Use continuous color scale for regression-style labels
                     fig = go.Figure(data=go.Scatter(
                         x=embedding[:, 0],
@@ -708,7 +708,7 @@ class ReducerRunner:
         elif n_dims == 3:
             # 3D scatter plot
             if labels is not None:
-                if continuous_labels:
+                if not categorical_labels:
                     # Use continuous color scale for regression-style labels
                     fig = go.Figure(data=go.Scatter3d(
                         x=embedding[:, 0],

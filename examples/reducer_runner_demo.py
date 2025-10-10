@@ -54,7 +54,7 @@ config = ReducerConfig(
         verbose=False
     ),
     visualize=False,
-    continuous_labels=True  # swiss_roll has continuous labels (angle/position)
+    categorical_labels=False  # swiss_roll has continuous labels (angle/position)
 )
 runner = ReducerRunner(config=config)
 
