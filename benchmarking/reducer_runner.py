@@ -614,21 +614,7 @@ class ReducerRunner:
 
         # Handle visualization
         if should_visualize:
-            # First try the reducer's built-in visualize method
-            if hasattr(reducer, "visualize"):
-                try:
-                    vis = reducer.visualize(labels=y)
-                    shown = _display_obj(vis)
-                    if not shown:
-                        try:
-                            import matplotlib.pyplot as plt
-                            plt.show()
-                        except Exception:
-                            pass
-                except Exception as e:
-                    print(f"[WARNING] .visualize failed: {e}")
-
-            # If embedding is 2D or 3D, create plotly visualization
+            # Only use ReducerRunner's plotly visualization (not the reducer's built-in visualize)
             n_dims = embedding.shape[1] if len(embedding.shape) > 1 else 1
             if n_dims in (2, 3):
                 try:
