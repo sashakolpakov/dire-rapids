@@ -220,7 +220,8 @@ config = ReducerConfig(
     name="DiRe",
     reducer_class=create_dire,
     reducer_kwargs={"n_neighbors": 16},
-    visualize=True
+    visualize=True,
+    max_points=10000  # Max points for visualization (uses WebGL, subsamples if larger)
 )
 
 # Run on various datasets
