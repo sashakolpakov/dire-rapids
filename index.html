@@ -83,7 +83,7 @@ with multiple backend implementations optimized for different scales and hardwar
 <li><p><strong>Custom distance metrics</strong> for k-NN computation (string expressions or callables)</p></li>
 <li><p><strong>GPU acceleration</strong> with CUDA support</p></li>
 <li><p><strong>Memory-efficient processing</strong> for large datasets (&gt;100K points)</p></li>
-<li><p><strong>Interactive visualizations</strong> with Plotly</p></li>
+<li><p><strong>High-performance visualizations</strong> with WebGL rendering (handles 100K+ points)</p></li>
 <li><p><strong>Scikit-learn compatible API</strong></p></li>
 </ul>
 </section>
@@ -156,8 +156,8 @@ with multiple backend implementations optimized for different scales and hardwar
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 
-<span class="c1"># Visualize</span>
-<span class="n">fig</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">visualize</span><span class="p">()</span>
+<span class="c1"># Visualize (uses WebGL for performance)</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">visualize</span><span class="p">(</span><span class="n">max_points</span><span class="o">=</span><span class="mi">10000</span><span class="p">)</span>
 <span class="n">fig</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 </div>
@@ -278,13 +278,18 @@ with multiple backend implementations optimized for different scales and hardwar
     <span class="n">reducer_class</span><span class="o">=</span><span class="n">create_dire</span><span class="p">,</span>
     <span class="n">reducer_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;n_neighbors&quot;</span><span class="p">:</span> <span class="mi">16</span><span class="p">},</span>
     <span class="n">visualize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">categorical_labels</span><span class="o">=</span><span class="kc">True</span>
+    <span class="n">categorical_labels</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">max_points</span><span class="o">=</span><span class="mi">10000</span>  <span class="c1"># Max points for WebGL visualization (subsamples if larger)</span>
 <span class="p">)</span>
 
 <span class="c1"># Run on dataset</span>
 <span class="n">runner</span> <span class="o">=</span> <span class="n">ReducerRunner</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;sklearn:blobs&quot;</span><span class="p">)</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;dire:sphere_uniform&quot;</span><span class="p">,</span> <span class="n">dataset_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;n_features&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span> <span class="s2">&quot;n_samples&quot;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">})</span>
+
+<span class="c1"># For large datasets, increase max_points</span>
+<span class="n">config</span><span class="o">.</span><span class="n">max_points</span> <span class="o">=</span> <span class="mi">50000</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">runner</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;cytof:levine32&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 <p><strong>Data sources:</strong></p>

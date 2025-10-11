@@ -14,7 +14,7 @@ Features
 * **Custom distance metrics** for k-NN computation (string expressions or callables)
 * **GPU acceleration** with CUDA support
 * **Memory-efficient processing** for large datasets (>100K points)
-* **Interactive visualizations** with Plotly
+* **High-performance visualizations** with WebGL rendering (handles 100K+ points)
 * **Scikit-learn compatible API**
 
 Backends
@@ -87,8 +87,8 @@ Basic Usage
    reducer = DiRePyTorch(n_neighbors=32, verbose=True)
    embedding = reducer.fit_transform(X)
    
-   # Visualize
-   fig = reducer.visualize()
+   # Visualize (uses WebGL for performance)
+   fig = reducer.visualize(max_points=10000)
    fig.show()
 
 Memory-Efficient Processing
@@ -221,13 +221,18 @@ General-purpose framework for running any dimensionality reduction algorithm wit
        reducer_class=create_dire,
        reducer_kwargs={"n_neighbors": 16},
        visualize=True,
-       categorical_labels=True
+       categorical_labels=True,
+       max_points=10000  # Max points for WebGL visualization (subsamples if larger)
    )
 
    # Run on dataset
    runner = ReducerRunner(config=config)
    result = runner.run("sklearn:blobs")
    result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_samples": 1000})
+
+   # For large datasets, increase max_points
+   config.max_points = 50000
+   result = runner.run("cytof:levine32")
 
 **Data sources:**
 
