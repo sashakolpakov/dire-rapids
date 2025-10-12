@@ -1,0 +1,844 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dire_rapids.dire_cuvs &mdash; dire-rapids 0.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search"  style="background: white" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            dire-rapids
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../api/modules.html">dire_rapids</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu"  style="background: white" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">dire-rapids</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">dire_rapids.dire_cuvs</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for dire_rapids.dire_cuvs</h1><div class="highlight"><pre>
+<span></span><span class="c1"># dire_cuvs.py</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">DIRE with cuVS backend for GPU-accelerated k-NN at scale.</span>
+
+<span class="sd">This module provides optional cuVS integration for massive datasets.</span>
+<span class="sd">Falls back to PyTorch if cuVS is not available.</span>
+
+<span class="sd">Requirements:</span>
+<span class="sd">    Follow the installation instructions at https://docs.rapids.ai/install/</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
+
+<span class="c1"># Import base DIRE PyTorch implementation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>
+
+<span class="c1"># Try to import cuVS and CuPy</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">cupy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cp</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cuvs.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">cagra</span><span class="p">,</span> <span class="n">ivf_pq</span><span class="p">,</span> <span class="n">ivf_flat</span>
+    <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuVS available - GPU-accelerated k-NN enabled&quot;</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS not available. Install RAPIDS for GPU-accelerated k-NN: &quot;</span>
+                  <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span><span class="p">)</span>
+
+<span class="c1"># Try to import cuML for GPU-accelerated PCA</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.decomposition</span><span class="w"> </span><span class="kn">import</span> <span class="n">PCA</span> <span class="k">as</span> <span class="n">cuPCA</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.decomposition</span><span class="w"> </span><span class="kn">import</span> <span class="n">TruncatedSVD</span> <span class="k">as</span> <span class="n">cuTruncatedSVD</span>
+    <span class="n">CUML_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuML available - GPU-accelerated PCA enabled&quot;</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">CUML_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuML not available but cuVS is. PCA will run on CPU.&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="DiReCuVS">
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_cuvs.DiReCuVS">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DiReCuVS</span><span class="p">(</span><span class="n">DiRePyTorch</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    RAPIDS cuVS/cuML accelerated implementation of DiRe for massive datasets.</span>
+<span class="sd">    </span>
+<span class="sd">    This class extends DiRePyTorch with optional RAPIDS cuVS (CUDA Vector Search)</span>
+<span class="sd">    integration for GPU-accelerated k-nearest neighbors computation and cuML</span>
+<span class="sd">    integration for GPU-accelerated PCA initialization. It provides substantial</span>
+<span class="sd">    performance improvements for large-scale datasets.</span>
+<span class="sd">    </span>
+<span class="sd">    Performance Advantages over PyTorch/PyKeOps</span>
+<span class="sd">    -------------------------------------------</span>
+<span class="sd">    - **10-100x faster k-NN**: For large datasets (&gt;100K points)</span>
+<span class="sd">    - **Massive scale support**: Handles 10M+ points efficiently</span>
+<span class="sd">    - **High accuracy**: Approximate k-NN with &gt;95% recall</span>
+<span class="sd">    - **Multi-GPU ready**: Supports extreme scale processing</span>
+<span class="sd">    - **GPU-accelerated PCA**: cuML PCA/SVD for initialization</span>
+<span class="sd">    </span>
+<span class="sd">    Automatic Fallback</span>
+<span class="sd">    ------------------</span>
+<span class="sd">    Falls back to PyTorch backend if cuVS is not available, ensuring</span>
+<span class="sd">    compatibility across different environments.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    use_cuvs : bool or None, default=None</span>
+<span class="sd">        Whether to use cuVS for k-NN computation. If None, automatically</span>
+<span class="sd">        detected based on availability and hardware.</span>
+<span class="sd">    use_cuml : bool or None, default=None  </span>
+<span class="sd">        Whether to use cuML for PCA initialization. If None, automatically</span>
+<span class="sd">        detected based on availability and hardware.</span>
+<span class="sd">    cuvs_index_type : {&#39;auto&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;, &#39;flat&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">        Type of cuVS index to build:</span>
+<span class="sd">        - &#39;auto&#39;: Automatically select based on data characteristics</span>
+<span class="sd">        - &#39;ivf_flat&#39;: Inverted file index without compression</span>
+<span class="sd">        - &#39;ivf_pq&#39;: Inverted file index with product quantization</span>
+<span class="sd">        - &#39;cagra&#39;: Graph-based index for very large datasets</span>
+<span class="sd">        - &#39;flat&#39;: Brute-force exact search</span>
+<span class="sd">    cuvs_build_params : dict, optional</span>
+<span class="sd">        Custom parameters for cuVS index building. Overrides defaults.</span>
+<span class="sd">    cuvs_search_params : dict, optional  </span>
+<span class="sd">        Custom parameters for cuVS search. Overrides defaults.</span>
+<span class="sd">    *args, **kwargs</span>
+<span class="sd">        Additional arguments passed to DiRePyTorch parent class.</span>
+<span class="sd">        Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,</span>
+<span class="sd">        spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,</span>
+<span class="sd">        metric (custom distance function for k-NN computation).</span>
+<span class="sd">        </span>
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    use_cuvs : bool</span>
+<span class="sd">        Whether cuVS backend is enabled and available.</span>
+<span class="sd">    use_cuml : bool</span>
+<span class="sd">        Whether cuML backend is enabled and available.</span>
+<span class="sd">    cuvs_index : object or None</span>
+<span class="sd">        Built cuVS index for k-NN search.</span>
+<span class="sd">        </span>
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    Basic usage with automatic backend selection::</span>
+<span class="sd">    </span>
+<span class="sd">        from dire_rapids import DiReCuVS</span>
+<span class="sd">        import numpy as np</span>
+<span class="sd">        </span>
+<span class="sd">        # Large dataset</span>
+<span class="sd">        X = np.random.randn(100000, 512)</span>
+<span class="sd">        </span>
+<span class="sd">        # Auto-detect cuVS/cuML availability</span>
+<span class="sd">        reducer = DiReCuVS()</span>
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
+<span class="sd">        </span>
+<span class="sd">    Force cuVS with custom index parameters::</span>
+<span class="sd">    </span>
+<span class="sd">        reducer = DiReCuVS(</span>
+<span class="sd">            use_cuvs=True,</span>
+<span class="sd">            cuvs_index_type=&#39;ivf_pq&#39;,</span>
+<span class="sd">            cuvs_build_params={&#39;n_lists&#39;: 2048, &#39;pq_dim&#39;: 64}</span>
+<span class="sd">        )</span>
+<span class="sd">        </span>
+<span class="sd">    Massive dataset processing::</span>
+<span class="sd">    </span>
+<span class="sd">        # 10M points, 1000 dimensions</span>
+<span class="sd">        X = np.random.randn(10_000_000, 1000)</span>
+<span class="sd">        </span>
+<span class="sd">        reducer = DiReCuVS(</span>
+<span class="sd">            use_cuvs=True,</span>
+<span class="sd">            use_cuml=True,</span>
+<span class="sd">            cuvs_index_type=&#39;cagra&#39;,  # Best for very large datasets</span>
+<span class="sd">            n_neighbors=32</span>
+<span class="sd">        )</span>
+<span class="sd">        </span>
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
+
+<span class="sd">    With custom distance metric::</span>
+
+<span class="sd">        # cuVS with L1 distance for k-NN computation</span>
+<span class="sd">        reducer = DiReCuVS(</span>
+<span class="sd">            use_cuvs=True,</span>
+<span class="sd">            metric=&#39;(x - y).abs().sum(-1)&#39;,  # L1/Manhattan distance</span>
+<span class="sd">            n_neighbors=32,</span>
+<span class="sd">            cuvs_index_type=&#39;ivf_flat&#39;</span>
+<span class="sd">        )</span>
+
+<span class="sd">        embedding = reducer.fit_transform(X)</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    **Requirements:**</span>
+<span class="sd">    - RAPIDS cuVS: Follow the installation instructions at https://docs.rapids.ai/install/</span>
+<span class="sd">    - CUDA-capable GPU with compute capability &gt;= 6.0</span>
+<span class="sd">    </span>
+<span class="sd">    **Index Selection Guidelines:**</span>
+<span class="sd">    - &lt; 50K points: &#39;flat&#39; (exact search)</span>
+<span class="sd">    - 50K-500K points: &#39;ivf_flat&#39; </span>
+<span class="sd">    - 500K-5M points: &#39;ivf_pq&#39;</span>
+<span class="sd">    - &gt; 5M points: &#39;cagra&#39; (if dimensions &lt;= 500)</span>
+<span class="sd">    </span>
+<span class="sd">    **Memory Considerations:**</span>
+<span class="sd">    - cuVS requires float32 precision (no FP16 support)</span>
+<span class="sd">    - Index building requires additional GPU memory</span>
+<span class="sd">    - &#39;cagra&#39; uses more memory but provides best performance for huge datasets</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="DiReCuVS.__init__">
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_cuvs.DiReCuVS.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">,</span>
+        <span class="n">use_cuvs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Auto-detect by default</span>
+        <span class="n">use_cuml</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># Auto-detect by default</span>
+        <span class="n">cuvs_index_type</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>  <span class="c1"># &#39;auto&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;</span>
+        <span class="n">cuvs_build_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">cuvs_search_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize DiReCuVS with cuVS and cuML backend configuration.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        *args</span>
+<span class="sd">            Positional arguments passed to DiRePyTorch parent class.</span>
+<span class="sd">        use_cuvs : bool or None, default=None</span>
+<span class="sd">            Whether to use cuVS for k-NN computation:</span>
+<span class="sd">            - None: Auto-detect based on availability and GPU presence</span>
+<span class="sd">            - True: Force cuVS usage (raises error if unavailable)</span>
+<span class="sd">            - False: Disable cuVS, use PyTorch backend</span>
+<span class="sd">        use_cuml : bool or None, default=None</span>
+<span class="sd">            Whether to use cuML for PCA initialization:</span>
+<span class="sd">            - None: Auto-detect based on availability and GPU presence  </span>
+<span class="sd">            - True: Force cuML usage (raises error if unavailable)</span>
+<span class="sd">            - False: Disable cuML, use sklearn backend</span>
+<span class="sd">        cuvs_index_type : {&#39;auto&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;, &#39;flat&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">            Type of cuVS index to build:</span>
+<span class="sd">            - &#39;auto&#39;: Automatically select optimal index based on data size/dimensionality</span>
+<span class="sd">            - &#39;ivf_flat&#39;: Inverted file index without compression (good balance)</span>
+<span class="sd">            - &#39;ivf_pq&#39;: Inverted file with product quantization (memory efficient)</span>
+<span class="sd">            - &#39;cagra&#39;: Graph-based index (best for very large datasets)</span>
+<span class="sd">            - &#39;flat&#39;: Brute-force exact search (small datasets only)</span>
+<span class="sd">        cuvs_build_params : dict, optional</span>
+<span class="sd">            Custom parameters for cuVS index building. These override the</span>
+<span class="sd">            automatically determined parameters. See cuVS documentation for</span>
+<span class="sd">            index-specific parameters.</span>
+<span class="sd">        cuvs_search_params : dict, optional</span>
+<span class="sd">            Custom parameters for cuVS search operations. These override the</span>
+<span class="sd">            automatically determined parameters. See cuVS documentation for</span>
+<span class="sd">            index-specific search parameters.</span>
+<span class="sd">        **kwargs</span>
+<span class="sd">            Additional keyword arguments passed to DiRePyTorch parent class.</span>
+<span class="sd">            See DiRePyTorch documentation for available parameters including:</span>
+<span class="sd">            n_components, n_neighbors, init, max_iter_layout, min_dist, spread,</span>
+<span class="sd">            cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,</span>
+<span class="sd">            metric (custom distance function for k-NN computation).</span>
+<span class="sd">            </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ImportError</span>
+<span class="sd">            If cuVS or cuML are requested but not available.</span>
+<span class="sd">        RuntimeError</span>
+<span class="sd">            If GPU is required but not available.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        
+        <span class="c1"># Auto-detect cuVS usage</span>
+        <span class="k">if</span> <span class="n">use_cuvs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Use cuVS if available and we have a GPU</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="o">=</span> <span class="n">CUVS_AVAILABLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="o">=</span> <span class="n">use_cuvs</span> <span class="ow">and</span> <span class="n">CUVS_AVAILABLE</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuVS backend enabled for k-NN computation&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">use_cuvs</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS requested but not available, falling back to PyTorch&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Auto-detect cuML usage for PCA</span>
+        <span class="k">if</span> <span class="n">use_cuml</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span> <span class="o">=</span> <span class="n">CUML_AVAILABLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span> <span class="o">=</span> <span class="n">use_cuml</span> <span class="ow">and</span> <span class="n">CUML_AVAILABLE</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuML backend enabled for PCA initialization&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">use_cuml</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">CUML_AVAILABLE</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuML requested but not available, falling back to sklearn&quot;</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span> <span class="o">=</span> <span class="n">cuvs_index_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span> <span class="o">=</span> <span class="n">cuvs_build_params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span> <span class="o">=</span> <span class="n">cuvs_search_params</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select_cuvs_index_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Automatically select optimal cuVS index type based on data characteristics.</span>
+<span class="sd">        </span>
+<span class="sd">        This private method uses heuristics to select the most appropriate cuVS index</span>
+<span class="sd">        type based on dataset size, dimensionality, and performance trade-offs.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        n_samples : int</span>
+<span class="sd">            Number of samples in the dataset.</span>
+<span class="sd">        n_dims : int</span>
+<span class="sd">            Number of dimensions/features per sample.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            Selected cuVS index type (&#39;flat&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, or &#39;cagra&#39;).</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Private method, should not be called directly. Used by _compute_knn().</span>
+<span class="sd">        </span>
+<span class="sd">        Selection Heuristics:</span>
+<span class="sd">        - **&lt; 50K samples**: &#39;flat&#39; (exact search)</span>
+<span class="sd">        - **50K-500K samples or &gt;500D**: &#39;ivf_flat&#39; (good balance)</span>
+<span class="sd">        - **500K-5M samples**: &#39;ivf_pq&#39; (memory efficient)</span>
+<span class="sd">        - **&gt; 5M samples and ≤500D**: &#39;cagra&#39; (best performance)</span>
+<span class="sd">        - **&gt; 5M samples and &gt;500D**: &#39;ivf_pq&#39; (high-D fallback)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span> <span class="o">!=</span> <span class="s1">&#39;auto&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span>
+        
+        <span class="c1"># Decision tree based on scale and dimensionality</span>
+        <span class="c1"># For high dimensions (&gt;500), prefer IVF methods over graph-based</span>
+        <span class="k">if</span> <span class="n">n_samples</span> <span class="o">&lt;</span> <span class="mi">50000</span><span class="p">:</span>
+            <span class="c1"># Small dataset - use flat (IVF with many lists)</span>
+            <span class="k">return</span> <span class="s1">&#39;flat&#39;</span>
+        <span class="k">if</span> <span class="n">n_samples</span> <span class="o">&lt;</span> <span class="mi">500000</span> <span class="ow">or</span> <span class="n">n_dims</span> <span class="o">&gt;</span> <span class="mi">500</span><span class="p">:</span>
+            <span class="c1"># Medium dataset or high-D - IVF without compression</span>
+            <span class="c1"># IVF-Flat works better than CAGRA for high dimensions</span>
+            <span class="k">return</span> <span class="s1">&#39;ivf_flat&#39;</span>
+        <span class="k">if</span> <span class="n">n_samples</span> <span class="o">&lt;</span> <span class="mi">5000000</span><span class="p">:</span>
+            <span class="c1"># Large dataset - IVF with compression</span>
+            <span class="k">return</span> <span class="s1">&#39;ivf_pq&#39;</span>
+        <span class="c1"># Very large dataset with moderate dimensions - graph-based</span>
+        <span class="k">return</span> <span class="s1">&#39;cagra&#39;</span> <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">500</span> <span class="k">else</span> <span class="s1">&#39;ivf_pq&#39;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_cuvs_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Build cuVS index for fast k-NN search.</span>
+<span class="sd">        </span>
+<span class="sd">        This private method constructs the appropriate cuVS index based on the</span>
+<span class="sd">        specified index type and data characteristics, with optimized parameters</span>
+<span class="sd">        for each index variant.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X_gpu : cupy.ndarray</span>
+<span class="sd">            Input data on GPU, shape (n_samples, n_features), dtype float32.</span>
+<span class="sd">        index_type : str</span>
+<span class="sd">            Type of index to build (&#39;flat&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;).</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        cuVS index object or None</span>
+<span class="sd">            Built cuVS index ready for search operations.</span>
+<span class="sd">            Returns None for &#39;flat&#39; type (no index needed).</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Private method, should not be called directly. Used by _compute_knn().</span>
+<span class="sd">        </span>
+<span class="sd">        Index-Specific Optimizations:</span>
+<span class="sd">        - **IVF-Flat**: Adaptive n_lists based on dataset size and dimensionality</span>
+<span class="sd">        - **IVF-PQ**: Optimized PQ dimension and quantization parameters  </span>
+<span class="sd">        - **CAGRA**: Graph-based parameters tuned for large datasets</span>
+<span class="sd">        </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If unknown index_type is specified.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X_gpu</span><span class="o">.</span><span class="n">shape</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Building cuVS </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2"> index for </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> points in </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D...&quot;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
+            <span class="c1"># Exact search - no index needed</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using brute-force search (exact)&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+            
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_flat&#39;</span><span class="p">:</span>
+            <span class="c1"># IVF without compression</span>
+            <span class="c1"># For high-D data, use more lists for better quantization</span>
+            <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&gt;</span> <span class="mi">500</span><span class="p">:</span>
+                <span class="c1"># High-D: more lists help with curse of dimensionality</span>
+                <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span><span class="p">),</span> <span class="mi">8192</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">4096</span><span class="p">)</span>
+            
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
+                <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>  <span class="c1"># cuVS uses &#39;euclidean&#39; not &#39;l2_expanded&#39;</span>
+                <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
+                <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
+            
+            <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
+            
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-Flat index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists for </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D data&quot;</span><span class="p">)</span>
+            
+        <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
+            <span class="c1"># IVF with product quantization</span>
+            <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">8192</span><span class="p">)</span>
+            <span class="n">pq_dim</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">n_dims</span> <span class="o">//</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>  <span class="c1"># Reasonable PQ dimension</span>
+            
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
+                <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>
+                <span class="n">pq_dim</span><span class="o">=</span><span class="n">pq_dim</span><span class="p">,</span>
+                <span class="n">pq_bits</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+                <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
+                <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
+            
+            <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
+            
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-PQ index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists, PQ dim=</span><span class="si">{</span><span class="n">pq_dim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            
+        <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span><span class="p">:</span>
+            <span class="c1"># Graph-based index for very large datasets</span>
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
+                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>
+                <span class="n">graph_degree</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+                <span class="n">intermediate_graph_degree</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+                <span class="n">graph_build_algo</span><span class="o">=</span><span class="s1">&#39;nn_descent&#39;</span>
+            <span class="p">)</span>
+            
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
+                <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
+            
+            <span class="n">index</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
+            
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Built CAGRA graph-based index&quot;</span><span class="p">)</span>
+        
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown index type: </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">index</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_search_cuvs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Search cuVS index for k nearest neighbors.</span>
+<span class="sd">        </span>
+<span class="sd">        This private method performs k-NN search using the built cuVS index,</span>
+<span class="sd">        with optimized search parameters for each index type.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : cuVS index object or None</span>
+<span class="sd">            Built cuVS index from _build_cuvs_index().</span>
+<span class="sd">        index_type : str</span>
+<span class="sd">            Type of index being searched (&#39;flat&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;).</span>
+<span class="sd">        X_gpu : cupy.ndarray</span>
+<span class="sd">            Query data on GPU, shape (n_samples, n_features), dtype float32.</span>
+<span class="sd">        k : int</span>
+<span class="sd">            Number of nearest neighbors to find (plus 1 for self).</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple of cupy.ndarray</span>
+<span class="sd">            distances : cupy.ndarray of shape (n_samples, k+1)</span>
+<span class="sd">                Distances to k+1 nearest neighbors (including self).</span>
+<span class="sd">            indices : cupy.ndarray of shape (n_samples, k+1)  </span>
+<span class="sd">                Indices of k+1 nearest neighbors (including self).</span>
+<span class="sd">                </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Private method, should not be called directly. Used by _compute_knn().</span>
+<span class="sd">        </span>
+<span class="sd">        Search Parameters:</span>
+<span class="sd">        - **IVF methods**: Adaptive n_probes based on index size</span>
+<span class="sd">        - **CAGRA**: Optimized search width and internal parameters</span>
+<span class="sd">        - **Flat**: Uses IVF-Flat with high probe count for near-exact results</span>
+<span class="sd">        </span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If unknown index_type is specified.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n_samples</span> <span class="o">=</span> <span class="n">X_gpu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Searching for </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2"> nearest neighbors using cuVS </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
+            <span class="c1"># For flat/brute force, just use IVF-Flat with many lists for exact search</span>
+            <span class="c1"># This avoids dtype issues with brute_force module</span>
+            <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">1024</span><span class="p">)</span>
+            
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
+                <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>
+                <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            
+            <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
+            
+            <span class="c1"># Search with high probe count for near-exact results</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
+                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">n_lists</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>  <span class="c1"># High probe count for accuracy</span>
+            <span class="p">)</span>
+            
+            <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+                <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
+            <span class="p">)</span>
+            
+        <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_flat&#39;</span><span class="p">:</span>
+            <span class="c1"># IVF search</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
+                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+            <span class="p">)</span>
+            
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
+                <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>
+            
+            <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+                <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
+            <span class="p">)</span>
+            
+        <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
+            <span class="c1"># IVF-PQ search</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
+                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+            <span class="p">)</span>
+            
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
+                <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>
+            
+            <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+                <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
+            <span class="p">)</span>
+            
+        <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span><span class="p">:</span>
+            <span class="c1"># CAGRA search</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
+                <span class="n">max_queries</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>  <span class="c1"># Automatic</span>
+                <span class="n">itopk_size</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">k</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+                <span class="n">search_width</span><span class="o">=</span><span class="mi">4</span>
+            <span class="p">)</span>
+            
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
+                <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>
+            
+            <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
+                <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
+            <span class="p">)</span>
+        
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown index type: </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_knn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">50000</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute k-NN using cuVS acceleration when available and beneficial.</span>
+<span class="sd">        </span>
+<span class="sd">        This method overrides the parent implementation to use cuVS for k-NN</span>
+<span class="sd">        computation when it provides performance benefits, automatically falling</span>
+<span class="sd">        back to PyTorch for cases where cuVS isn&#39;t optimal.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X : numpy.ndarray</span>
+<span class="sd">            Input data of shape (n_samples, n_features).</span>
+<span class="sd">        chunk_size : int, default=50000</span>
+<span class="sd">            Chunk size for processing (used by fallback PyTorch method).</span>
+<span class="sd">        use_fp16 : bool, optional</span>
+<span class="sd">            Use FP16 precision (used by fallback PyTorch method).</span>
+<span class="sd">            Note: cuVS requires float32, so FP16 is only used for PyTorch fallback.</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Private method, should not be called directly. Used by fit_transform().</span>
+<span class="sd">        </span>
+<span class="sd">        cuVS Usage Criteria:</span>
+<span class="sd">        - cuVS backend must be enabled and available</span>
+<span class="sd">        - Dataset size &gt;= 10,000 samples (cuVS overhead not worth it for smaller datasets)</span>
+<span class="sd">        - Dimensionality &lt;= 2,048 (cuVS works best for moderate dimensions)</span>
+<span class="sd">        </span>
+<span class="sd">        If criteria aren&#39;t met, falls back to parent PyTorch implementation.</span>
+<span class="sd">        </span>
+<span class="sd">        Side Effects</span>
+<span class="sd">        ------------</span>
+<span class="sd">        Sets self._knn_indices and self._knn_distances with computed k-NN graph.</span>
+<span class="sd">        Cleans up GPU memory after computation.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
+        
+        <span class="c1"># Decide whether to use cuVS</span>
+        <span class="n">use_cuvs_for_this</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="ow">and</span> 
+            <span class="n">n_samples</span> <span class="o">&gt;=</span> <span class="mi">10000</span> <span class="ow">and</span>  <span class="c1"># cuVS overhead not worth it for small datasets</span>
+            <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">2048</span>  <span class="c1"># cuVS works best for moderate dimensions</span>
+        <span class="p">)</span>
+        
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">use_cuvs_for_this</span><span class="p">:</span>
+            <span class="c1"># Fall back to PyTorch implementation</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend for k-NN&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">)</span>
+        
+        <span class="c1"># Use cuVS for k-NN</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">-NN graph using cuVS...&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Convert to CuPy array</span>
+        <span class="c1"># Note: cuVS requires float32, not float16</span>
+        <span class="c1"># cuVS also requires C-contiguous (row-major) arrays</span>
+        <span class="n">X_gpu</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;C&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Select index type</span>
+        <span class="n">index_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_cuvs_index_type</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">)</span>
+        
+        <span class="c1"># Build index</span>
+        <span class="k">if</span> <span class="n">index_type</span> <span class="o">!=</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_cuvs_index</span><span class="p">(</span><span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span>
+        
+        <span class="c1"># Search for k-NN</span>
+        <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_search_cuvs</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Convert to CuPy arrays first, then remove self (first neighbor) and convert to numpy</span>
+        <span class="n">indices_cp</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+        <span class="n">distances_cp</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">indices_cp</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:])</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;k-NN graph computed: shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Clean up GPU memory</span>
+        <span class="k">del</span> <span class="n">X_gpu</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">cp</span><span class="o">.</span><span class="n">get_default_memory_pool</span><span class="p">()</span><span class="o">.</span><span class="n">free_all_blocks</span><span class="p">()</span>
+        
+        <span class="k">return</span> <span class="bp">self</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_initialize_embedding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize embedding using cuML PCA when available, with sklearn fallback.</span>
+<span class="sd">        </span>
+<span class="sd">        This method overrides the parent implementation to use GPU-accelerated</span>
+<span class="sd">        cuML PCA/TruncatedSVD for initialization when available, providing</span>
+<span class="sd">        significant speedups for high-dimensional data.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X : numpy.ndarray</span>
+<span class="sd">            Input high-dimensional data of shape (n_samples, n_features).</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Initial embedding of shape (n_samples, n_components) on the target device.</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Private method, should not be called directly. Used by fit_transform().</span>
+<span class="sd">        </span>
+<span class="sd">        cuML Usage:</span>
+<span class="sd">        - Uses TruncatedSVD for high-dimensional data (&gt;100 features) for efficiency</span>
+<span class="sd">        - Uses regular PCA for lower-dimensional data</span>
+<span class="sd">        - Performs normalization on GPU before converting to PyTorch</span>
+<span class="sd">        - Uses DLPack for zero-copy GPU tensor transfer</span>
+<span class="sd">        </span>
+<span class="sd">        Falls back to parent sklearn-based initialization if:</span>
+<span class="sd">        - cuML is not available or disabled</span>
+<span class="sd">        - Initialization method is not &#39;pca&#39;</span>
+<span class="sd">        - Any errors occur during cuML processing</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span> <span class="o">==</span> <span class="s1">&#39;pca&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Initializing with cuML PCA (GPU-accelerated)&quot;</span><span class="p">)</span>
+            
+            <span class="c1"># Convert to CuPy array if needed</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+                <span class="n">X_gpu</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">X_gpu</span> <span class="o">=</span> <span class="n">X</span>
+            
+            <span class="c1"># Use TruncatedSVD for high-dimensional data (more efficient)</span>
+            <span class="k">if</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">100</span><span class="p">:</span>
+                <span class="c1"># TruncatedSVD is perfect for high-D to low-D reduction</span>
+                <span class="n">pca</span> <span class="o">=</span> <span class="n">cuTruncatedSVD</span><span class="p">(</span>
+                    <span class="n">n_components</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">,</span>
+                    <span class="n">random_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Regular PCA for lower dimensions</span>
+                <span class="c1"># Note: cuPCA doesn&#39;t support random_state parameter</span>
+                <span class="n">pca</span> <span class="o">=</span> <span class="n">cuPCA</span><span class="p">(</span>
+                    <span class="n">n_components</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span>
+                <span class="p">)</span>
+            
+            <span class="c1"># Fit and transform on GPU</span>
+            <span class="n">embedding_gpu</span> <span class="o">=</span> <span class="n">pca</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X_gpu</span><span class="p">)</span>
+            
+            <span class="c1"># Convert to PyTorch tensor on GPU</span>
+            <span class="c1"># cuML returns cupy array, convert to torch</span>
+            <span class="n">embedding_cp</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">embedding_gpu</span><span class="p">)</span>
+            
+            <span class="c1"># Normalize on GPU</span>
+            <span class="n">embedding_cp</span> <span class="o">-=</span> <span class="n">embedding_cp</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">embedding_cp</span> <span class="o">/=</span> <span class="n">embedding_cp</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            
+            <span class="c1"># Convert to PyTorch</span>
+            <span class="c1"># Use dlpack for zero-copy transfer from CuPy to PyTorch</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.dlpack</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_dlpack</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
+            <span class="n">embedding_torch</span> <span class="o">=</span> <span class="n">from_dlpack</span><span class="p">(</span><span class="n">embedding_cp</span><span class="o">.</span><span class="n">toDlpack</span><span class="p">())</span>
+            
+            <span class="k">return</span> <span class="n">embedding_torch</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        
+        <span class="c1"># Fall back to CPU sklearn PCA</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_initialize_embedding</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="DiReCuVS.fit_transform">
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_cuvs.DiReCuVS.fit_transform">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fit the model and transform data with cuVS/cuML acceleration.</span>
+<span class="sd">        </span>
+<span class="sd">        This method extends the parent implementation with intelligent backend</span>
+<span class="sd">        selection and logging to inform users about the acceleration being used.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X : array-like of shape (n_samples, n_features)</span>
+<span class="sd">            High-dimensional input data to transform.</span>
+<span class="sd">        y : array-like of shape (n_samples,), optional</span>
+<span class="sd">            Ignored. Present for scikit-learn API compatibility.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray of shape (n_samples, n_components)</span>
+<span class="sd">            Low-dimensional embedding of the input data.</span>
+<span class="sd">            </span>
+<span class="sd">        Notes</span>
+<span class="sd">        -----</span>
+<span class="sd">        Backend Selection Logic:</span>
+<span class="sd">        - Uses cuVS for k-NN if dataset is large enough and cuVS is available</span>
+<span class="sd">        - Uses cuML for PCA initialization if available and init=&#39;pca&#39;</span>
+<span class="sd">        - Falls back to PyTorch implementations automatically</span>
+<span class="sd">        </span>
+<span class="sd">        Performance Benefits:</span>
+<span class="sd">        - cuVS k-NN: 10-100x speedup for large datasets</span>
+<span class="sd">        - cuML PCA: 5-50x speedup for high-dimensional initialization</span>
+<span class="sd">        </span>
+<span class="sd">        Examples</span>
+<span class="sd">        --------</span>
+<span class="sd">        Large dataset with cuVS acceleration::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            from dire_rapids import DiReCuVS</span>
+<span class="sd">            </span>
+<span class="sd">            # 500K points, 1000 dimensions  </span>
+<span class="sd">            X = np.random.randn(500000, 1000)</span>
+<span class="sd">            </span>
+<span class="sd">            reducer = DiReCuVS(verbose=True)  # Will log backend selection</span>
+<span class="sd">            embedding = reducer.fit_transform(X)</span>
+<span class="sd">            # Output: &quot;Using cuVS-accelerated backend for 500000 points&quot;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Log backend being used</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="ow">and</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">10000</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using cuVS-accelerated backend for </span><span class="si">{</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> points&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch backend for </span><span class="si">{</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> points&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
