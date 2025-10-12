@@ -10,11 +10,7 @@ This demonstrates using ReducerRunner with:
 - sklearn UMAP (if available)
 """
 
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'benchmarking'))
-
-from reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire, DiRePyTorch
 
 print("=" * 80)

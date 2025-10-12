@@ -7,12 +7,8 @@ This demonstrates using compare_reducers() to evaluate multiple dimensionality
 reduction algorithms on quality metrics.
 """
 
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'benchmarking'))
-
-from compare_reducers import compare_reducers, print_comparison_summary
-from reducer_runner import ReducerConfig
+from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
+from dire_rapids.dire_pytorch import ReducerConfig
 from dire_rapids import create_dire
 
 print("=" * 80)

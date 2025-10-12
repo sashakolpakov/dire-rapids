@@ -41,7 +41,7 @@ jobs:
     
     - name: Run CPU tests
       run: |
-        pytest tests/test_cpu_basic.py -v -m "not gpu" --cov=dire_rapids --cov-report=term-missing
+        pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v -m "not gpu" --cov=dire_rapids --cov-report=term-missing
     
     - name: Upload coverage reports
       uses: codecov/codecov-action@v3

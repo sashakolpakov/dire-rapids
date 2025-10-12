@@ -19,7 +19,7 @@ See `../benchmarking/dire_rapids_benchmarks.ipynb` for complete examples.
 
 **Quick Start:**
 ```python
-from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire
 
 # Create configuration

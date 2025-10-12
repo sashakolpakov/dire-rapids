@@ -11,7 +11,7 @@ import time
 import numpy as np
 from typing import Dict, List, Optional, Any, Tuple
 
-from reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
 
 
 def compare_reducers(
@@ -115,7 +115,7 @@ def compare_reducers(
             # Store original data from first reducer
             if X_orig is None:
                 # Load data again to get original
-                from reducer_runner import _parse_selector, _load_sklearn_any, _load_file, _load_cytof, _load_dire_dataset, _coerce_Xy
+                from dire_rapids.dire_pytorch import _parse_selector, _load_sklearn_any, _load_file, _load_cytof, _load_dire_dataset, _coerce_Xy
                 scheme, name = _parse_selector(dataset)
                 dkwargs = dataset_kwargs or {}
 

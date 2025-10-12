@@ -212,7 +212,7 @@ General-purpose framework for running dimensionality reduction algorithms with a
 ### Quick Start with ReducerRunner
 
 ```python
-from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire
 
 # Create a configuration
@@ -242,6 +242,8 @@ result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_
 
 ```python
 from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
+from dire_rapids.dire_pytorch import ReducerConfig
+from dire_rapids import create_dire
 
 # Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
 results = compare_reducers("sklearn:blobs", metrics=['distortion', 'context'])
@@ -272,7 +274,7 @@ print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
 
 **Persistence backends:** giotto-ph (recommended), ripser++ (GPU), ripser (CPU). Auto-selected.
 
-See [METRICS_README.md](dire_rapids/METRICS_README.md) and [full documentation](https://sashakolpakov.github.io/dire-rapids/).
+See [METRICS_README.md](METRICS_README.md) and [full documentation](https://sashakolpakov.github.io/dire-rapids/).
 
 ## Testing
 

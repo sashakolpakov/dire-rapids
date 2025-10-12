@@ -178,7 +178,7 @@ The **ReducerRunner** framework provides a unified interface for running and com
 ### Basic Usage
 
 ```python
-from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
+from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire
 
 # Create configuration
@@ -205,6 +205,8 @@ result = runner.run("cytof:levine13")
 
 ```python
 from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
+from dire_rapids.dire_pytorch import ReducerConfig
+from dire_rapids import create_dire
 
 # Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
 results = compare_reducers(
@@ -235,7 +237,7 @@ Comprehensive Jupyter notebook with benchmarking results:
 - Global and local structure preservation analysis
 - Comprehensive metrics (distortion, context, topology)
 
-### reducer_runner.py
+### ReducerRunner (in dire_rapids.dire_pytorch)
 General-purpose framework for dimensionality reduction:
 - **ReducerRunner** class for running any sklearn-compatible reducer
 - **ReducerConfig** dataclass for configuring reducers
