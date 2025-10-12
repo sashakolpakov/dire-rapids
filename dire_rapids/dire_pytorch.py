@@ -1143,8 +1143,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
-from IPython.display import display, HTML  # for Colab/Notebook visualize
-
 from sklearn import datasets as skds
 
 try:
@@ -1204,12 +1202,20 @@ def _display_obj(obj) -> bool:
     if isinstance(obj, (str, bytes)):
         s = obj.decode("utf-8", "ignore") if isinstance(obj, bytes) else obj
         if "<" in s and ">" in s:
-            display(HTML(s))
+            try:
+                from IPython.display import display, HTML
+                display(HTML(s))
+            except ImportError:
+                print(s)  # Fallback to print if IPython not available
         else:
             print(s)
         return True
     try:
-        display(obj)
+        try:
+            from IPython.display import display
+            display(obj)
+        except ImportError:
+            print(obj)  # Fallback to print if IPython not available
         return True
     except Exception:
         return False
