@@ -132,10 +132,6 @@ with multiple backend implementations optimized for different scales and hardwar
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="api/modules.html">dire_rapids</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/modules.html#dire_rapids.DiRePyTorch"><code class="docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/modules.html#dire_rapids.DiRePyTorchMemoryEfficient"><code class="docutils literal notranslate"><span class="pre">DiRePyTorchMemoryEfficient</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/modules.html#dire_rapids.create_dire"><code class="docutils literal notranslate"><span class="pre">create_dire()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/modules.html#dire_rapids.DiReCuVS"><code class="docutils literal notranslate"><span class="pre">DiReCuVS</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/modules.html#submodules">Submodules</a></li>
 </ul>
 </li>
@@ -269,7 +265,7 @@ with multiple backend implementations optimized for different scales and hardwar
 <section id="reducerrunner-framework">
 <h3>ReducerRunner Framework<a class="headerlink" href="#reducerrunner-framework" title="Link to this heading"></a></h3>
 <p>General-purpose framework for running any dimensionality reduction algorithm with automatic data loading, visualization, and metrics computation. Replaces the previous <code class="docutils literal notranslate"><span class="pre">DiReRunner</span></code> and supports any sklearn-compatible reducer. See <code class="docutils literal notranslate"><span class="pre">benchmarking/dire_rapids_benchmarks.ipynb</span></code> for complete examples.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">benchmarking.reducer_runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReducerRunner</span><span class="p">,</span> <span class="n">ReducerConfig</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReducerRunner</span><span class="p">,</span> <span class="n">ReducerConfig</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
 
 <span class="c1"># Create configuration</span>
@@ -301,8 +297,9 @@ with multiple backend implementations optimized for different scales and hardwar
 <li><p><code class="docutils literal notranslate"><span class="pre">file:path</span></code> - Local files (.csv, .npy, .npz, .parquet)</p></li>
 </ul>
 <p><strong>Reducer comparison:</strong></p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># In notebooks: %run benchmarking/compare_reducers.py</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">benchmarking.compare_reducers</span><span class="w"> </span><span class="kn">import</span> <span class="n">compare_reducers</span><span class="p">,</span> <span class="n">print_comparison_summary</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">benchmarking.compare_reducers</span><span class="w"> </span><span class="kn">import</span> <span class="n">compare_reducers</span><span class="p">,</span> <span class="n">print_comparison_summary</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReducerConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
 
 <span class="c1"># Compare default reducers (DiRe, cuML UMAP, cuML TSNE)</span>
 <span class="n">results</span> <span class="o">=</span> <span class="n">compare_reducers</span><span class="p">(</span><span class="s2">&quot;sklearn:blobs&quot;</span><span class="p">,</span> <span class="n">metrics</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;distortion&#39;</span><span class="p">,</span> <span class="s1">&#39;context&#39;</span><span class="p">])</span>

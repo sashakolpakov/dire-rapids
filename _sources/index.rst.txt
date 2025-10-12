@@ -212,7 +212,7 @@ General-purpose framework for running any dimensionality reduction algorithm wit
 
 .. code-block:: python
 
-   from benchmarking.reducer_runner import ReducerRunner, ReducerConfig
+   from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
    from dire_rapids import create_dire
 
    # Create configuration
@@ -246,8 +246,9 @@ General-purpose framework for running any dimensionality reduction algorithm wit
 
 .. code-block:: python
 
-   # In notebooks: %run benchmarking/compare_reducers.py
    from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
+   from dire_rapids.dire_pytorch import ReducerConfig
+   from dire_rapids import create_dire
 
    # Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
    results = compare_reducers("sklearn:blobs", metrics=['distortion', 'context'])
