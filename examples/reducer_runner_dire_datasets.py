@@ -9,8 +9,7 @@ This demonstrates using ReducerRunner with DiRe's geometric datasets:
 - dire:ellipsoid_uniform - uniformly distributed points on n-dimensional ellipsoid
 """
 
-from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
-from dire_rapids import create_dire
+from dire_rapids import ReducerRunner, ReducerConfig, create_dire
 
 print("=" * 80)
 print("DIRE GEOMETRIC DATASETS DEMO")

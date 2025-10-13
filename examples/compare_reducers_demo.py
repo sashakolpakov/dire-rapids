@@ -8,8 +8,7 @@ reduction algorithms on quality metrics.
 """
 
 from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
-from dire_rapids.dire_pytorch import ReducerConfig
-from dire_rapids import create_dire
+from dire_rapids import ReducerConfig, create_dire
 
 print("=" * 80)
 print("COMPARE REDUCERS DEMO")

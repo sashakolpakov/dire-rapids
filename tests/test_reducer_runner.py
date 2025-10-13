@@ -4,8 +4,7 @@ Basic tests for ReducerRunner framework (CPU only).
 
 import pytest
 import numpy as np
-from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
-from dire_rapids import DiRePyTorch
+from dire_rapids import ReducerRunner, ReducerConfig, DiRePyTorch
 
 
 def test_reducer_config():

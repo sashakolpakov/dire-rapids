@@ -10,8 +10,7 @@ This demonstrates using ReducerRunner with:
 - sklearn UMAP (if available)
 """
 
-from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
-from dire_rapids import create_dire, DiRePyTorch
+from dire_rapids import ReducerRunner, ReducerConfig, create_dire, DiRePyTorch
 
 print("=" * 80)
 print("REDUCER RUNNER DEMO")

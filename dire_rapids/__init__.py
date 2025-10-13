@@ -56,6 +56,9 @@ Evaluate embedding quality::
 from .dire_pytorch import DiRePyTorch, create_dire
 from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient
 
+# Import utility classes
+from .utils import ReducerRunner, ReducerConfig
+
 # Attempt to import cuVS backend
 try:
     from .dire_cuvs import DiReCuVS
@@ -70,6 +73,6 @@ except ImportError:
     )
 
 # Build __all__ based on available modules
-__all__ = ['DiRePyTorch', 'DiRePyTorchMemoryEfficient', 'create_dire']
+__all__ = ['DiRePyTorch', 'DiRePyTorchMemoryEfficient', 'create_dire', 'ReducerRunner', 'ReducerConfig']
 if HAS_CUVS:
     __all__.append('DiReCuVS')
