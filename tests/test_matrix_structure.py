@@ -3,11 +3,11 @@ Analyze the sparsity structure of the atlas Laplacian matrices.
 """
 
 import numpy as np
+from scipy import sparse
+from sklearn.neighbors import NearestNeighbors
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from scipy import sparse
-from sklearn.neighbors import NearestNeighbors
 
 # Generate circle
 n = 100
@@ -68,12 +68,12 @@ L0 = D - A
 L1 = (B1.T @ B1).astype(np.float64)
 
 # Analyze sparsity structure
-print(f"\nL0 (vertex Laplacian):")
+print("\nL0 (vertex Laplacian):")
 print(f"  Shape: {L0.shape}")
 print(f"  Nonzeros: {L0.nnz}")
 print(f"  Density: {L0.nnz / (n * n):.4f}")
 
-print(f"\nL1 (edge Laplacian):")
+print("\nL1 (edge Laplacian):")
 print(f"  Shape: {L1.shape}")
 print(f"  Nonzeros: {L1.nnz}")
 print(f"  Density: {L1.nnz / (n_edges * n_edges):.4f}")
@@ -93,7 +93,7 @@ axes[1].set_ylabel('Row')
 
 plt.tight_layout()
 plt.savefig('atlas_sparsity_pattern.png', dpi=150)
-print(f"\n✓ Saved sparsity pattern to atlas_sparsity_pattern.png")
+print("\n✓ Saved sparsity pattern to atlas_sparsity_pattern.png")
 
 # Analyze block structure
 # Look at bandwidth (how far from diagonal are nonzeros?)
@@ -103,14 +103,14 @@ L1_coo = L1.tocoo()
 L0_bandwidth = np.max(np.abs(L0_coo.row - L0_coo.col))
 L1_bandwidth = np.max(np.abs(L1_coo.row - L1_coo.col))
 
-print(f"\nBandwidth analysis:")
+print("\nBandwidth analysis:")
 print(f"  L0 bandwidth: {L0_bandwidth} (matrix size {n}x{n})")
 print(f"  L1 bandwidth: {L1_bandwidth} (matrix size {n_edges}x{n_edges})")
 print(f"  L0 bandwidth ratio: {L0_bandwidth/n:.3f}")
 print(f"  L1 bandwidth ratio: {L1_bandwidth/n_edges:.3f}")
 
 # Check if blocks are localized
-print(f"\nBlock structure:")
+print("\nBlock structure:")
 for i in range(0, n, n//10):  # Sample every 10%
     row_nnz = L0[i].nonzero()[1]
     if len(row_nnz) > 0:

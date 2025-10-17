@@ -8,11 +8,6 @@ then glued together consistently into a global complex.
 import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import eigsh
-try:
-    import cupy as cp
-    HAS_CUPY = True
-except ImportError:
-    HAS_CUPY = False
 
 
 def compute_h0_h1_atlas(data, k_local=20, density_threshold=0.8, overlap_factor=1.5, use_gpu=True):
@@ -42,7 +37,7 @@ def compute_h0_h1_atlas(data, k_local=20, density_threshold=0.8, overlap_factor=
     tuple : (h0_diagram, h1_diagram)
         Persistence diagrams with [birth, death] pairs
     """
-    from sklearn.neighbors import NearestNeighbors
+    from sklearn.neighbors import NearestNeighbors  # pylint: disable=import-outside-toplevel
 
     data = np.asarray(data, dtype=np.float32)
     n = len(data)
@@ -185,14 +180,14 @@ def compute_h0_h1_atlas(data, k_local=20, density_threshold=0.8, overlap_factor=
     try:
         eigs_h0, _ = eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
         eigs_h0 = np.abs(eigs_h0)
-    except:
+    except Exception:  # pylint: disable=broad-exception-caught
         eigs_h0 = np.array([])
 
     if n_eigs_h1 > 0:
         try:
             eigs_h1, _ = eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
             eigs_h1 = np.abs(eigs_h1)
-        except:
+        except Exception:  # pylint: disable=broad-exception-caught
             eigs_h1 = np.array([])
     else:
         eigs_h1 = np.array([])

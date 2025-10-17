@@ -189,9 +189,8 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         """
         if self.device.type == 'cuda':
             return torch.cuda.mem_get_info()[0]  # Free memory
-        else:
-            import psutil
-            return psutil.virtual_memory().available
+        import psutil  # pylint: disable=import-outside-toplevel
+        return psutil.virtual_memory().available
     
     def _compute_optimal_chunk_size(self, n_samples, n_features, operation_type="knn", dtype=torch.float32):
         """

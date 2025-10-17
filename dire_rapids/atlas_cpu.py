@@ -171,14 +171,14 @@ def compute_h0_h1_atlas_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
     try:
         eigs_h0, _ = eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
         eigs_h0 = np.abs(eigs_h0)
-    except:
+    except Exception:  # pylint: disable=broad-exception-caught
         eigs_h0 = np.array([])
 
     if n_eigs_h1 > 0:
         try:
             eigs_h1, _ = eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
             eigs_h1 = np.abs(eigs_h1)
-        except:
+        except Exception:  # pylint: disable=broad-exception-caught
             eigs_h1 = np.array([])
     else:
         eigs_h1 = np.array([])

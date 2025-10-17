@@ -58,7 +58,7 @@ def _compile_metric(spec):
         def _expr_metric(x, y, _expr=spec):
             # Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.
             # Works for both torch.Tensor and KeOps LazyTensor.
-            return eval(_expr, {"__builtins__": {}}, {"x": x, "y": y})
+            return eval(_expr, {"__builtins__": {}}, {"x": x, "y": y})  # pylint: disable=eval-used # Sandboxed eval for custom metrics
         return _expr_metric
     if callable(spec):
         return spec
@@ -485,8 +485,8 @@ class DiRePyTorch(TransformerMixin):
 
         elif self.init == 'random':
             self.logger.info("Initializing with random projection")
-            rng = np.random.RandomState(self.random_state)  # pylint: disable=no-member
-            projection = rng.randn(X.shape[1], self.n_components)
+            rng = np.random.default_rng(self.random_state)
+            projection = rng.standard_normal((X.shape[1], self.n_components))
             projection /= np.linalg.norm(projection, axis=0)
             embedding = X @ projection
 
@@ -905,7 +905,7 @@ class DiRePyTorch(TransformerMixin):
         # Subsample if needed
         n_points = self._layout.shape[0]
         if n_points > max_points:
-            rng = np.random.RandomState(42)
+            rng = np.random.default_rng(42)
             subsample_idx = rng.choice(n_points, max_points, replace=False)
             layout_vis = self._layout[subsample_idx]
             labels_vis = labels[subsample_idx] if labels is not None else None
@@ -1039,12 +1039,12 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
 
     # Import here to avoid circular imports
     try:
-        from .dire_cuvs import DiReCuVS
+        from .dire_cuvs import DiReCuVS  # pylint: disable=import-outside-toplevel
         CUVS_AVAILABLE = True
     except ImportError:
         CUVS_AVAILABLE = False
 
-    from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient
+    from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient  # pylint: disable=import-outside-toplevel
 
     if backend == 'auto':
         # Auto-select best backend based on availability
@@ -1058,10 +1058,9 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
                 if verbose:
                     logger.info("Auto-selected memory-efficient PyTorch backend (GPU)")
                 return DiRePyTorchMemoryEfficient(**kwargs)
-            else:
-                if verbose:
-                    logger.info("Auto-selected PyTorch backend (GPU)")
-                return DiRePyTorch(**kwargs)
+            if verbose:
+                logger.info("Auto-selected PyTorch backend (GPU)")
+            return DiRePyTorch(**kwargs)
 
         # CPU fallback
         if verbose:
@@ -1072,7 +1071,7 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
             return DiRePyTorchMemoryEfficient(**kwargs)
         return DiRePyTorch(**kwargs)
 
-    elif backend == 'cuvs':
+    if backend == 'cuvs':
         if not CUVS_AVAILABLE:
             raise RuntimeError(
                 "cuVS backend requested but RAPIDS not installed. "
@@ -1084,30 +1083,28 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
             logger.info("Using RAPIDS cuVS backend")
         return DiReCuVS(use_cuvs=True, **kwargs)
 
-    elif backend == 'pytorch':
+    if backend == 'pytorch':
         # Use PyTorch with auto device selection
         if memory_efficient:
             if verbose:
-                logger.info(f"Using memory-efficient PyTorch backend")
+                logger.info("Using memory-efficient PyTorch backend")
             return DiRePyTorchMemoryEfficient(**kwargs)
-        else:
-            if verbose:
-                logger.info(f"Using PyTorch backend")
-            return DiRePyTorch(**kwargs)
+        if verbose:
+            logger.info("Using PyTorch backend")
+        return DiRePyTorch(**kwargs)
 
-    elif backend == 'pytorch_gpu':
+    if backend == 'pytorch_gpu':
         if not torch.cuda.is_available():
             raise RuntimeError("GPU requested but CUDA not available")
         if memory_efficient:
             if verbose:
                 logger.info("Using memory-efficient PyTorch backend (GPU)")
             return DiRePyTorchMemoryEfficient(**kwargs)
-        else:
-            if verbose:
-                logger.info("Using PyTorch backend (GPU)")
-            return DiRePyTorch(**kwargs)
+        if verbose:
+            logger.info("Using PyTorch backend (GPU)")
+        return DiRePyTorch(**kwargs)
 
-    elif backend == 'pytorch_cpu':
+    if backend == 'pytorch_cpu':
         # Force CPU even if GPU is available
         if verbose:
             logger.info("Using PyTorch backend (forced CPU)")
@@ -1121,9 +1118,8 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         reducer.device = torch.device('cpu')
         return reducer
 
-    else:
-        raise ValueError(
-            f"Unknown backend: {backend}. "
-            f"Choose from: 'auto', 'cuvs', 'pytorch', 'pytorch_gpu', 'pytorch_cpu'"
-        )
+    raise ValueError(
+        f"Unknown backend: {backend}. "
+        f"Choose from: 'auto', 'cuvs', 'pytorch', 'pytorch_gpu', 'pytorch_cpu'"
+    )
 

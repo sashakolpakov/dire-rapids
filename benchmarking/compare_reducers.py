@@ -7,9 +7,9 @@ This function provides a unified interface to compare DiRe, cuML UMAP, cuML TSNE
 and other sklearn-compatible reducers on various quality metrics.
 """
 
-import time
+from typing import Dict, List, Optional, Any
+
 import numpy as np
-from typing import Dict, List, Optional, Any, Tuple
 
 from dire_rapids import ReducerRunner, ReducerConfig
 
@@ -88,7 +88,7 @@ def compare_reducers(
 
     # Check if metrics module is available
     try:
-        from dire_rapids.metrics import evaluate_embedding
+        from dire_rapids.metrics import evaluate_embedding  # pylint: disable=import-outside-toplevel
         has_metrics = True
     except ImportError:
         if verbose:
@@ -115,7 +115,7 @@ def compare_reducers(
             # Store original data from first reducer
             if X_orig is None:
                 # Load data again to get original
-                from dire_rapids.utils import _parse_selector, _load_sklearn_any, _load_file, _load_cytof, _load_dire_dataset, _coerce_Xy
+                from dire_rapids.utils import _parse_selector, _load_sklearn_any, _load_file, _load_cytof, _load_dire_dataset, _coerce_Xy  # pylint: disable=import-outside-toplevel
                 scheme, name = _parse_selector(dataset)
                 dkwargs = dataset_kwargs or {}
 
@@ -124,11 +124,11 @@ def compare_reducers(
                 elif scheme == "file":
                     X_orig, y_orig = _load_file(name, **dkwargs)
                 elif scheme == "openml":
-                    from sklearn.datasets import fetch_openml
+                    from sklearn.datasets import fetch_openml  # pylint: disable=import-outside-toplevel
                     try:
                         data_id = int(str(name))
                         ds = fetch_openml(data_id=data_id, return_X_y=True, **dkwargs)
-                    except Exception:
+                    except Exception:  # pylint: disable=broad-exception-caught
                         ds = fetch_openml(name=name, return_X_y=True, **dkwargs)
                     X_orig, y_orig = _coerce_Xy(ds[0], ds[1])
                 elif scheme == "cytof":
@@ -174,7 +174,7 @@ def compare_reducers(
                 if result['metrics']:
                     _print_metrics(result['metrics'])
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             if verbose:
                 print(f"  ERROR: {config.name} failed - {e}")
             results[config.name] = {"error": str(e)}
@@ -188,7 +188,7 @@ def _get_default_reducers() -> List[ReducerConfig]:
 
     # DiRe
     try:
-        from dire_rapids import create_dire
+        from dire_rapids import create_dire  # pylint: disable=import-outside-toplevel
         reducers.append(ReducerConfig(
             name="DiRe",
             reducer_class=create_dire,
@@ -200,7 +200,7 @@ def _get_default_reducers() -> List[ReducerConfig]:
 
     # cuML UMAP
     try:
-        from cuml import UMAP
+        from cuml import UMAP  # pylint: disable=import-outside-toplevel
         reducers.append(ReducerConfig(
             name="cuML-UMAP",
             reducer_class=UMAP,
@@ -212,7 +212,7 @@ def _get_default_reducers() -> List[ReducerConfig]:
 
     # cuML TSNE
     try:
-        from cuml import TSNE
+        from cuml import TSNE  # pylint: disable=import-outside-toplevel
         reducers.append(ReducerConfig(
             name="cuML-TSNE",
             reducer_class=TSNE,
@@ -231,14 +231,14 @@ def _get_default_reducers() -> List[ReducerConfig]:
 def _print_metrics(metrics: Dict[str, Any]) -> None:
     """Pretty print metrics results."""
     if 'local' in metrics:
-        print(f"  Distortion metrics:")
+        print("  Distortion metrics:")
         if 'stress' in metrics['local']:
             print(f"    Stress: {metrics['local']['stress']:.4f}")
         if 'neighbor_score' in metrics['local']:
             print(f"    Neighbor score: {metrics['local']['neighbor_score']:.4f}")
 
     if 'context' in metrics:
-        print(f"  Context metrics:")
+        print("  Context metrics:")
         if 'svm' in metrics['context']:
             acc_hd, acc_ld, score = metrics['context']['svm']
             print(f"    SVM accuracy: HD={acc_hd:.4f}, LD={acc_ld:.4f}, score={score:.4f}")
@@ -247,7 +247,7 @@ def _print_metrics(metrics: Dict[str, Any]) -> None:
             print(f"    kNN accuracy: HD={acc_hd:.4f}, LD={acc_ld:.4f}, score={score:.4f}")
 
     if 'topology' in metrics:
-        print(f"  Topology metrics:")
+        print("  Topology metrics:")
         if 'metrics' in metrics['topology']:
             topo = metrics['topology']['metrics']
             if 'wass' in topo:

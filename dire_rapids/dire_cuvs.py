@@ -11,7 +11,7 @@ Requirements:
 """
 
 import numpy as np
-import torch
+import torch  # pylint: disable=unused-import # Used via parent class (self.device from DiRePyTorch)
 from loguru import logger
 
 # Import base DIRE PyTorch implementation

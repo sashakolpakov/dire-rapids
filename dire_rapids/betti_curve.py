@@ -10,11 +10,12 @@ Computes Betti numbers (β₀, β₁) at multiple filtration thresholds by:
 Contains both CPU and GPU implementations with automatic backend selection.
 """
 
+import warnings
+
 import numpy as np
 from scipy import sparse
 from scipy.sparse.linalg import eigsh
 from sklearn.neighbors import NearestNeighbors
-import warnings
 
 
 def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap_factor=1.5,
@@ -210,14 +211,14 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
         try:
             eigs_h0, _ = eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
             eigs_h0 = np.abs(eigs_h0)
-        except:
+        except Exception:  # pylint: disable=broad-exception-caught
             eigs_h0 = np.array([])
 
         if n_eigs_h1 > 0:
             try:
                 eigs_h1, _ = eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
                 eigs_h1 = np.abs(eigs_h1)
-            except:
+            except Exception:  # pylint: disable=broad-exception-caught
                 eigs_h1 = np.array([])
         else:
             eigs_h1 = np.array([])
@@ -264,16 +265,16 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
     -------
     dict : Same structure as compute_betti_curve_cpu
     """
-    import cupy as cp
-    from cupyx.scipy import sparse as cp_sparse
-    from cupyx.scipy.sparse.linalg import eigsh as cp_eigsh
+    import cupy as cp  # pylint: disable=import-outside-toplevel
+    from cupyx.scipy import sparse as cp_sparse  # pylint: disable=import-outside-toplevel
+    from cupyx.scipy.sparse.linalg import eigsh as cp_eigsh  # pylint: disable=import-outside-toplevel
 
     # kNN backend: prefer cuVS, fallback to cuML
     try:
-        from cuvs.neighbors import brute_force
+        from cuvs.neighbors import brute_force  # pylint: disable=import-outside-toplevel
         USE_CUVS = True
     except ImportError:
-        from cuml.neighbors import NearestNeighbors as cumlNearestNeighbors
+        from cuml.neighbors import NearestNeighbors as cumlNearestNeighbors  # pylint: disable=import-outside-toplevel
         USE_CUVS = False
 
     # Convert to CuPy array
@@ -467,14 +468,14 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
         try:
             eigs_h0_gpu, _ = cp_eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
             eigs_h0 = cp.asnumpy(cp.abs(eigs_h0_gpu))
-        except:
+        except Exception:  # pylint: disable=broad-exception-caught
             eigs_h0 = np.array([])
 
         if n_eigs_h1 > 0:
             try:
                 eigs_h1_gpu, _ = cp_eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
                 eigs_h1 = cp.asnumpy(cp.abs(eigs_h1_gpu))
-            except:
+            except Exception:  # pylint: disable=broad-exception-caught
                 eigs_h1 = np.array([])
         else:
             eigs_h1 = np.array([])

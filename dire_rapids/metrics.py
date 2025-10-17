@@ -16,7 +16,6 @@ The module supports multiple backends for persistence computation:
 - ripser (CPU fallback)
 """
 
-import gc
 import warnings
 import numpy as np
 
@@ -30,7 +29,6 @@ except ImportError:
 
 # RAPIDS cuML imports
 try:
-    import cuml
     from cuml.neighbors import NearestNeighbors as cumlNearestNeighbors
     from cuml.model_selection import train_test_split as cuml_train_test_split
     from cuml.preprocessing import StandardScaler as cumlStandardScaler
@@ -178,15 +176,14 @@ def get_persistence_backend():
     # Auto-select: giotto-ph > ripser++ > ripser
     if HAS_GIOTTO_PH:
         return 'giotto-ph'
-    elif HAS_RIPSER_PP:
+    if HAS_RIPSER_PP:
         return 'ripser++'
-    elif HAS_RIPSER:
+    if HAS_RIPSER:
         return 'ripser'
-    else:
-        raise RuntimeError(
-            "No persistence backend available. "
-            "Install giotto-ph (recommended), ripserplusplus, or ripser."
-        )
+    raise RuntimeError(
+        "No persistence backend available. "
+        "Install giotto-ph (recommended), ripserplusplus, or ripser."
+    )
 
 
 #
@@ -333,25 +330,25 @@ def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_sta
             return data_sub, layout_sub, labels_sub
 
         return data_sub, layout_sub
-    else:
-        # CPU fallback
-        np.random.seed(random_state)
-        data_np = np.asarray(data)
-        layout_np = np.asarray(layout)
 
-        n_samples = data_np.shape[0]
-        random_numbers = np.random.uniform(0, 1, size=n_samples)
-        selected_indices = random_numbers < threshold
+    # CPU fallback
+    np.random.seed(random_state)
+    data_np = np.asarray(data)
+    layout_np = np.asarray(layout)
 
-        data_sub = data_np[selected_indices]
-        layout_sub = layout_np[selected_indices]
+    n_samples = data_np.shape[0]
+    random_numbers = np.random.uniform(0, 1, size=n_samples)
+    selected_indices = random_numbers < threshold
 
-        if labels is not None:
-            labels_np = np.asarray(labels)
-            labels_sub = labels_np[selected_indices]
-            return data_sub, layout_sub, labels_sub
+    data_sub = data_np[selected_indices]
+    layout_sub = layout_np[selected_indices]
 
-        return data_sub, layout_sub
+    if labels is not None:
+        labels_np = np.asarray(labels)
+        labels_sub = labels_np[selected_indices]
+        return data_sub, layout_sub, labels_sub
+
+    return data_sub, layout_sub
 
 
 #
@@ -707,7 +704,7 @@ def compute_svm_accuracy(X, y, test_size=0.3, reg_param=1.0, max_iter=1000, rand
         model.fit(X_train, y_train)
 
         y_pred = model.predict(X_test)
-        from sklearn.metrics import accuracy_score
+        from sklearn.metrics import accuracy_score  # pylint: disable=import-outside-toplevel
         accuracy = accuracy_score(y_test, y_pred)
 
     return accuracy
@@ -777,7 +774,7 @@ def compute_knn_accuracy(X, y, n_neighbors=16, test_size=0.3, random_state=42, u
         model.fit(X_train, y_train)
 
         y_pred = model.predict(X_test)
-        from sklearn.metrics import accuracy_score
+        from sklearn.metrics import accuracy_score  # pylint: disable=import-outside-toplevel
         accuracy = accuracy_score(y_test, y_pred)
 
     return accuracy
@@ -1009,7 +1006,7 @@ def compute_h0_h1_knn(data, k_neighbors=20, density_threshold=0.8, overlap_facto
     # Select backend: GPU if requested and available, otherwise CPU
     if use_gpu:
         try:
-            from .atlas_gpu import compute_h0_h1_atlas_gpu
+            from .atlas_gpu import compute_h0_h1_atlas_gpu  # pylint: disable=import-outside-toplevel
             return compute_h0_h1_atlas_gpu(
                 data, k_neighbors=k_neighbors,
                 density_threshold=density_threshold,
@@ -1021,7 +1018,7 @@ def compute_h0_h1_knn(data, k_neighbors=20, density_threshold=0.8, overlap_facto
             warnings.warn(f"GPU atlas not available ({e}), falling back to CPU", UserWarning)
 
     # Use CPU implementation
-    from .atlas_cpu import compute_h0_h1_atlas_cpu
+    from .atlas_cpu import compute_h0_h1_atlas_cpu  # pylint: disable=import-outside-toplevel
     return compute_h0_h1_atlas_cpu(
         data, k_neighbors=k_neighbors,
         density_threshold=density_threshold,

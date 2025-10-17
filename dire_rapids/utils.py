@@ -38,10 +38,10 @@ def _identity_transform(X, y):
 
 def _safe_init_plotly_renderer():
     try:
-        import plotly.io as pio
+        import plotly.io as pio  # pylint: disable=import-outside-toplevel
         if pio.renderers.default in (None, "auto"):
             try:
-                import google.colab  # noqa: F401
+                import google.colab  # noqa: F401  # pylint: disable=import-outside-toplevel
                 pio.renderers.default = "colab"
             except Exception:
                 pio.renderers.default = "notebook_connected"
@@ -58,7 +58,7 @@ def _display_obj(obj):
         return shown
     # Plotly
     try:
-        import plotly.graph_objects as go
+        import plotly.graph_objects as go  # pylint: disable=import-outside-toplevel
         if isinstance(obj, go.Figure):
             _safe_init_plotly_renderer()
             obj.show()
@@ -67,9 +67,9 @@ def _display_obj(obj):
         pass
     # Matplotlib
     try:
-        import matplotlib.pyplot as plt
-        from matplotlib.figure import Figure
-        from matplotlib.axes import Axes
+        import matplotlib.pyplot as plt  # pylint: disable=import-outside-toplevel
+        from matplotlib.figure import Figure  # pylint: disable=import-outside-toplevel
+        from matplotlib.axes import Axes  # pylint: disable=import-outside-toplevel
         if isinstance(obj, (Figure, Axes)):
             plt.show()
             return True
@@ -80,7 +80,7 @@ def _display_obj(obj):
         s = obj.decode("utf-8", "ignore") if isinstance(obj, bytes) else obj
         if "<" in s and ">" in s:
             try:
-                from IPython.display import display, HTML
+                from IPython.display import display, HTML  # pylint: disable=import-outside-toplevel
                 display(HTML(s))
             except ImportError:
                 print(s)  # Fallback to print if IPython not available
@@ -89,7 +89,7 @@ def _display_obj(obj):
         return True
     try:
         try:
-            from IPython.display import display
+            from IPython.display import display  # pylint: disable=import-outside-toplevel
             display(obj)
         except ImportError:
             print(obj)  # Fallback to print if IPython not available
@@ -421,7 +421,7 @@ def _load_cytof(name, **kwargs):
     # ---------- FCS via flowio ----------
     if ext == ".fcs":
         try:
-            import flowio
+            import flowio  # pylint: disable=import-outside-toplevel
         except ImportError:
             raise ImportError("flowio required for FCS files. Install with: pip install flowio")
 
@@ -544,11 +544,8 @@ class ReducerRunner:
     ----------
     config : ReducerConfig
         Configuration object containing reducer_class, reducer_kwargs, name, and visualize flag.
-    default_transform : callable
-        Default transform to apply to data before reduction
     """
     config: ReducerConfig
-    default_transform = _identity_transform
 
     def __post_init__(self):
         """Validate that config is provided."""
@@ -600,7 +597,7 @@ class ReducerRunner:
         elif scheme == "file":
             X, y = _load_file(name, **dataset_kwargs)
         elif scheme == "openml":
-            from sklearn.datasets import fetch_openml
+            from sklearn.datasets import fetch_openml  # pylint: disable=import-outside-toplevel
             try:
                 data_id = int(str(name))
                 ds = fetch_openml(data_id=data_id, return_X_y=True, **dataset_kwargs)
@@ -614,7 +611,7 @@ class ReducerRunner:
         else:
             raise ValueError(f"Unsupported scheme '{scheme}'. Use 'sklearn', 'openml', 'cytof', 'dire', 'file'.")
 
-        T = transform or self.default_transform
+        T = transform or _identity_transform
         X, y = T(X, y)
 
         # Instantiate reducer (handles both classes and factory functions)
@@ -657,7 +654,7 @@ class ReducerRunner:
         to max_points if dataset is larger.
         """
         try:
-            import plotly.graph_objects as go
+            import plotly.graph_objects as go  # pylint: disable=import-outside-toplevel
         except ImportError:
             print("[WARNING] plotly not installed. Install with: pip install plotly")
             return
@@ -668,7 +665,7 @@ class ReducerRunner:
 
         # Subsample if needed
         if n_points > max_points:
-            rng = np.random.RandomState(42)
+            rng = np.random.default_rng(42)
             subsample_idx = rng.choice(n_points, max_points, replace=False)
             embedding_vis = embedding[subsample_idx]
             labels_vis = labels[subsample_idx] if labels is not None else None

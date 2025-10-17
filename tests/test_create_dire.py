@@ -2,7 +2,6 @@
 """Test script for create_dire function."""
 
 import numpy as np
-import torch
 from dire_rapids import create_dire
 
 print("Testing create_dire function...\n")
@@ -56,7 +55,7 @@ try:
     print(f"   Device: {reducer.device}")
 except RuntimeError as e:
     if "CUDA not available" in str(e):
-        print(f"   Skipped: CUDA not available")
+        print("   Skipped: CUDA not available")
     else:
         print(f"   Error: {e}")
 except Exception as e:
@@ -79,7 +78,7 @@ except Exception as e:
 print("\n7. Testing invalid backend:")
 try:
     reducer = create_dire(backend='invalid')
-    print(f"   Should have raised error")
+    print("   Should have raised error")
 except ValueError as e:
     print(f"   Correctly raised ValueError: {e}")
 except Exception as e:

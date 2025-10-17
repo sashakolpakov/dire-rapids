@@ -3,7 +3,6 @@ Basic tests for ReducerRunner framework (CPU only).
 """
 
 import pytest
-import numpy as np
 from dire_rapids import ReducerRunner, ReducerConfig, DiRePyTorch
 
 
@@ -17,7 +16,7 @@ def test_reducer_config():
     )
     assert config.name == "TestReducer"
     assert config.reducer_class == DiRePyTorch
-    assert config.visualize == False
+    assert config.visualize is False
 
 
 def test_reducer_runner_sklearn_dataset():

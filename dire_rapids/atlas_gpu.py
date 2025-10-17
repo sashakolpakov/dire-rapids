@@ -207,14 +207,14 @@ def compute_h0_h1_atlas_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
     try:
         eigs_h0_gpu, _ = cp_eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
         eigs_h0 = cp.asnumpy(cp.abs(eigs_h0_gpu))
-    except:
+    except Exception:  # pylint: disable=broad-exception-caught
         eigs_h0 = np.array([])
 
     if n_eigs_h1 > 0:
         try:
             eigs_h1_gpu, _ = cp_eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
             eigs_h1 = cp.asnumpy(cp.abs(eigs_h1_gpu))
-        except:
+        except Exception:  # pylint: disable=broad-exception-caught
             eigs_h1 = np.array([])
     else:
         eigs_h1 = np.array([])
