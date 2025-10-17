@@ -9,8 +9,6 @@ This module provides:
 - Dataset loading utilities for sklearn, cytof, DiRe geometric datasets, and more
 """
 
-from __future__ import annotations
-
 import inspect
 import os
 import re
@@ -20,7 +18,6 @@ import shutil
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -32,10 +29,8 @@ try:
 except Exception:
     sp = None  # sklearn normally pulls scipy in; keep soft guard
 
-TransformFn = Callable[[np.ndarray, Optional[np.ndarray]], Tuple[np.ndarray, Optional[np.ndarray]]]
 
-
-def _identity_transform(X: np.ndarray, y: Optional[np.ndarray]):
+def _identity_transform(X, y):
     return X, y
 
 
@@ -53,7 +48,7 @@ def _safe_init_plotly_renderer():
     except Exception:
         pass
 
-def _display_obj(obj) -> bool:
+def _display_obj(obj):
     if obj is None:
         return False
     if isinstance(obj, (list, tuple)):
@@ -127,10 +122,10 @@ _SKLEARN_ALIASES = {
     "sparse_spd_matrix": "make_sparse_spd_matrix",
 }
 
-def _normalize_key(s: str) -> str:
+def _normalize_key(s):
     return re.sub(r"[^a-z0-9_]+", "_", s.strip().lower())
 
-def _resolve_sklearn_function(name: str):
+def _resolve_sklearn_function(name):
     n = _normalize_key(name)
     if n.startswith(("load_", "fetch_", "make_")):
         fn = getattr(skds, n, None)
@@ -158,7 +153,7 @@ def _resolve_sklearn_function(name: str):
     raise ValueError(f"Unknown sklearn dataset '{name}'. Available include: {all_names}")
 
 
-def _to_Xy_from_obj(obj) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+def _to_Xy_from_obj(obj):
     if isinstance(obj, (tuple, list)) and len(obj) >= 1:
         X = obj[0]
         y = obj[1] if len(obj) > 1 else None
@@ -176,7 +171,7 @@ def _to_Xy_from_obj(obj) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     raise ValueError("Unsupported sklearn return type; cannot coerce to (X, y).")
 
 
-def _coerce_Xy(X, y) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+def _coerce_Xy(X, y):
     if isinstance(X, list) and X and isinstance(X[0], str):
         raise TypeError("Loaded dataset contains text data; vectorize first.")
     if sp is not None and sp.issparse(X):
@@ -191,7 +186,7 @@ def _coerce_Xy(X, y) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     return X, y
 
 
-def _load_sklearn_any(name: str, **kwargs) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+def _load_sklearn_any(name, **kwargs):
     _, fn = _resolve_sklearn_function(name)
     try:
         sig = inspect.signature(fn)
@@ -209,7 +204,7 @@ def _load_sklearn_any(name: str, **kwargs) -> Tuple[np.ndarray, Optional[np.ndar
 
 # --------- file loader ---------
 
-def _load_file(path: str, **kwargs) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+def _load_file(path, **kwargs):
     path = str(path)
     ext = Path(path).suffix.lower()
 
@@ -292,7 +287,7 @@ def rand_point_ell(semi_axes, n_features, n_samples=1):
     return eg(spts)
 
 
-def _load_dire_dataset(name: str, **kwargs) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+def _load_dire_dataset(name, **kwargs):
     """
     Load DiRe geometric datasets.
 
@@ -340,7 +335,7 @@ def _load_dire_dataset(name: str, **kwargs) -> Tuple[np.ndarray, Optional[np.nda
 _DEF_CACHE = os.path.join(os.path.expanduser("~"), ".cache", "reducer_runner", "cytof")
 os.makedirs(_DEF_CACHE, exist_ok=True)
 
-def _download(url: str, dest: str, *, overwrite=False):
+def _download(url, dest, *, overwrite=False):
     if (not overwrite) and os.path.exists(dest):
         return dest
     tmp = dest + ".part"
@@ -349,7 +344,7 @@ def _download(url: str, dest: str, *, overwrite=False):
     os.replace(tmp, dest)
     return dest
 
-def _safe_gunzip(path: str) -> str:
+def _safe_gunzip(path):
     if path.endswith(".gz"):
         out = path[:-3]
         if not os.path.exists(out):
@@ -376,7 +371,7 @@ _CYTOF_REGISTRY = {
     },
 }
 
-def _load_cytof(name: str, **kwargs) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+def _load_cytof(name, **kwargs):
     """
     CyTOF loader:
       - 'levine13'
@@ -514,7 +509,7 @@ class ReducerConfig:
     """
     name: str
     reducer_class: type
-    reducer_kwargs: Dict[str, Any]
+    reducer_kwargs: dict
     visualize: bool = False
     categorical_labels: bool = True  # False for regression-style labels (swiss_roll, etc.)
     max_points: int = 10000  # Max points for visualization (subsamples if larger)
@@ -522,7 +517,7 @@ class ReducerConfig:
 
 # --------- selector parsing ---------
 
-def _parse_selector(selector: str) -> Tuple[str, str]:
+def _parse_selector(selector):
     s = selector.strip()
     p = Path(s)
     if p.exists() or re.search(r"\.(csv|np[yz]|parquet)$", s, re.I):
@@ -553,14 +548,14 @@ class ReducerRunner:
         Default transform to apply to data before reduction
     """
     config: ReducerConfig
-    default_transform: TransformFn = _identity_transform
+    default_transform = _identity_transform
 
     def __post_init__(self):
         """Validate that config is provided."""
         if self.config is None:
             raise ValueError("Must provide 'config' (ReducerConfig)")
 
-    def _get_reducer_info(self) -> Tuple[str, type, Dict[str, Any], bool, bool, int]:
+    def _get_reducer_info(self):
         """Extract reducer info from config."""
         return (
             self.config.name,
@@ -571,13 +566,7 @@ class ReducerRunner:
             self.config.max_points
         )
 
-    def run(
-        self,
-        dataset: str,
-        *,
-        dataset_kwargs: Optional[Dict[str, Any]] = None,
-        transform: Optional[TransformFn] = None,
-    ) -> Dict[str, Any]:
+    def run(self, dataset, *, dataset_kwargs=None, transform=None):
         """
         Run dimensionality reduction on specified dataset.
 
@@ -660,15 +649,7 @@ class ReducerRunner:
             },
         }
 
-    def _visualize_with_plotly(
-        self,
-        embedding: np.ndarray,
-        labels: Optional[np.ndarray],
-        title: str,
-        n_dims: int,
-        categorical_labels: bool = True,
-        max_points: int = 10000
-    ):
+    def _visualize_with_plotly(self, embedding, labels, title, n_dims, categorical_labels=True, max_points=10000):
         """
         Create and display plotly visualization for 2D or 3D embeddings.
 
@@ -835,12 +816,12 @@ class ReducerRunner:
         fig.show()
 
     @staticmethod
-    def available_sklearn() -> Dict[str, Tuple[str, ...]]:
+    def available_sklearn():
         loads = tuple(a for a in dir(skds) if a.startswith("load_") and callable(getattr(skds, a)))
         fetches = tuple(a for a in dir(skds) if a.startswith("fetch_") and callable(getattr(skds, a)))
         makes = tuple(a for a in dir(skds) if a.startswith("make_") and callable(getattr(skds, a)))
         return {"load": loads, "fetch": fetches, "make": makes}
 
     @staticmethod
-    def available_cytof() -> Tuple[str, ...]:
+    def available_cytof():
         return tuple(_CYTOF_REGISTRY.keys())

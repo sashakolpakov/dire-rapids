@@ -44,3 +44,6 @@ dmypy.json
 
 # Documentation builds
 docs/_build/
+
+# Project notes (not tracked)
+NOTES_*.md

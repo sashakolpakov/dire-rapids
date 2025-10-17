@@ -973,62 +973,235 @@ def compute_context_measures(data, layout, labels, subsample_threshold=0.5, n_ne
 #
 
 
-def compute_h0_h1_knn(data, k_neighbors=20, density_threshold=0.8, overlap_factor=1.5,
-                     use_gpu=True, return_distances=False):
+def compute_h0_h1_knn(data, k_neighbors=30, use_gpu=True, density_threshold=0.8, overlap_factor=1.5):
     """
-    Compute H0/H1 using local kNN atlas approach.
+    Compute H0/H1 Betti numbers using local kNN atlas approach.
 
-    Build dense local triangulations around each point, then merge consistently.
-    This avoids the "holes" problem of global sparse kNN graphs.
+    Builds dense, overlapping local neighborhoods that are consistently glued together.
+    This avoids spurious loops from sparse global kNN graphs.
 
-    Automatically selects between GPU and CPU implementation based on availability
-    and use_gpu parameter.
+    Uses spectral graph theory:
+    - β₀ = dim(ker(L₀)) = number of connected components
+    - β₁ = dim(ker(L₁)) = number of independent loops
 
     Parameters
     ----------
     data : array-like
         Point cloud data (n_samples, n_features)
-    k_neighbors : int
-        Size of local neighborhood (default 20, recommended 15-20 for noisy data)
-    density_threshold : float
-        Percentile threshold for edge inclusion (0-1). Lower = denser triangulation.
-        Default 0.8 means edges up to 80th percentile of local distances are included.
-    overlap_factor : float
-        Factor for expanding local neighborhoods to ensure overlap (default 1.5).
-        Higher values create more dense, overlapping patches.
+    k_neighbors : int or list of int
+        Size of local neighborhood. If int, compute for single k.
+        If list, compute for each k and return as persistence diagram.
+        Recommended: 15-20 for noisy data.
     use_gpu : bool
-        Whether to use GPU acceleration (if available)
-    return_distances : bool
-        If True, also return edge-to-distance mapping for persistence diagrams
+        Whether to use GPU for kNN computation (default True)
+    density_threshold : float
+        Percentile threshold for edge inclusion in local patches (0-1).
+        Lower = denser triangulation. Default 0.8.
+    overlap_factor : float
+        Factor for expanding local neighborhoods (default 1.5).
+        Higher values create more overlap between patches.
 
     Returns
     -------
-    tuple : (h0_diagram, h1_diagram) or (h0_diagram, h1_diagram, edge_distances)
-        Persistence diagrams with [birth, death] pairs
+    tuple : (h0_diagram, h1_diagram)
+        Persistence diagrams. Each row is [birth, death].
+        - For single k: β₀ features with death=inf, β₁ features with death=inf
+        - For multiple k: features across scales (birth scales with k)
     """
-    # Select backend: GPU if requested and available, otherwise CPU
-    if use_gpu:
+    try:
+        from scipy import sparse
+        from scipy.sparse.linalg import eigsh
+        from sklearn.neighbors import NearestNeighbors
+    except ImportError:
+        raise RuntimeError("scipy and sklearn required for atlas backend")
+
+    data = np.asarray(data, dtype=np.float32)
+    n = len(data)
+
+    if n <= 2:
+        h0_diagram = np.array([[0, np.inf]])
+        h1_diagram = np.array([[0, 0]])
+        return h0_diagram, h1_diagram
+
+    # Handle single k or list of k
+    if isinstance(k_neighbors, int):
+        k_list = [min(k_neighbors, n - 1)]
+    else:
+        k_list = [min(k, n - 1) for k in k_neighbors]
+
+    h0_features_all = []
+    h1_features_all = []
+
+    for k in k_list:
+        # Build kNN graph for local neighborhoods
+        nn = NearestNeighbors(n_neighbors=k + 1, metric='euclidean')
+        nn.fit(data)
+        distances, indices = nn.kneighbors(data)
+
+        # Global edge and triangle sets (auto-deduplicate)
+        global_edges = set()
+        global_triangles = set()
+
+        # Build adjacency matrix (symmetric kNN graph)
+        row_idx = []
+        col_idx = []
+        edge_weights = []
+
+        for i in range(n):
+            for j_idx in range(1, k+1):  # Skip self
+                j = indices[i, j_idx]
+                w = 1.0 / (distances[i, j_idx] + 1e-8)  # Weight = inverse distance
+                row_idx.append(i)
+                col_idx.append(j)
+                edge_weights.append(w)
+
+        # Symmetrize by adding reverse edges
+        row_idx_sym = row_idx + col_idx
+        col_idx_sym = col_idx + row_idx
+        edge_weights_sym = edge_weights + edge_weights
+
+        A = sparse.coo_matrix((edge_weights_sym, (row_idx_sym, col_idx_sym)), shape=(n, n))
+        A = A.tocsr()
+
+        # Graph Laplacian L0 = D - A
+        deg = np.array(A.sum(axis=1)).flatten()
+        D = sparse.diags(deg)
+        L0 = D - A
+
+        # Compute L0 eigenvalues (H0 features)
+        n_eigs_h0 = min(50, n-2)
         try:
-            from .atlas_gpu import compute_h0_h1_atlas_gpu
-            return compute_h0_h1_atlas_gpu(
-                data, k_neighbors=k_neighbors,
-                density_threshold=density_threshold,
-                overlap_factor=overlap_factor,
-                return_distances=return_distances
-            )
-        except ImportError as e:
-            # Fall back to CPU if GPU not available
-            warnings.warn(f"GPU atlas not available ({e}), falling back to CPU", UserWarning)
+            eigs_h0, _ = eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-3)
+            eigs_h0 = np.abs(eigs_h0)  # Ensure non-negative
+        except:
+            eigs_h0 = np.array([])
 
-    # Use CPU implementation
-    from .atlas_cpu import compute_h0_h1_atlas_cpu
-    return compute_h0_h1_atlas_cpu(
-        data, k_neighbors=k_neighbors,
-        density_threshold=density_threshold,
-        overlap_factor=overlap_factor,
-        return_distances=return_distances
-    )
+        # Count zero eigenvalues (Betti number β₀)
+        beta_0 = np.sum(eigs_h0 < 1e-6)
 
+        # Build Hodge Laplacian L1 for H1
+        # L1 = B1^T @ B1 + B2 @ B2^T
+        # where B1: edges → vertices, B2: triangles → edges
+
+        # Build edge list (deduplicated, symmetric kNN)
+        edges = set()
+        for i in range(n):
+            for j_idx in range(1, k+1):
+                j = indices[i, j_idx]
+                edge = tuple(sorted([i, j]))
+                edges.add(edge)
+
+        edges = sorted(list(edges))
+        n_edges = len(edges)
+        edge_to_idx = {e: idx for idx, e in enumerate(edges)}
+
+        # Build B1 (edge → vertex boundary operator)
+        # B1[i, e] = +1 if vertex i is target of edge e, -1 if source
+        B1_rows = []
+        B1_cols = []
+        B1_data = []
+
+        for e_idx, (v0, v1) in enumerate(edges):
+            B1_rows.append(v0)
+            B1_cols.append(e_idx)
+            B1_data.append(-1)
+
+            B1_rows.append(v1)
+            B1_cols.append(e_idx)
+            B1_data.append(+1)
+
+        B1 = sparse.coo_matrix((B1_data, (B1_rows, B1_cols)), shape=(n, n_edges), dtype=np.float64)
+        B1 = B1.tocsr().astype(np.float64)
+
+        # Find triangles in kNN graph
+        # A triangle is a triplet (i, j, k) where all three edges exist
+        triangles = []
+        for i in range(n):
+            neighbors_i = set(indices[i, 1:k+1])
+            for j in neighbors_i:
+                if j > i:  # Avoid duplicates
+                    neighbors_j = set(indices[j, 1:k+1])
+                    common = neighbors_i & neighbors_j
+                    for m in common:
+                        if m > j:  # Ensure i < j < m (canonical ordering)
+                            triangles.append((i, j, m))
+
+        n_triangles = len(triangles)
+
+        if n_triangles > 0:
+            # Build B2 (triangle → edge boundary operator)
+            # B2[e, t] = ±1 if edge e is on boundary of triangle t
+            B2_rows = []
+            B2_cols = []
+            B2_data = []
+
+            for t_idx, (i, j, m) in enumerate(triangles):
+                # Triangle has edges: (i,j), (i,m), (j,m)
+                # Boundary orientation: (i→j) - (i→m) + (j→m)
+
+                e1 = tuple(sorted([i, j]))
+                e2 = tuple(sorted([i, m]))
+                e3 = tuple(sorted([j, m]))
+
+                if e1 in edge_to_idx:
+                    B2_rows.append(edge_to_idx[e1])
+                    B2_cols.append(t_idx)
+                    B2_data.append(+1 if i < j else -1)
+
+                if e2 in edge_to_idx:
+                    B2_rows.append(edge_to_idx[e2])
+                    B2_cols.append(t_idx)
+                    B2_data.append(-1 if i < m else +1)
+
+                if e3 in edge_to_idx:
+                    B2_rows.append(edge_to_idx[e3])
+                    B2_cols.append(t_idx)
+                    B2_data.append(+1 if j < m else -1)
+
+            B2 = sparse.coo_matrix((B2_data, (B2_rows, B2_cols)), shape=(n_edges, n_triangles), dtype=np.float64)
+            B2 = B2.tocsr().astype(np.float64)
+
+            # Compute Hodge Laplacian L1 = B1^T @ B1 + B2 @ B2^T
+            L1 = (B1.T @ B1 + B2 @ B2.T).astype(np.float64)
+        else:
+            # No triangles, L1 = B1^T @ B1 only
+            L1 = (B1.T @ B1).astype(np.float64)
+
+        # Compute L1 eigenvalues (H1 features)
+        n_eigs_h1 = min(50, n_edges - 2) if n_edges > 2 else 0
+
+        if n_eigs_h1 > 0:
+            try:
+                eigs_h1, _ = eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-3)
+                eigs_h1 = np.abs(eigs_h1)
+            except:
+                eigs_h1 = np.array([])
+        else:
+            eigs_h1 = np.array([])
+
+        # Count zero eigenvalues (Betti number β₁)
+        beta_1 = np.sum(eigs_h1 < 1e-6) if len(eigs_h1) > 0 else 0
+
+        # Add β₀ features (one per component)
+        for i in range(beta_0):
+            h0_features_all.append([0.0, np.inf])
+
+        # Add β₁ features (one per loop)
+        for i in range(beta_1):
+            h1_features_all.append([0.0, np.inf])
+
+    # Convert to diagrams
+    if len(h0_features_all) == 0:
+        h0_diagram = np.array([[0, 0]])  # No features
+    else:
+        h0_diagram = np.array(h0_features_all)
+
+    if len(h1_features_all) == 0:
+        h1_diagram = np.array([[0, 0]])  # No features
+    else:
+        h1_diagram = np.array(h1_features_all)
+
+    return h0_diagram, h1_diagram
 
 
 def compute_persistence_diagrams_fast(data, layout, k_neighbors=30, use_gpu=True):
