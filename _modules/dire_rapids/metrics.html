@@ -188,6 +188,7 @@
 <span class="sd">    dict : Dictionary mapping backend names to availability status</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;fast&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Always available, uses graph-based H0/H1 only</span>
         <span class="s1">&#39;giotto-ph&#39;</span><span class="p">:</span> <span class="n">HAS_GIOTTO_PH</span><span class="p">,</span>
         <span class="s1">&#39;ripser++&#39;</span><span class="p">:</span> <span class="n">HAS_RIPSER_PP</span><span class="p">,</span>
         <span class="s1">&#39;ripser&#39;</span><span class="p">:</span> <span class="n">HAS_RIPSER</span>
@@ -1089,10 +1090,123 @@
 <span class="c1">#</span>
 
 
+<span class="c1">#</span>
+<span class="c1"># Fast H0 and H1 computation using kNN-based sparse Rips filtration</span>
+<span class="c1">#</span>
+
+
+<div class="viewcode-block" id="compute_h0_h1_knn">
+<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_h0_h1_knn">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+                     <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_distances</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute H0/H1 using local kNN atlas approach.</span>
+
+<span class="sd">    Build dense local triangulations around each point, then merge consistently.</span>
+<span class="sd">    This avoids the &quot;holes&quot; problem of global sparse kNN graphs.</span>
+
+<span class="sd">    Automatically selects between GPU and CPU implementation based on availability</span>
+<span class="sd">    and use_gpu parameter.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : array-like</span>
+<span class="sd">        Point cloud data (n_samples, n_features)</span>
+<span class="sd">    k_neighbors : int</span>
+<span class="sd">        Size of local neighborhood (default 20, recommended 15-20 for noisy data)</span>
+<span class="sd">    density_threshold : float</span>
+<span class="sd">        Percentile threshold for edge inclusion (0-1). Lower = denser triangulation.</span>
+<span class="sd">        Default 0.8 means edges up to 80th percentile of local distances are included.</span>
+<span class="sd">    overlap_factor : float</span>
+<span class="sd">        Factor for expanding local neighborhoods to ensure overlap (default 1.5).</span>
+<span class="sd">        Higher values create more dense, overlapping patches.</span>
+<span class="sd">    use_gpu : bool</span>
+<span class="sd">        Whether to use GPU acceleration (if available)</span>
+<span class="sd">    return_distances : bool</span>
+<span class="sd">        If True, also return edge-to-distance mapping for persistence diagrams</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple : (h0_diagram, h1_diagram) or (h0_diagram, h1_diagram, edge_distances)</span>
+<span class="sd">        Persistence diagrams with [birth, death] pairs</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Select backend: GPU if requested and available, otherwise CPU</span>
+    <span class="k">if</span> <span class="n">use_gpu</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_gpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_gpu</span>
+            <span class="k">return</span> <span class="n">compute_h0_h1_atlas_gpu</span><span class="p">(</span>
+                <span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
+                <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
+                <span class="n">overlap_factor</span><span class="o">=</span><span class="n">overlap_factor</span><span class="p">,</span>
+                <span class="n">return_distances</span><span class="o">=</span><span class="n">return_distances</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="c1"># Fall back to CPU if GPU not available</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GPU atlas not available (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to CPU&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
+
+    <span class="c1"># Use CPU implementation</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_cpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_cpu</span>
+    <span class="k">return</span> <span class="n">compute_h0_h1_atlas_cpu</span><span class="p">(</span>
+        <span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
+        <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
+        <span class="n">overlap_factor</span><span class="o">=</span><span class="n">overlap_factor</span><span class="p">,</span>
+        <span class="n">return_distances</span><span class="o">=</span><span class="n">return_distances</span>
+    <span class="p">)</span></div>
+
+
+
+
+<div class="viewcode-block" id="compute_persistence_diagrams_fast">
+<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_persistence_diagrams_fast">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_persistence_diagrams_fast</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fast computation of H0/H1 persistence diagrams using kNN-based sparse Rips.</span>
+
+<span class="sd">    Much faster than full Vietoris-Rips as it only uses kNN graph (O(nk) vs O(n²) edges).</span>
+<span class="sd">    Builds Rips complex from kNN edges and computes persistence via Ripser.</span>
+
+<span class="sd">    Note: Does NOT subsample internally - expects already-subsampled data.</span>
+<span class="sd">    This avoids double subsampling when called from compute_global_metrics.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : array-like</span>
+<span class="sd">        High-dimensional data (already subsampled if needed)</span>
+<span class="sd">    layout : array-like</span>
+<span class="sd">        Low-dimensional embedding (already subsampled if needed)</span>
+<span class="sd">    k_neighbors : int</span>
+<span class="sd">        Number of neighbors for kNN graph (default 30, recommended &gt;= 20)</span>
+<span class="sd">    use_gpu : bool</span>
+<span class="sd">        Whether to use GPU for kNN computation (default True)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict : {&#39;data&#39;: [h0_diag, h1_diag], &#39;layout&#39;: [h0_diag, h1_diag], &#39;backend&#39;: &#39;fast&#39;}</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Convert to NumPy if needed</span>
+    <span class="k">if</span> <span class="n">HAS_CUPY</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">cp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="n">data_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">layout_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">layout</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">data_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">layout_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">layout</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="c1"># Compute H0 and H1 using kNN-Rips method</span>
+    <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
+    <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span><span class="p">],</span>
+        <span class="s1">&#39;layout&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span><span class="p">],</span>
+        <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;fast&#39;</span>
+    <span class="p">}</span></div>
+
+
+
 <div class="viewcode-block" id="compute_persistence_diagrams">
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_persistence_diagrams">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">compute_persistence_diagrams</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-                                <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">collapse_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                                <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Compute persistence diagrams for data and layout.</span>
 
@@ -1109,11 +1223,13 @@
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
 <span class="sd">    backend : str, optional</span>
-<span class="sd">        Persistence backend: &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
-<span class="sd">    n_threads : int</span>
-<span class="sd">        Number of threads for giotto-ph (-1 for all cores)</span>
-<span class="sd">    collapse_edges : bool</span>
-<span class="sd">        Whether to use edge collapse optimization (giotto-ph only)</span>
+<span class="sd">        Persistence backend: &#39;fast&#39;, &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
+<span class="sd">    backend_kwargs : dict, optional</span>
+<span class="sd">        Backend-specific parameters passed to the backend, using defaults unless specified:</span>
+<span class="sd">        - &#39;fast&#39;: k_neighbors=30, use_gpu=True</span>
+<span class="sd">        - &#39;giotto-ph&#39;: n_threads=-1, collapse_edges=True, return_generators=False</span>
+<span class="sd">        - &#39;ripser++&#39;: Any valid parameters for ripserplusplus.run()</span>
+<span class="sd">        - &#39;ripser&#39;: Any valid parameters for ripser.ripser()</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -1127,6 +1243,10 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
+    <span class="c1"># Initialize backend_kwargs if not provided</span>
+    <span class="k">if</span> <span class="n">backend_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">backend_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+
     <span class="c1"># Select backend</span>
     <span class="k">if</span> <span class="n">backend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">backend</span> <span class="o">=</span> <span class="n">get_persistence_backend</span><span class="p">()</span>
@@ -1136,7 +1256,7 @@
         <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">available</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">available</span><span class="p">[</span><span class="n">backend</span><span class="p">]:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Backend &#39;</span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&#39; not available. Use one of </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">available</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="c1"># Subsample</span>
+    <span class="c1"># Subsample ONCE</span>
     <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
     <span class="p">)</span>
@@ -1150,34 +1270,52 @@
         <span class="n">layout_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">layout_sub</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
 
     <span class="c1"># Compute persistence diagrams based on backend</span>
-    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;giotto-ph&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;fast&#39;</span><span class="p">:</span>
+        <span class="c1"># Use fast kNN-Laplacian computation</span>
+        <span class="c1"># Extract parameters with defaults</span>
+        <span class="n">k_neighbors</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;k_neighbors&#39;</span><span class="p">,</span> <span class="mi">30</span><span class="p">)</span>
+        <span class="n">use_gpu</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;use_gpu&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
+        <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
+        <span class="n">diags_hd</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span><span class="p">]</span>
+        <span class="n">diags_ld</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span><span class="p">]</span>
+
+    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;giotto-ph&#39;</span><span class="p">:</span>
         <span class="c1"># Use giotto-ph (fastest CPU option)</span>
+        <span class="c1"># Extract parameters with defaults</span>
+        <span class="n">n_threads</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n_threads&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">collapse_edges</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;collapse_edges&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="n">return_generators</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;return_generators&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
         <span class="n">result_hd</span> <span class="o">=</span> <span class="n">ripser_parallel</span><span class="p">(</span>
             <span class="n">data_np</span><span class="p">,</span>
             <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span>
             <span class="n">collapse_edges</span><span class="o">=</span><span class="n">collapse_edges</span><span class="p">,</span>
             <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span><span class="p">,</span>
-            <span class="n">return_generators</span><span class="o">=</span><span class="kc">False</span>
+            <span class="n">return_generators</span><span class="o">=</span><span class="n">return_generators</span>
         <span class="p">)</span>
         <span class="n">result_ld</span> <span class="o">=</span> <span class="n">ripser_parallel</span><span class="p">(</span>
             <span class="n">layout_np</span><span class="p">,</span>
             <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span>
             <span class="n">collapse_edges</span><span class="o">=</span><span class="n">collapse_edges</span><span class="p">,</span>
             <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span><span class="p">,</span>
-            <span class="n">return_generators</span><span class="o">=</span><span class="kc">False</span>
+            <span class="n">return_generators</span><span class="o">=</span><span class="n">return_generators</span>
         <span class="p">)</span>
         <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">result_hd</span><span class="p">[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
         <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">result_ld</span><span class="p">[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
 
     <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;ripser++&#39;</span><span class="p">:</span>
         <span class="c1"># Use GPU-accelerated ripser++</span>
-        <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">rpp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-        <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">rpp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
+        <span class="c1"># Pass through all kwargs to rpp.run()</span>
+        <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">rpp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
+        <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">rpp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
 
     <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;ripser&#39;</span><span class="p">:</span>
         <span class="c1"># Use standard CPU ripser</span>
-        <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">ripser</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-        <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">ripser</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
+        <span class="c1"># Pass through all kwargs to ripser()</span>
+        <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">ripser</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
+        <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">ripser</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
 
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -1343,9 +1481,7 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Compute Wasserstein distance between persistence diagrams.</span>
 
-<span class="sd">    Handles infinite death times by:</span>
-<span class="sd">    1. Computing Wasserstein on finite features</span>
-<span class="sd">    2. Adding birth time difference for infinite features</span>
+<span class="sd">    Simple implementation matching dire-jax (no special handling for infinite features).</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -1362,45 +1498,9 @@
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;persim not available, returning NaN&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
 
-    <span class="n">diag_hd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">)</span>
-    <span class="n">diag_ld</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">diag_ld</span><span class="p">)</span>
-
-    <span class="c1"># Separate finite and infinite features</span>
-    <span class="n">finite_mask_hd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="n">diag_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="n">finite_mask_ld</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">diag_ld</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="n">diag_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-
-    <span class="n">diag_hd_finite</span> <span class="o">=</span> <span class="n">diag_hd</span><span class="p">[</span><span class="n">finite_mask_hd</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-    <span class="n">diag_ld_finite</span> <span class="o">=</span> <span class="n">diag_ld</span><span class="p">[</span><span class="n">finite_mask_ld</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-
-    <span class="c1"># Compute Wasserstein on finite features</span>
-    <span class="n">dist_wass_finite</span> <span class="o">=</span> <span class="n">wasserstein</span><span class="p">(</span><span class="n">diag_hd_finite</span><span class="p">,</span> <span class="n">diag_ld_finite</span><span class="p">)</span>
-
-    <span class="c1"># Handle infinite features by comparing birth times</span>
-    <span class="n">diag_hd_inf</span> <span class="o">=</span> <span class="n">diag_hd</span><span class="p">[</span><span class="o">~</span><span class="n">finite_mask_hd</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">~</span><span class="n">finite_mask_hd</span><span class="p">)</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-    <span class="n">diag_ld_inf</span> <span class="o">=</span> <span class="n">diag_ld</span><span class="p">[</span><span class="o">~</span><span class="n">finite_mask_ld</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">~</span><span class="n">finite_mask_ld</span><span class="p">)</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-
-    <span class="n">dist_wass_inf</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="k">if</span> <span class="n">diag_hd_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">diag_ld_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="c1"># Extract birth times of infinite features</span>
-        <span class="n">births_hd</span> <span class="o">=</span> <span class="n">diag_hd_inf</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_hd_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-        <span class="n">births_ld</span> <span class="o">=</span> <span class="n">diag_ld_inf</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_ld_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-
-        <span class="c1"># Compute Wasserstein distance on birth times (treated as 1D distributions)</span>
-        <span class="c1"># We create (birth, birth) pairs to use the same wasserstein function</span>
-        <span class="k">if</span> <span class="n">births_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">births_hd_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">births_hd</span><span class="p">,</span> <span class="n">births_hd</span><span class="p">])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">births_hd_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-
-        <span class="k">if</span> <span class="n">births_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">births_ld_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">births_ld</span><span class="p">,</span> <span class="n">births_ld</span><span class="p">])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">births_ld_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-
-        <span class="n">dist_wass_inf</span> <span class="o">=</span> <span class="n">wasserstein</span><span class="p">(</span><span class="n">births_hd_pairs</span><span class="p">,</span> <span class="n">births_ld_pairs</span><span class="p">)</span>
-
-    <span class="n">dist_wass</span> <span class="o">=</span> <span class="n">dist_wass_finite</span> <span class="o">+</span> <span class="n">dist_wass_inf</span>
-    <span class="k">return</span> <span class="n">dist_wass</span> <span class="o">*</span> <span class="n">norm_factor</span></div>
+    <span class="n">dist_wass</span> <span class="o">=</span> <span class="n">wasserstein</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span><span class="p">)</span>
+    <span class="n">dist_wass</span> <span class="o">*=</span> <span class="n">norm_factor</span>
+    <span class="k">return</span> <span class="n">dist_wass</span></div>
 
 
 
@@ -1474,7 +1574,7 @@
 <div class="viewcode-block" id="compute_global_metrics">
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_global_metrics">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">compute_global_metrics</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">dimension</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
-                          <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">metrics_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">collapse_edges</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                          <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">metrics_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Compute global topological metrics based on persistence homology.</span>
 
@@ -1499,11 +1599,9 @@
 <span class="sd">    metrics_only : bool</span>
 <span class="sd">        If True, return only metrics; otherwise include diagrams and curves</span>
 <span class="sd">    backend : str, optional</span>
-<span class="sd">        Persistence backend: &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
-<span class="sd">    n_threads : int</span>
-<span class="sd">        Number of threads for giotto-ph (-1 for all cores)</span>
-<span class="sd">    collapse_edges : bool</span>
-<span class="sd">        Whether to use edge collapse optimization (giotto-ph only)</span>
+<span class="sd">        Persistence backend: &#39;fast&#39;, &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
+<span class="sd">    backend_kwargs : dict, optional</span>
+<span class="sd">        Backend-specific parameters. See compute_persistence_diagrams() for details.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -1529,21 +1627,17 @@
         <span class="s1">&#39;layout&#39;</span><span class="p">:</span> <span class="p">[]</span>
     <span class="p">}</span>
 
-    <span class="c1"># Compute persistence diagrams</span>
+    <span class="c1"># Compute persistence diagrams (subsamples once internally)</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">compute_persistence_diagrams</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_dim</span><span class="o">=</span><span class="n">dimension</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span>
-        <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span><span class="p">,</span>
-        <span class="n">collapse_edges</span><span class="o">=</span><span class="n">collapse_edges</span>
+        <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="n">backend_kwargs</span>
     <span class="p">)</span>
+
+    <span class="c1"># Get number of points after subsampling (from result data)</span>
+    <span class="n">n_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>  <span class="c1"># H0 diagram length</span>
 
     <span class="n">diags</span> <span class="o">=</span> <span class="n">result</span>
     <span class="n">backend_used</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;backend&#39;</span><span class="p">,</span> <span class="s1">&#39;unknown&#39;</span><span class="p">)</span>
-
-    <span class="c1"># Subsample to get point count for normalization</span>
-    <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
-        <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
-    <span class="p">)</span>
-    <span class="n">n_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_sub</span><span class="p">)</span>
 
     <span class="c1"># Compute metrics for each dimension</span>
     <span class="k">for</span> <span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">diags</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">],</span> <span class="n">diags</span><span class="p">[</span><span class="s1">&#39;layout&#39;</span><span class="p">]):</span>

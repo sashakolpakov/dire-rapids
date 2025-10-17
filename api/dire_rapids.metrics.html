@@ -72,6 +72,8 @@
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.compute_svm_score"><code class="docutils literal notranslate"><span class="pre">compute_svm_score()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.compute_knn_score"><code class="docutils literal notranslate"><span class="pre">compute_knn_score()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.compute_context_measures"><code class="docutils literal notranslate"><span class="pre">compute_context_measures()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.compute_h0_h1_knn"><code class="docutils literal notranslate"><span class="pre">compute_h0_h1_knn()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.compute_persistence_diagrams_fast"><code class="docutils literal notranslate"><span class="pre">compute_persistence_diagrams_fast()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.compute_persistence_diagrams"><code class="docutils literal notranslate"><span class="pre">compute_persistence_diagrams()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.betti_curve"><code class="docutils literal notranslate"><span class="pre">betti_curve()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.compute_dtw"><code class="docutils literal notranslate"><span class="pre">compute_dtw()</span></code></a></li>
@@ -518,8 +520,64 @@ vs low-dimensional embedding.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="dire_rapids.metrics.compute_h0_h1_knn">
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_h0_h1_knn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_distances</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_h0_h1_knn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_h0_h1_knn" title="Link to this definition"></a></dt>
+<dd><p>Compute H0/H1 using local kNN atlas approach.</p>
+<p>Build dense local triangulations around each point, then merge consistently.
+This avoids the “holes” problem of global sparse kNN graphs.</p>
+<p>Automatically selects between GPU and CPU implementation based on availability
+and use_gpu parameter.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>array-like</em>) – Point cloud data (n_samples, n_features)</p></li>
+<li><p><strong>k_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Size of local neighborhood (default 20, recommended 15-20 for noisy data)</p></li>
+<li><p><strong>density_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Percentile threshold for edge inclusion (0-1). Lower = denser triangulation.
+Default 0.8 means edges up to 80th percentile of local distances are included.</p></li>
+<li><p><strong>overlap_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Factor for expanding local neighborhoods to ensure overlap (default 1.5).
+Higher values create more dense, overlapping patches.</p></li>
+<li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU acceleration (if available)</p></li>
+<li><p><strong>return_distances</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, also return edge-to-distance mapping for persistence diagrams</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>tuple</strong> – Persistence diagrams with [birth, death] pairs</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(h0_diagram, h1_diagram) or (h0_diagram, h1_diagram, edge_distances)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dire_rapids.metrics.compute_persistence_diagrams_fast">
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_persistence_diagrams_fast</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_persistence_diagrams_fast"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_persistence_diagrams_fast" title="Link to this definition"></a></dt>
+<dd><p>Fast computation of H0/H1 persistence diagrams using kNN-based sparse Rips.</p>
+<p>Much faster than full Vietoris-Rips as it only uses kNN graph (O(nk) vs O(n²) edges).
+Builds Rips complex from kNN edges and computes persistence via Ripser.</p>
+<p>Note: Does NOT subsample internally - expects already-subsampled data.
+This avoids double subsampling when called from compute_global_metrics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>array-like</em>) – High-dimensional data (already subsampled if needed)</p></li>
+<li><p><strong>layout</strong> (<em>array-like</em>) – Low-dimensional embedding (already subsampled if needed)</p></li>
+<li><p><strong>k_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of neighbors for kNN graph (default 30, recommended &gt;= 20)</p></li>
+<li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU for kNN computation (default True)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>dict</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>{‘data’: [h0_diag, h1_diag], ‘layout’: [h0_diag, h1_diag], ‘backend’: ‘fast’}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.compute_persistence_diagrams">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_persistence_diagrams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subsample_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collapse_edges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_persistence_diagrams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_persistence_diagrams" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_persistence_diagrams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_dim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subsample_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_persistence_diagrams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_persistence_diagrams" title="Link to this definition"></a></dt>
 <dd><p>Compute persistence diagrams for data and layout.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -529,9 +587,12 @@ vs low-dimensional embedding.</p>
 <li><p><strong>max_dim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Maximum homology dimension</p></li>
 <li><p><strong>subsample_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Subsampling probability (must be between 0.0 and 1.0)</p></li>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
-<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Persistence backend: ‘giotto-ph’, ‘ripser++’, ‘ripser’, or None for auto</p></li>
-<li><p><strong>n_threads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of threads for giotto-ph (-1 for all cores)</p></li>
-<li><p><strong>collapse_edges</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use edge collapse optimization (giotto-ph only)</p></li>
+<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Persistence backend: ‘fast’, ‘giotto-ph’, ‘ripser++’, ‘ripser’, or None for auto</p></li>
+<li><p><strong>backend_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Backend-specific parameters passed to the backend, using defaults unless specified:
+- ‘fast’: k_neighbors=30, use_gpu=True
+- ‘giotto-ph’: n_threads=-1, collapse_edges=True, return_generators=False
+- ‘ripser++’: Any valid parameters for ripserplusplus.run()
+- ‘ripser’: Any valid parameters for ripser.ripser()</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -642,9 +703,7 @@ at different filtration values.</p>
 <dt class="sig sig-object py" id="dire_rapids.metrics.compute_wasserstein">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_wasserstein</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">diag_hd</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diag_ld</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_wasserstein"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_wasserstein" title="Link to this definition"></a></dt>
 <dd><p>Compute Wasserstein distance between persistence diagrams.</p>
-<p>Handles infinite death times by:
-1. Computing Wasserstein on finite features
-2. Adding birth time difference for infinite features</p>
+<p>Simple implementation matching dire-jax (no special handling for infinite features).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -688,7 +747,7 @@ at different filtration values.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.compute_global_metrics">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_global_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dimension</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subsample_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metrics_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_threads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">collapse_edges</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_global_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_global_metrics" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_global_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layout</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dimension</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">subsample_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metrics_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">backend_kwargs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#compute_global_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.compute_global_metrics" title="Link to this definition"></a></dt>
 <dd><p>Compute global topological metrics based on persistence homology.</p>
 <p>Computes distances between persistence diagrams and Betti curves:
 - DTW, TWED, EMD for Betti curves
@@ -703,9 +762,8 @@ at different filtration values.</p>
 <li><p><strong>random_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Random seed</p></li>
 <li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of points for Betti curves</p></li>
 <li><p><strong>metrics_only</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, return only metrics; otherwise include diagrams and curves</p></li>
-<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Persistence backend: ‘giotto-ph’, ‘ripser++’, ‘ripser’, or None for auto</p></li>
-<li><p><strong>n_threads</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of threads for giotto-ph (-1 for all cores)</p></li>
-<li><p><strong>collapse_edges</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use edge collapse optimization (giotto-ph only)</p></li>
+<li><p><strong>backend</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Persistence backend: ‘fast’, ‘giotto-ph’, ‘ripser++’, ‘ripser’, or None for auto</p></li>
+<li><p><strong>backend_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Backend-specific parameters. See compute_persistence_diagrams() for details.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
