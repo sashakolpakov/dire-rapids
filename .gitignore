@@ -47,3 +47,6 @@ docs/_build/
 
 # Project notes (not tracked)
 NOTES_*.md
+
+# Backup files
+*.bak
