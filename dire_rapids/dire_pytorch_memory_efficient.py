@@ -17,7 +17,7 @@ import torch
 from loguru import logger
 
 # Import base class
-from .dire_pytorch import DiRePyTorch
+from .dire_pytorch import DiRePyTorch  # pylint: disable=cyclic-import
 
 # PyKeOps for efficient force computations
 try:
@@ -542,10 +542,11 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             # Monitor memory before computation
             if self.device.type == 'cuda' and iteration % 20 == 0:
                 mem_available = torch.cuda.mem_get_info()[0] / 1e9
-                
+                mem_reserved = torch.cuda.memory_reserved() / 1e9
+
                 # Warn if memory usage is getting high
                 if mem_available < 2.0:  # Less than 2GB free
-                    self.logger.warning(f"Low GPU memory: {mem_available:.1f}GB free, {mem_before:.1f}GB used")
+                    self.logger.warning(f"Low GPU memory: {mem_available:.1f}GB free, {mem_reserved:.1f}GB used")
             
             # Compute forces with our memory-efficient method
             forces = self._compute_forces(positions, iteration, self.max_iter_layout)

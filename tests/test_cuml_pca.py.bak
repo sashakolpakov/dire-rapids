@@ -123,7 +123,7 @@ def main():
                 'cuml_time': t_cuml,
                 'speedup': speedup
             })
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except (RuntimeError, MemoryError, ValueError) as e:
             print(f"\nFailed: {e}")
             traceback.print_exc()
             break

@@ -168,7 +168,7 @@ def get_persistence_backend():
     RuntimeError
         If no persistence backend is available
     """
-    global _PERSISTENCE_BACKEND
+    global _PERSISTENCE_BACKEND  # pylint: disable=global-variable-not-assigned
 
     if _PERSISTENCE_BACKEND is not None:
         return _PERSISTENCE_BACKEND
@@ -356,7 +356,7 @@ def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_sta
 #
 
 
-def make_knn_graph_gpu(data, n_neighbors, batch_size=None):
+def make_knn_graph_gpu(data, n_neighbors, batch_size=50000):
     """
     GPU-accelerated kNN graph construction using cuML.
 
@@ -367,7 +367,9 @@ def make_knn_graph_gpu(data, n_neighbors, batch_size=None):
     n_neighbors : int
         Number of nearest neighbors
     batch_size : int, optional
-        Batch size for processing (currently unused with cuML)
+        Batch size for querying neighbors (queries in batches against full dataset).
+        Default 50000 balances GPU memory and performance.
+        Set to None to query all at once.
 
     Returns
     -------
@@ -383,12 +385,30 @@ def make_knn_graph_gpu(data, n_neighbors, batch_size=None):
     else:
         data_gpu = np.asarray(data, dtype=np.float32)
 
-    # Use cuML NearestNeighbors
+    n_samples = data_gpu.shape[0]
+
+    # Fit on entire dataset
     nn = cumlNearestNeighbors(n_neighbors=n_neighbors + 1, metric='euclidean')
     nn.fit(data_gpu)
 
-    # Query for neighbors (including self)
-    distances, indices = nn.kneighbors(data_gpu)
+    if batch_size is None or batch_size >= n_samples:
+        # Query all at once
+        distances, indices = nn.kneighbors(data_gpu)
+    else:
+        # Query in batches (each batch queries against full dataset for memory efficiency)
+        if HAS_CUPY:
+            distances = cp.zeros((n_samples, n_neighbors + 1), dtype=cp.float32)
+            indices = cp.zeros((n_samples, n_neighbors + 1), dtype=cp.int32)
+        else:
+            distances = np.zeros((n_samples, n_neighbors + 1), dtype=np.float32)
+            indices = np.zeros((n_samples, n_neighbors + 1), dtype=np.int32)
+
+        for start_idx in range(0, n_samples, batch_size):
+            end_idx = min(start_idx + batch_size, n_samples)
+            # Query batch against FULL dataset
+            batch_distances, batch_indices = nn.kneighbors(data_gpu[start_idx:end_idx])
+            distances[start_idx:end_idx] = batch_distances
+            indices[start_idx:end_idx] = batch_indices
 
     # Convert to CuPy arrays if not already
     if HAS_CUPY:
@@ -398,7 +418,7 @@ def make_knn_graph_gpu(data, n_neighbors, batch_size=None):
     return distances, indices
 
 
-def make_knn_graph_cpu(data, n_neighbors, batch_size=None):
+def make_knn_graph_cpu(data, n_neighbors, batch_size=10000):
     """
     CPU fallback for kNN graph construction.
 
@@ -409,18 +429,35 @@ def make_knn_graph_cpu(data, n_neighbors, batch_size=None):
     n_neighbors : int
         Number of nearest neighbors
     batch_size : int, optional
-        Unused for CPU version
+        Batch size for querying neighbors (queries in batches against full dataset).
+        Default 10000 provides good balance between memory and performance.
+        Set to None to query all at once.
 
     Returns
     -------
     tuple : (distances, indices) arrays
     """
     data_np = np.asarray(data, dtype=np.float32)
+    n_samples = data_np.shape[0]
 
+    # Fit on entire dataset
     nn = NearestNeighbors(n_neighbors=n_neighbors + 1, metric='euclidean')
     nn.fit(data_np)
 
-    distances, indices = nn.kneighbors(data_np)
+    if batch_size is None or batch_size >= n_samples:
+        # Query all at once
+        distances, indices = nn.kneighbors(data_np)
+    else:
+        # Query in batches (each batch queries against full dataset for memory efficiency)
+        distances = np.zeros((n_samples, n_neighbors + 1), dtype=np.float32)
+        indices = np.zeros((n_samples, n_neighbors + 1), dtype=np.int32)
+
+        for start_idx in range(0, n_samples, batch_size):
+            end_idx = min(start_idx + batch_size, n_samples)
+            # Query batch against FULL dataset
+            batch_distances, batch_indices = nn.kneighbors(data_np[start_idx:end_idx])
+            distances[start_idx:end_idx] = batch_distances
+            indices[start_idx:end_idx] = batch_indices
 
     return distances, indices
 
@@ -817,7 +854,7 @@ def compute_svm_score(data, layout, labels, subsample_threshold=0.5, random_stat
         raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
 
     # Subsample
-    X_hd, X_ld, y = threshold_subsample_gpu(
+    X_hd, X_ld, y = threshold_subsample_gpu(  # pylint: disable=unbalanced-tuple-unpacking
         data, layout, labels, threshold=subsample_threshold, random_state=random_state
     )
 
@@ -886,7 +923,7 @@ def compute_knn_score(data, layout, labels, n_neighbors=16, subsample_threshold=
         raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
 
     # Subsample
-    X_hd, X_ld, y = threshold_subsample_gpu(
+    X_hd, X_ld, y = threshold_subsample_gpu(  # pylint: disable=unbalanced-tuple-unpacking
         data, layout, labels, threshold=subsample_threshold, random_state=random_state
     )
 
@@ -1062,8 +1099,8 @@ def compute_persistence_diagrams_fast(data, layout, k_neighbors=30, use_gpu=True
         layout_np = np.asarray(layout, dtype=np.float32)
 
     # Compute H0 and H1 using kNN-Rips method
-    h0_hd, h1_hd = compute_h0_h1_knn(data_np, k_neighbors=k_neighbors, use_gpu=use_gpu)
-    h0_ld, h1_ld = compute_h0_h1_knn(layout_np, k_neighbors=k_neighbors, use_gpu=use_gpu)
+    h0_hd, h1_hd = compute_h0_h1_knn(data_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
+    h0_ld, h1_ld = compute_h0_h1_knn(layout_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
 
     return {
         'data': [h0_hd, h1_hd],
@@ -1143,8 +1180,8 @@ def compute_persistence_diagrams(data, layout, max_dim=1, subsample_threshold=0.
         k_neighbors = backend_kwargs.get('k_neighbors', 30)
         use_gpu = backend_kwargs.get('use_gpu', True)
 
-        h0_hd, h1_hd = compute_h0_h1_knn(data_np, k_neighbors=k_neighbors, use_gpu=use_gpu)
-        h0_ld, h1_ld = compute_h0_h1_knn(layout_np, k_neighbors=k_neighbors, use_gpu=use_gpu)
+        h0_hd, h1_hd = compute_h0_h1_knn(data_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
+        h0_ld, h1_ld = compute_h0_h1_knn(layout_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
         diags_hd = [h0_hd, h1_hd]
         diags_ld = [h0_ld, h1_ld]
 
@@ -1596,9 +1633,11 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
         if HAS_GIOTTO_PH or HAS_RIPSER_PP or HAS_RIPSER:
             backend = persistence_backend or get_persistence_backend()
             print(f"Computing topological metrics using backend: {backend}...")
+            # Pass n_threads through backend_kwargs for giotto-ph
+            backend_kw = {'n_threads': n_threads} if backend == 'giotto-ph' else {}
             results['topology'] = compute_global_metrics(
                 data, layout, max_homology_dim, subsample_threshold,
-                random_state, backend=backend, n_threads=n_threads
+                random_state, backend=backend, backend_kwargs=backend_kw
             )
         else:
             warnings.warn("Skipping topological metrics (no persistence backend available)")

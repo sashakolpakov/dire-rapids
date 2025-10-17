@@ -11,7 +11,7 @@ n = 100
 theta = np.linspace(0, 2*np.pi, n, endpoint=False)
 data = np.column_stack([np.cos(theta), np.sin(theta)]).astype(np.float32)
 
-h0, h1 = compute_h0_h1_knn(data, k_neighbors=15, use_gpu=False)
+h0, h1 = compute_h0_h1_knn(data, k_neighbors=15, use_gpu=False)  # pylint: disable=unbalanced-tuple-unpacking
 beta_0 = len(h0[h0[:, 1] == np.inf])
 beta_1 = len(h1[h1[:, 1] == np.inf])
 status = "✓" if beta_0 == 1 and beta_1 == 1 else "✗"
@@ -25,7 +25,7 @@ x = np.cos(theta) + rng.randn(200) * 0.05
 y = np.sin(theta) + rng.randn(200) * 0.05
 data = np.column_stack([x, y]).astype(np.float32)
 
-h0, h1 = compute_h0_h1_knn(data, k_neighbors=15, use_gpu=False)
+h0, h1 = compute_h0_h1_knn(data, k_neighbors=15, use_gpu=False)  # pylint: disable=unbalanced-tuple-unpacking
 beta_0 = len(h0[h0[:, 1] == np.inf])
 beta_1 = len(h1[h1[:, 1] == np.inf])
 status = "✓" if beta_0 == 1 and beta_1 == 1 else "✗"

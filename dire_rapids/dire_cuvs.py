@@ -15,7 +15,7 @@ import torch  # pylint: disable=unused-import # Used via parent class (self.devi
 from loguru import logger
 
 # Import base DIRE PyTorch implementation
-from .dire_pytorch import DiRePyTorch
+from .dire_pytorch import DiRePyTorch  # pylint: disable=cyclic-import
 
 # Try to import cuVS and CuPy
 try:
@@ -219,7 +219,13 @@ class DiReCuVS(DiRePyTorch):
             If GPU is required but not available.
         """
         super().__init__(*args, **kwargs)
-        
+
+        # Seed CuPy random generator for cuML/cuVS operations (if available)
+        if CUVS_AVAILABLE:
+            cp.random.seed(self.random_state)
+            if self.verbose:
+                self.logger.debug(f"Seeded CuPy random generator: {self.random_state}")
+
         # Auto-detect cuVS usage
         if use_cuvs is None:
             # Use cuVS if available and we have a GPU
@@ -298,50 +304,52 @@ class DiReCuVS(DiRePyTorch):
         # Very large dataset with moderate dimensions - graph-based
         return 'cagra' if n_dims <= 500 else 'ivf_pq'
     
-    def _build_cuvs_index(self, X_gpu, index_type):
+    def _build_cuvs_index(self, X_gpu, index_type, metric='euclidean'):
         """
         Build cuVS index for fast k-NN search.
-        
+
         This private method constructs the appropriate cuVS index based on the
         specified index type and data characteristics, with optimized parameters
         for each index variant.
-        
+
         Parameters
         ----------
         X_gpu : cupy.ndarray
             Input data on GPU, shape (n_samples, n_features), dtype float32.
         index_type : str
             Type of index to build ('flat', 'ivf_flat', 'ivf_pq', 'cagra').
-            
+        metric : str, default='euclidean'
+            Distance metric to use ('euclidean' or 'inner_product').
+
         Returns
         -------
         cuVS index object or None
             Built cuVS index ready for search operations.
             Returns None for 'flat' type (no index needed).
-            
+
         Notes
         -----
         Private method, should not be called directly. Used by _compute_knn().
-        
+
         Index-Specific Optimizations:
         - **IVF-Flat**: Adaptive n_lists based on dataset size and dimensionality
-        - **IVF-PQ**: Optimized PQ dimension and quantization parameters  
+        - **IVF-PQ**: Optimized PQ dimension and quantization parameters
         - **CAGRA**: Graph-based parameters tuned for large datasets
-        
+
         Raises
         ------
         ValueError
             If unknown index_type is specified.
         """
         n_samples, n_dims = X_gpu.shape
-        
-        self.logger.info(f"Building cuVS {index_type} index for {n_samples} points in {n_dims}D...")
-        
+
+        self.logger.info(f"Building cuVS {index_type} index for {n_samples} points in {n_dims}D with {metric} metric...")
+
         if index_type == 'flat':
             # Exact search - no index needed
             self.logger.info("Using brute-force search (exact)")
             return None
-            
+
         if index_type == 'ivf_flat':
             # IVF without compression
             # For high-D data, use more lists for better quantization
@@ -350,68 +358,68 @@ class DiReCuVS(DiRePyTorch):
                 n_lists = min(int(np.sqrt(n_samples) * 2), 8192)
             else:
                 n_lists = min(int(np.sqrt(n_samples)), 4096)
-            
+
             build_params = ivf_flat.IndexParams(
                 n_lists=n_lists,
-                metric='euclidean',  # cuVS uses 'euclidean' not 'l2_expanded'
+                metric=metric,
                 add_data_on_build=True
             )
-            
+
             if self.cuvs_build_params:
                 build_params.update(self.cuvs_build_params)
-            
+
             index = ivf_flat.build(build_params, X_gpu)
-            
+
             self.logger.info(f"Built IVF-Flat index with {n_lists} lists for {n_dims}D data")
-            
+
         elif index_type == 'ivf_pq':
             # IVF with product quantization
             n_lists = min(int(np.sqrt(n_samples)), 8192)
             pq_dim = min(n_dims // 4, 128)  # Reasonable PQ dimension
-            
+
             build_params = ivf_pq.IndexParams(
                 n_lists=n_lists,
-                metric='euclidean',
+                metric=metric,
                 pq_dim=pq_dim,
                 pq_bits=8,
                 add_data_on_build=True
             )
-            
+
             if self.cuvs_build_params:
                 build_params.update(self.cuvs_build_params)
-            
+
             index = ivf_pq.build(build_params, X_gpu)
-            
+
             self.logger.info(f"Built IVF-PQ index with {n_lists} lists, PQ dim={pq_dim}")
-            
+
         elif index_type == 'cagra':
             # Graph-based index for very large datasets
             build_params = cagra.IndexParams(
-                metric='euclidean',
+                metric=metric,
                 graph_degree=32,
                 intermediate_graph_degree=64,
                 graph_build_algo='nn_descent'
             )
-            
+
             if self.cuvs_build_params:
                 build_params.update(self.cuvs_build_params)
-            
+
             index = cagra.build(build_params, X_gpu)
-            
+
             self.logger.info("Built CAGRA graph-based index")
-        
+
         else:
             raise ValueError(f"Unknown index type: {index_type}")
-        
+
         return index
     
-    def _search_cuvs(self, index, index_type, X_gpu, k):
+    def _search_cuvs(self, index, index_type, X_gpu, k, metric='euclidean'):
         """
         Search cuVS index for k nearest neighbors.
-        
+
         This private method performs k-NN search using the built cuVS index,
         with optimized search parameters for each index type.
-        
+
         Parameters
         ----------
         index : cuVS index object or None
@@ -422,51 +430,53 @@ class DiReCuVS(DiRePyTorch):
             Query data on GPU, shape (n_samples, n_features), dtype float32.
         k : int
             Number of nearest neighbors to find (plus 1 for self).
-            
+        metric : str, default='euclidean'
+            Distance metric to use ('euclidean' or 'inner_product').
+
         Returns
         -------
         tuple of cupy.ndarray
             distances : cupy.ndarray of shape (n_samples, k+1)
                 Distances to k+1 nearest neighbors (including self).
-            indices : cupy.ndarray of shape (n_samples, k+1)  
+            indices : cupy.ndarray of shape (n_samples, k+1)
                 Indices of k+1 nearest neighbors (including self).
-                
+
         Notes
         -----
         Private method, should not be called directly. Used by _compute_knn().
-        
+
         Search Parameters:
         - **IVF methods**: Adaptive n_probes based on index size
         - **CAGRA**: Optimized search width and internal parameters
         - **Flat**: Uses IVF-Flat with high probe count for near-exact results
-        
+
         Raises
         ------
         ValueError
             If unknown index_type is specified.
         """
         n_samples = X_gpu.shape[0]
-        
+
         self.logger.info(f"Searching for {k} nearest neighbors using cuVS {index_type}...")
-        
+
         if index_type == 'flat':
             # For flat/brute force, just use IVF-Flat with many lists for exact search
             # This avoids dtype issues with brute_force module
             n_lists = min(int(np.sqrt(n_samples)), 1024)
-            
+
             build_params = ivf_flat.IndexParams(
                 n_lists=n_lists,
-                metric='euclidean',
+                metric=metric,
                 add_data_on_build=True
             )
-            
+
             index = ivf_flat.build(build_params, X_gpu)
-            
+
             # Search with high probe count for near-exact results
             search_params = ivf_flat.SearchParams(
                 n_probes=min(n_lists, 256)  # High probe count for accuracy
             )
-            
+
             distances, indices = ivf_flat.search(
                 search_params, index, X_gpu, k+1
             )
@@ -520,11 +530,11 @@ class DiReCuVS(DiRePyTorch):
     def _compute_knn(self, X, chunk_size=50000, use_fp16=None):
         """
         Compute k-NN using cuVS acceleration when available and beneficial.
-        
+
         This method overrides the parent implementation to use cuVS for k-NN
         computation when it provides performance benefits, automatically falling
         back to PyTorch for cases where cuVS isn't optimal.
-        
+
         Parameters
         ----------
         X : numpy.ndarray
@@ -534,32 +544,42 @@ class DiReCuVS(DiRePyTorch):
         use_fp16 : bool, optional
             Use FP16 precision (used by fallback PyTorch method).
             Note: cuVS requires float32, so FP16 is only used for PyTorch fallback.
-            
+
         Notes
         -----
         Private method, should not be called directly. Used by fit_transform().
-        
+
         cuVS Usage Criteria:
         - cuVS backend must be enabled and available
         - Dataset size >= 10,000 samples (cuVS overhead not worth it for smaller datasets)
         - Dimensionality <= 2,048 (cuVS works best for moderate dimensions)
-        
+        - Only native metrics supported (euclidean, inner_product)
+
         If criteria aren't met, falls back to parent PyTorch implementation.
-        
+
         Side Effects
         ------------
         Sets self._knn_indices and self._knn_distances with computed k-NN graph.
         Cleans up GPU memory after computation.
         """
         n_samples, n_dims = X.shape
-        
+
+        # Check if custom metric expression/callable is specified
+        # cuVS only supports named metrics like 'euclidean', 'inner_product'
+        if self._metric_fn is not None:
+            self.logger.warning(
+                "Custom metric expressions/callables not supported by cuVS. "
+                "Falling back to PyTorch backend for k-NN."
+            )
+            return super()._compute_knn(X, chunk_size, use_fp16)
+
         # Decide whether to use cuVS
         use_cuvs_for_this = (
-            self.use_cuvs and 
+            self.use_cuvs and
             n_samples >= 10000 and  # cuVS overhead not worth it for small datasets
             n_dims <= 2048  # cuVS works best for moderate dimensions
         )
-        
+
         if not use_cuvs_for_this:
             # Fall back to PyTorch implementation
             self.logger.info("Using PyTorch backend for k-NN")
@@ -567,24 +587,35 @@ class DiReCuVS(DiRePyTorch):
         
         # Use cuVS for k-NN
         self.logger.info(f"Computing {self.n_neighbors}-NN graph using cuVS...")
-        
+
+        # Determine which metric to use for cuVS
+        # Default to euclidean, but allow named metrics
+        cuvs_metric = 'euclidean'
+        if self.metric_spec is not None and isinstance(self.metric_spec, str):
+            metric_lower = self.metric_spec.strip().lower()
+            if metric_lower in ('euclidean', 'l2', 'sqeuclidean'):
+                cuvs_metric = 'euclidean'
+            elif metric_lower == 'inner_product':
+                cuvs_metric = 'inner_product'
+            # Note: cuVS doesn't support cosine directly, would need normalization
+
         # Convert to CuPy array
         # Note: cuVS requires float32, not float16
         # cuVS also requires C-contiguous (row-major) arrays
         X_gpu = cp.asarray(X, dtype=cp.float32, order='C')
-        
+
         # Select index type
         index_type = self._select_cuvs_index_type(n_samples, n_dims)
-        
+
         # Build index
         if index_type != 'flat':
-            self.cuvs_index = self._build_cuvs_index(X_gpu, index_type)
+            self.cuvs_index = self._build_cuvs_index(X_gpu, index_type, cuvs_metric)
         else:
             self.cuvs_index = None
         
         # Search for k-NN
         distances, indices = self._search_cuvs(
-            self.cuvs_index, index_type, X_gpu, self.n_neighbors
+            self.cuvs_index, index_type, X_gpu, self.n_neighbors, cuvs_metric
         )
         
         # Convert to CuPy arrays first, then remove self (first neighbor) and convert to numpy

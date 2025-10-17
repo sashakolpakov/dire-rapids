@@ -126,7 +126,7 @@ def test_scaling(n_samples, n_features=1000, n_clusters=50):
         
         return True, total_time
         
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"\nFAILED: {e}")
         traceback.print_exc()
         

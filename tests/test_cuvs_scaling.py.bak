@@ -91,7 +91,7 @@ def test_cuvs_scaling(n_samples, n_dims, max_iter=3):
             'success': True
         }
         
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"\n❌ FAILED: {e}")
         traceback.print_exc()
         return {

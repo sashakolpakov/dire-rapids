@@ -60,7 +60,7 @@ def test_backend(backend_class, X, backend_name="Backend", **kwargs):
         
         return embedding, dt
         
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"❌ Failed: {e}")
         traceback.print_exc()
         return None, None

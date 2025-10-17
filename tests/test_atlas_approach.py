@@ -2,11 +2,12 @@
 Test the local kNN atlas approach for topology computation.
 """
 
-import numpy as np
 import sys
+import numpy as np
+
 sys.path.insert(0, '/Users/sasha/dire-rapids')
 
-from dire_rapids.metrics_atlas import compute_h0_h1_atlas
+from dire_rapids.atlas_cpu import compute_h0_h1_atlas_cpu
 
 def test_circle(n_samples, noise, k_local, density_threshold, label):
     """Test on circle with given parameters."""
@@ -16,9 +17,8 @@ def test_circle(n_samples, noise, k_local, density_threshold, label):
     y = np.sin(theta) + rng.randn(n_samples) * noise
     data = np.column_stack([x, y]).astype(np.float32)
 
-    h0, h1 = compute_h0_h1_atlas(data, k_local=k_local,
-                                  density_threshold=density_threshold,
-                                  use_gpu=False)
+    h0, h1 = compute_h0_h1_atlas_cpu(data, k_neighbors=k_local,
+                                      density_threshold=density_threshold)
 
     beta_0 = len(h0[h0[:, 1] == np.inf])
     beta_1 = len(h1[h1[:, 1] == np.inf])

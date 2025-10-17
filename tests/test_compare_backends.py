@@ -2,12 +2,13 @@
 Compare original fast backend vs atlas backend vs ripser.
 """
 
-import numpy as np
 import time
+import numpy as np
 from dire_rapids.metrics import compute_h0_h1_knn
-from dire_rapids.metrics_atlas import compute_h0_h1_atlas
+from dire_rapids.atlas_cpu import compute_h0_h1_atlas_cpu
 
 def generate_circle(n_samples, noise=0.05, seed=42):
+    """Generate a noisy circle in 2D."""
     rng = np.random.RandomState(seed)
     theta = np.linspace(0, 2*np.pi, n_samples, endpoint=False)
     x = np.cos(theta) + rng.randn(n_samples) * noise
@@ -15,6 +16,7 @@ def generate_circle(n_samples, noise=0.05, seed=42):
     return np.column_stack([x, y]).astype(np.float32)
 
 def generate_torus(n_samples, R=2.0, r=1.0, noise=0.05, seed=42):
+    """Generate a noisy torus in 3D."""
     rng = np.random.RandomState(seed)
     n_sqrt = int(np.sqrt(n_samples))
     u = np.linspace(0, 2*np.pi, n_sqrt, endpoint=False)
@@ -29,10 +31,10 @@ def generate_torus(n_samples, R=2.0, r=1.0, noise=0.05, seed=42):
 
     return np.column_stack([x, y, z]).astype(np.float32)
 
-def test_backend(name, data, expected_beta0, expected_beta1, compute_func, **kwargs):
+def test_backend(name, test_data, expected_beta0, expected_beta1, compute_func, **kwargs):
     """Test a backend and return results."""
     t_start = time.time()
-    h0, h1 = compute_func(data, **kwargs)
+    h0, h1 = compute_func(test_data, **kwargs)
     elapsed = time.time() - t_start
 
     beta_0 = len(h0[h0[:, 1] == np.inf])
@@ -56,8 +58,8 @@ data = generate_circle(100, noise=0.0)
 results['clean_circle'] = []
 results['clean_circle'].append(test_backend("Fast (k=2)", data, 1, 1, compute_h0_h1_knn, k_neighbors=2, use_gpu=False))
 results['clean_circle'].append(test_backend("Fast (k=10)", data, 1, 1, compute_h0_h1_knn, k_neighbors=10, use_gpu=False))
-results['clean_circle'].append(test_backend("Atlas (k=10, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas, k_local=10, density_threshold=0.7, use_gpu=False))
-results['clean_circle'].append(test_backend("Atlas (k=15, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas, k_local=15, density_threshold=0.7, use_gpu=False))
+results['clean_circle'].append(test_backend("Atlas (k=10, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas_cpu, k_neighbors=10, density_threshold=0.7))
+results['clean_circle'].append(test_backend("Atlas (k=15, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas_cpu, k_neighbors=15, density_threshold=0.7))
 
 # Test 2: Noisy circle
 print("\n[Test 2] Noisy Circle (n=200, noise=0.05)")
@@ -65,17 +67,17 @@ data = generate_circle(200, noise=0.05)
 results['noisy_circle'] = []
 results['noisy_circle'].append(test_backend("Fast (k=2)", data, 1, 1, compute_h0_h1_knn, k_neighbors=2, use_gpu=False))
 results['noisy_circle'].append(test_backend("Fast (k=10)", data, 1, 1, compute_h0_h1_knn, k_neighbors=10, use_gpu=False))
-results['noisy_circle'].append(test_backend("Atlas (k=10, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas, k_local=10, density_threshold=0.7, use_gpu=False))
-results['noisy_circle'].append(test_backend("Atlas (k=15, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas, k_local=15, density_threshold=0.7, use_gpu=False))
-results['noisy_circle'].append(test_backend("Atlas (k=20, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas, k_local=20, density_threshold=0.7, use_gpu=False))
+results['noisy_circle'].append(test_backend("Atlas (k=10, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas_cpu, k_neighbors=10, density_threshold=0.7))
+results['noisy_circle'].append(test_backend("Atlas (k=15, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas_cpu, k_neighbors=15, density_threshold=0.7))
+results['noisy_circle'].append(test_backend("Atlas (k=20, ρ=0.7)", data, 1, 1, compute_h0_h1_atlas_cpu, k_neighbors=20, density_threshold=0.7))
 
 # Test 3: Torus
 print("\n[Test 3] Torus (n=400, noise=0.05)")
 data = generate_torus(400, noise=0.05)
 results['torus'] = []
 results['torus'].append(test_backend("Fast (k=5)", data, 1, 2, compute_h0_h1_knn, k_neighbors=5, use_gpu=False))
-results['torus'].append(test_backend("Atlas (k=15, ρ=0.7)", data, 1, 2, compute_h0_h1_atlas, k_local=15, density_threshold=0.7, use_gpu=False))
-results['torus'].append(test_backend("Atlas (k=20, ρ=0.7)", data, 1, 2, compute_h0_h1_atlas, k_local=20, density_threshold=0.7, use_gpu=False))
+results['torus'].append(test_backend("Atlas (k=15, ρ=0.7)", data, 1, 2, compute_h0_h1_atlas_cpu, k_neighbors=15, density_threshold=0.7))
+results['torus'].append(test_backend("Atlas (k=20, ρ=0.7)", data, 1, 2, compute_h0_h1_atlas_cpu, k_neighbors=20, density_threshold=0.7))
 
 # Summary
 print("\n" + "="*80)

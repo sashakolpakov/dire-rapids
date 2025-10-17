@@ -274,8 +274,8 @@ def main():
             
             # Store for comparison
             all_results[name] = (results, total_time)
-            
-        except (RuntimeError, MemoryError) as e:
+
+        except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"\nFailed: {e}")
             import traceback  # pylint: disable=import-outside-toplevel
             traceback.print_exc()

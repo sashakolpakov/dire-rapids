@@ -50,7 +50,7 @@ def compute_h0_h1_atlas_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
     distances, indices = nn.kneighbors(data)
 
     # Track edge distances for persistence
-    edge_distances = {} if return_distances else None
+    edge_distances: dict = {} if return_distances else None  # type: ignore[assignment]
 
     # Global edge and triangle sets
     global_edges = set()
@@ -65,8 +65,8 @@ def compute_h0_h1_atlas_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
         for j_idx, j in enumerate(local_neighborhood):
             edge = tuple(sorted([i, int(j)]))
             global_edges.add(edge)
-            if return_distances and edge not in edge_distances:
-                edge_distances[edge] = local_dists[j_idx]
+            if return_distances and edge not in edge_distances:  # type: ignore[operator]
+                edge_distances[edge] = local_dists[j_idx]  # type: ignore[index]
 
         # Dense local patch: connect neighbors if close enough
         dist_threshold = np.percentile(local_dists, density_threshold * 100) * overlap_factor
@@ -74,8 +74,8 @@ def compute_h0_h1_atlas_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
         # Vectorized distance computation within neighborhood
         if len(local_neighborhood) > 1:
             neighborhood_coords = data[local_neighborhood]
-            for idx_j in range(len(local_neighborhood)):
-                j = int(local_neighborhood[idx_j])
+            for idx_j, j_val in enumerate(local_neighborhood):
+                j = int(j_val)
                 # Vectorized distance from j to all k > j
                 dists_jk = np.linalg.norm(
                     neighborhood_coords[idx_j+1:] - neighborhood_coords[idx_j], axis=1
@@ -86,13 +86,13 @@ def compute_h0_h1_atlas_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
                         k = int(local_neighborhood[idx_j + 1 + offset])
                         edge = tuple(sorted([j, k]))
                         global_edges.add(edge)
-                        if return_distances and edge not in edge_distances:
-                            edge_distances[edge] = dists_jk[offset]
+                        if return_distances and edge not in edge_distances:  # type: ignore[operator]
+                            edge_distances[edge] = dists_jk[offset]  # type: ignore[index]
 
         # Build triangles
-        for idx_j in range(len(local_neighborhood)):
+        for idx_j, j_val in enumerate(local_neighborhood):
             for idx_k in range(idx_j + 1, len(local_neighborhood)):
-                j = int(local_neighborhood[idx_j])
+                j = int(j_val)
                 k = int(local_neighborhood[idx_k])
                 e1 = tuple(sorted([i, j]))
                 e2 = tuple(sorted([i, k]))

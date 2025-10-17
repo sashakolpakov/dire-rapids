@@ -8,12 +8,14 @@ max-module-lines=2048 # Longer modules
 
 
 [DESIGN]
-max-locals=48                 # Variables per function
+max-locals=128                # Variables per function
 max-branches=32               # Control-flow split point per function
 max-statements=128            # Statements per function
+max-return-statements=16      # Return statements per function
 max-args=16                   # Arguments per function
 max-positional-arguments=16   # Positional arguments per function
 max-attributes=32             # Attributes per class
+max-nested-blocks=8           # Nested blocks per function
 
 
 

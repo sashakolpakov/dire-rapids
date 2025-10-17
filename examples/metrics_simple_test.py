@@ -6,8 +6,10 @@ Simple test script for dire-rapids metrics module.
 Tests basic functionality without requiring all optional dependencies.
 """
 
+import sys
 import numpy as np
 from sklearn.datasets import make_blobs
+from sklearn.decomposition import PCA
 
 print("Testing dire-rapids metrics module...")
 print("=" * 80)
@@ -24,7 +26,7 @@ try:
     print("  ✓ Metrics module imported successfully")
 except ImportError as e:
     print(f"  ✗ Failed to import metrics module: {e}")
-    exit(1)
+    sys.exit(1)
 
 # Test 2: Check available backends
 print("\n[2/6] Checking available persistence backends...")
@@ -40,7 +42,6 @@ data, labels = make_blobs(n_samples=200, n_features=20, centers=3, random_state=
 print(f"  Data shape: {data.shape}")
 
 # Create simple embedding (PCA-like reduction)
-from sklearn.decomposition import PCA
 pca = PCA(n_components=2)
 layout = pca.fit_transform(data)
 print(f"  Layout shape: {layout.shape}")
@@ -50,7 +51,7 @@ print("\n[4/6] Computing stress metric...")
 try:
     stress = compute_stress(data, layout, n_neighbors=15, use_gpu=False)
     print(f"  ✓ Stress (normalized): {stress:.6f}")
-except Exception as e:
+except (ValueError, TypeError, RuntimeError) as e:
     print(f"  ✗ Failed to compute stress: {e}")
 
 # Test 5: Compute neighbor preservation
@@ -58,7 +59,7 @@ print("\n[5/6] Computing neighborhood preservation...")
 try:
     neighbor_score = compute_neighbor_score(data, layout, n_neighbors=15, use_gpu=False)
     print(f"  ✓ Neighbor preservation: {neighbor_score[0]:.4f} ± {neighbor_score[1]:.4f}")
-except Exception as e:
+except (ValueError, TypeError, RuntimeError) as e:
     print(f"  ✗ Failed to compute neighbor score: {e}")
 
 # Test 6: Compute local metrics
@@ -67,7 +68,7 @@ try:
     metrics = compute_local_metrics(data, layout, n_neighbors=15, use_gpu=False)
     print(f"  ✓ Stress: {metrics['stress']:.6f}")
     print(f"  ✓ Neighbor: {metrics['neighbor'][0]:.4f} ± {metrics['neighbor'][1]:.4f}")
-except Exception as e:
+except (ValueError, TypeError, RuntimeError) as e:
     print(f"  ✗ Failed to compute local metrics: {e}")
 
 # Summary

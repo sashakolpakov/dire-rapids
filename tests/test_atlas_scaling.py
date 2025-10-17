@@ -13,8 +13,8 @@ Measures:
 - Matrix sizes and sparsity
 """
 
-import numpy as np
 import time
+import numpy as np
 from dire_rapids.metrics import compute_h0_h1_knn
 
 

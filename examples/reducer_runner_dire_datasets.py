@@ -20,11 +20,11 @@ print("\n1. DiRe disk_uniform dataset (5D disk, 1000 points)...")
 config = ReducerConfig(
     name="DiRe",
     reducer_class=create_dire,
-    reducer_kwargs=dict(
-        n_components=2,
-        n_neighbors=16,
-        verbose=False
-    ),
+    reducer_kwargs={
+        "n_components": 2,
+        "n_neighbors": 16,
+        "verbose": False
+    },
     visualize=False
 )
 runner = ReducerRunner(config=config)

@@ -21,13 +21,13 @@ print("\n1. Running DiRe with create_dire...")
 config = ReducerConfig(
     name="DiRe",
     reducer_class=create_dire,
-    reducer_kwargs=dict(
-        memory_efficient=True,
-        n_components=2,
-        n_neighbors=16,
-        max_iter_layout=64,
-        verbose=False
-    ),
+    reducer_kwargs={
+        "memory_efficient": True,
+        "n_components": 2,
+        "n_neighbors": 16,
+        "max_iter_layout": 64,
+        "verbose": False
+    },
     visualize=False
 )
 runner = ReducerRunner(config=config)
@@ -43,11 +43,11 @@ print("\n2. Running DiRe with DiRePyTorch...")
 config = ReducerConfig(
     name="DiRePyTorch",
     reducer_class=DiRePyTorch,
-    reducer_kwargs=dict(
-        n_components=2,
-        n_neighbors=20,
-        verbose=False
-    ),
+    reducer_kwargs={
+        "n_components": 2,
+        "n_neighbors": 20,
+        "verbose": False
+    },
     visualize=False,
     categorical_labels=False  # swiss_roll has continuous labels (angle/position)
 )
@@ -66,12 +66,12 @@ try:
     config = ReducerConfig(
         name="cuML-UMAP",
         reducer_class=cumlUMAP,
-        reducer_kwargs=dict(
-            n_components=2,
-            n_neighbors=15,
-            min_dist=0.1,
-            verbose=False
-        ),
+        reducer_kwargs={
+            "n_components": 2,
+            "n_neighbors": 15,
+            "min_dist": 0.1,
+            "verbose": False
+        },
         visualize=False
     )
     runner = ReducerRunner(config=config)
@@ -91,11 +91,11 @@ try:
     config = ReducerConfig(
         name="cuML-TSNE",
         reducer_class=cumlTSNE,
-        reducer_kwargs=dict(
-            n_components=2,
-            perplexity=30,
-            verbose=False
-        ),
+        reducer_kwargs={
+            "n_components": 2,
+            "perplexity": 30,
+            "verbose": False
+        },
         visualize=False
     )
     runner = ReducerRunner(config=config)
@@ -115,12 +115,12 @@ try:
     config = ReducerConfig(
         name="UMAP",
         reducer_class=UMAP,
-        reducer_kwargs=dict(
-            n_components=2,
-            n_neighbors=15,
-            min_dist=0.1,
-            verbose=False
-        ),
+        reducer_kwargs={
+            "n_components": 2,
+            "n_neighbors": 15,
+            "min_dist": 0.1,
+            "verbose": False
+        },
         visualize=False
     )
     runner = ReducerRunner(config=config)

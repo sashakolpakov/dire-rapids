@@ -10,18 +10,18 @@ This script demonstrates:
 4. Computing topological metrics (persistence diagrams, Betti curves, distances)
 """
 
-import numpy as np
+import sys
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_classification, make_swiss_roll
 
 # Import dire-rapids
 try:
-    from dire_rapids import DiRePyTorch, DiReCuVS
+    from dire_rapids import DiRePyTorch
     HAS_DIRE = True
 except ImportError:
     print("dire-rapids not installed. Install it first.")
     HAS_DIRE = False
-    exit(1)
+    sys.exit(1)
 
 # Import metrics module
 try:
@@ -37,7 +37,7 @@ try:
 except ImportError:
     print("Metrics module not available")
     HAS_METRICS = False
-    exit(1)
+    sys.exit(1)
 
 
 def generate_test_data(n_samples=1024, dataset_type='classification'):
@@ -196,6 +196,12 @@ def demo_topological_metrics(data, layout):
     print("\nComputing topological metrics (persistence diagrams, Betti curves)...")
     print("This may take a while depending on data size and backend...")
 
+    # Backend-specific kwargs
+    backend_kwargs = {
+        'n_threads': -1,  # Use all cores for giotto-ph
+        'collapse_edges': True
+    }
+
     topo_results = compute_global_metrics(
         data, layout,
         dimension=1,
@@ -204,8 +210,7 @@ def demo_topological_metrics(data, layout):
         n_steps=100,
         metrics_only=False,  # Get diagrams and Betti curves too
         backend=None,  # Auto-select
-        n_threads=-1,  # Use all cores for giotto-ph
-        collapse_edges=True
+        backend_kwargs=backend_kwargs
     )
 
     backend_used = topo_results.get('backend', 'unknown')
@@ -235,7 +240,7 @@ def plot_betti_curves(betti_curves):
     print("\nPlotting Betti curves...")
 
     n_dims = len(betti_curves['data'])
-    fig, axes = plt.subplots(1, n_dims, figsize=(6*n_dims, 4))
+    _, axes = plt.subplots(1, n_dims, figsize=(6*n_dims, 4))
 
     if n_dims == 1:
         axes = [axes]

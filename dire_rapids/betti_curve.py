@@ -88,8 +88,8 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
 
         if len(local_neighborhood) > 1:
             neighborhood_coords = data[local_neighborhood]
-            for idx_j in range(len(local_neighborhood)):
-                j = int(local_neighborhood[idx_j])
+            for idx_j, j_val in enumerate(local_neighborhood):
+                j = int(j_val)
                 dists_jk = np.linalg.norm(
                     neighborhood_coords[idx_j+1:] - neighborhood_coords[idx_j], axis=1
                 )
@@ -103,9 +103,9 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
                             edge_distances[edge] = dists_jk[offset]
 
         # Build triangles
-        for idx_j in range(len(local_neighborhood)):
+        for idx_j, j_val in enumerate(local_neighborhood):
             for idx_k in range(idx_j + 1, len(local_neighborhood)):
-                j = int(local_neighborhood[idx_j])
+                j = int(j_val)
                 k = int(local_neighborhood[idx_k])
                 e1 = tuple(sorted([i, j]))
                 e2 = tuple(sorted([i, k]))
@@ -328,8 +328,8 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
 
         if len(local_neighborhood) > 1:
             neighborhood_coords = data_cpu[local_neighborhood]
-            for idx_j in range(len(local_neighborhood)):
-                j = int(local_neighborhood[idx_j])
+            for idx_j, j_val in enumerate(local_neighborhood):
+                j = int(j_val)
                 dists_jk = np.linalg.norm(
                     neighborhood_coords[idx_j+1:] - neighborhood_coords[idx_j], axis=1
                 )
@@ -342,9 +342,9 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
                         if edge not in edge_distances:
                             edge_distances[edge] = dists_jk[offset]
 
-        for idx_j in range(len(local_neighborhood)):
+        for idx_j, j_val in enumerate(local_neighborhood):
             for idx_k in range(idx_j + 1, len(local_neighborhood)):
-                j = int(local_neighborhood[idx_j])
+                j = int(j_val)
                 k = int(local_neighborhood[idx_k])
                 e1 = tuple(sorted([i, j]))
                 e2 = tuple(sorted([i, k]))

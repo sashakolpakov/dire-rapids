@@ -16,7 +16,7 @@ try:
     print(f"   Created: {type(reducer).__name__}")
     result = reducer.fit_transform(X)
     print(f"   Transform successful, shape: {result.shape}")
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"   Error: {e}")
 
 # Test 2: PyTorch backend
@@ -25,7 +25,7 @@ try:
     reducer = create_dire(backend='pytorch', verbose=False)
     print(f"   Created: {type(reducer).__name__}")
     print(f"   Device: {reducer.device}")
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"   Error: {e}")
 
 # Test 3: PyTorch CPU backend
@@ -34,7 +34,7 @@ try:
     reducer = create_dire(backend='pytorch_cpu', verbose=False)
     print(f"   Created: {type(reducer).__name__}")
     print(f"   Device: {reducer.device}")
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"   Error: {e}")
 
 # Test 4: Memory-efficient mode
@@ -44,7 +44,7 @@ try:
     print(f"   Created: {type(reducer).__name__}")
     result = reducer.fit_transform(X)
     print(f"   Transform successful, shape: {result.shape}")
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"   Error: {e}")
 
 # Test 5: PyTorch GPU backend (if available)
@@ -58,7 +58,7 @@ except RuntimeError as e:
         print("   Skipped: CUDA not available")
     else:
         print(f"   Error: {e}")
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"   Error: {e}")
 
 # Test 6: cuVS backend (if available)
@@ -71,7 +71,7 @@ except RuntimeError as e:
         print(f"   Skipped: {e}")
     else:
         print(f"   Error: {e}")
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"   Error: {e}")
 
 # Test 7: Invalid backend
@@ -81,7 +81,7 @@ try:
     print("   Should have raised error")
 except ValueError as e:
     print(f"   Correctly raised ValueError: {e}")
-except Exception as e:
+except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"   Unexpected error: {e}")
 
 print("\nAll tests completed!")

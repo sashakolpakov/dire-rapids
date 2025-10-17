@@ -12,5 +12,28 @@ pandas>=1.3.0
 plotly>=5.0.0
 psutil>=5.8.0
 
+# Persistence homology - ripser as primary backend
+ripser>=0.6.0
+
+# Betti curve distance metrics
+fastdtw>=0.3.0
+
+# Optional GPU acceleration (RAPIDS)
+# These are optional - the package will work without them but with reduced performance
+# Install via: pip install cupy-cuda12x cuml-cu12 cuvs-cu12
+# See https://docs.rapids.ai/install/ for detailed installation instructions
+# cupy>=12.0.0  # Uncomment for GPU support
+# cuml>=24.0.0  # Uncomment for GPU-accelerated ML
+# cuvs>=24.0.0  # Uncomment for GPU-accelerated k-NN
+
+# Optional persistence backends (for advanced topological analysis)
+# giotto-ph>=0.2.0  # Fastest CPU backend, multi-threaded
+# ripserplusplus  # GPU-accelerated persistence (requires CUDA)
+
+# Optional distance metrics for Betti curves
+# persim>=0.3.0  # Wasserstein and bottleneck distances
+# POT>=0.9.0  # Earth Mover's Distance
+# twed  # Time Warp Edit Distance
+
 # Network dependencies (compatible with google-adk)
 websockets>=10.3,<16.0.0

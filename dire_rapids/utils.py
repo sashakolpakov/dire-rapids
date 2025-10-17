@@ -16,7 +16,7 @@ import time
 import gzip
 import shutil
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +26,7 @@ from sklearn import datasets as skds
 
 try:
     from scipy import sparse as sp
-except Exception:
+except ImportError:
     sp = None  # sklearn normally pulls scipy in; keep soft guard
 
 
@@ -41,14 +41,15 @@ def _safe_init_plotly_renderer():
         import plotly.io as pio  # pylint: disable=import-outside-toplevel
         if pio.renderers.default in (None, "auto"):
             try:
-                import google.colab  # noqa: F401  # pylint: disable=import-outside-toplevel
+                import google.colab  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
                 pio.renderers.default = "colab"
-            except Exception:
+            except ImportError:
                 pio.renderers.default = "notebook_connected"
-    except Exception:
+    except ImportError:
         pass
 
-def _display_obj(obj):
+def _display_obj(obj):  # pylint: disable=too-many-return-statements
+    """Display an object using appropriate renderer (plotly, matplotlib, IPython)."""
     if obj is None:
         return False
     if isinstance(obj, (list, tuple)):
@@ -63,7 +64,7 @@ def _display_obj(obj):
             _safe_init_plotly_renderer()
             obj.show()
             return True
-    except Exception:
+    except (ImportError, AttributeError):
         pass
     # Matplotlib
     try:
@@ -73,7 +74,7 @@ def _display_obj(obj):
         if isinstance(obj, (Figure, Axes)):
             plt.show()
             return True
-    except Exception:
+    except (ImportError, AttributeError):
         pass
     # HTML / str
     if isinstance(obj, (str, bytes)):
@@ -94,7 +95,7 @@ def _display_obj(obj):
         except ImportError:
             print(obj)  # Fallback to print if IPython not available
         return True
-    except Exception:
+    except (ImportError, AttributeError, TypeError):
         return False
 
 
@@ -409,11 +410,11 @@ def _load_cytof(name, **kwargs):
                 fname = os.path.join(cache_dir, os.path.basename(u.split("?")[0]))
                 local_path = _download(u, fname)
                 break
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 last_err = e
                 local_path = None
         if local_path is None:
-            raise RuntimeError(f"Failed to download cytof:{name}: {last_err}")
+            raise RuntimeError(f"Failed to download cytof:{name}: {last_err}") from last_err
 
     path = _safe_gunzip(local_path)
     ext = Path(path).suffix.lower()
@@ -422,8 +423,8 @@ def _load_cytof(name, **kwargs):
     if ext == ".fcs":
         try:
             import flowio  # pylint: disable=import-outside-toplevel
-        except ImportError:
-            raise ImportError("flowio required for FCS files. Install with: pip install flowio")
+        except ImportError as exc:
+            raise ImportError("flowio required for FCS files. Install with: pip install flowio") from exc
 
         fcs = flowio.FlowData(path)
         data = fcs.as_array()  # Get 2D numpy array with preprocessing
@@ -601,7 +602,7 @@ class ReducerRunner:
             try:
                 data_id = int(str(name))
                 ds = fetch_openml(data_id=data_id, return_X_y=True, **dataset_kwargs)
-            except Exception:
+            except (ValueError, TypeError):
                 ds = fetch_openml(name=name, return_X_y=True, **dataset_kwargs)
             X, y = _coerce_Xy(ds[0], ds[1])
         elif scheme == "cytof":
@@ -631,7 +632,7 @@ class ReducerRunner:
             if n_dims in (2, 3):
                 try:
                     self._visualize_with_plotly(embedding, y, reducer_name, n_dims, categorical_labels, max_points)
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     print(f"[WARNING] plotly visualization failed: {e}")
 
         return {
@@ -681,14 +682,14 @@ class ReducerRunner:
                         x=embedding_vis[:, 0],
                         y=embedding_vis[:, 1],
                         mode='markers',
-                        marker=dict(
-                            size=4,
-                            color=labels_vis,
-                            colorscale='Viridis',
-                            colorbar=dict(title="Label Value"),
-                            showscale=True,
-                            opacity=0.8
-                        )
+                        marker={
+                            "size": 4,
+                            "color": labels_vis,
+                            "colorscale": 'Viridis',
+                            "colorbar": {"title": "Label Value"},
+                            "showscale": True,
+                            "opacity": 0.8
+                        }
                     ))
                 else:
                     unique_labels = np.unique(labels_vis)
@@ -701,13 +702,13 @@ class ReducerRunner:
                             x=embedding_vis[:, 0],
                             y=embedding_vis[:, 1],
                             mode='markers',
-                            marker=dict(
-                                size=4,
-                                color=colors,
-                                colorscale='Viridis',
-                                showscale=True,
-                                opacity=0.8
-                            ),
+                            marker={
+                                "size": 4,
+                                "color": colors,
+                                "colorscale": 'Viridis',
+                                "showscale": True,
+                                "opacity": 0.8
+                            },
                             text=[f"Label: {lbl}" for lbl in labels_vis],
                             hovertemplate='%{text}<extra></extra>'
                         ))
@@ -720,14 +721,14 @@ class ReducerRunner:
                                 y=embedding_vis[mask, 1],
                                 mode='markers',
                                 name=str(label),
-                                marker=dict(size=4, opacity=0.8)
+                                marker={"size": 4, "opacity": 0.8}
                             ))
             else:
                 fig = go.Figure(data=go.Scattergl(
                     x=embedding_vis[:, 0],
                     y=embedding_vis[:, 1],
                     mode='markers',
-                    marker=dict(size=4, opacity=0.7)
+                    marker={"size": 4, "opacity": 0.7}
                 ))
 
             fig.update_layout(
@@ -747,14 +748,14 @@ class ReducerRunner:
                         y=embedding_vis[:, 1],
                         z=embedding_vis[:, 2],
                         mode='markers',
-                        marker=dict(
-                            size=2,
-                            color=labels_vis,
-                            colorscale='Viridis',
-                            colorbar=dict(title="Label Value"),
-                            showscale=True,
-                            opacity=0.8
-                        )
+                        marker={
+                            "size": 2,
+                            "color": labels_vis,
+                            "colorscale": 'Viridis',
+                            "colorbar": {"title": "Label Value"},
+                            "showscale": True,
+                            "opacity": 0.8
+                        }
                     ))
                 else:
                     unique_labels = np.unique(labels_vis)
@@ -768,13 +769,13 @@ class ReducerRunner:
                             y=embedding_vis[:, 1],
                             z=embedding_vis[:, 2],
                             mode='markers',
-                            marker=dict(
-                                size=2,
-                                color=colors,
-                                colorscale='Viridis',
-                                showscale=True,
-                                opacity=0.8
-                            ),
+                            marker={
+                                "size": 2,
+                                "color": colors,
+                                "colorscale": 'Viridis',
+                                "showscale": True,
+                                "opacity": 0.8
+                            },
                             text=[f"Label: {lbl}" for lbl in labels_vis],
                             hovertemplate='%{text}<extra></extra>'
                         ))
@@ -788,7 +789,7 @@ class ReducerRunner:
                                 z=embedding_vis[mask, 2],
                                 mode='markers',
                                 name=str(label),
-                                marker=dict(size=2, opacity=0.8)
+                                marker={"size": 2, "opacity": 0.8}
                             ))
             else:
                 fig = go.Figure(data=go.Scatter3d(
@@ -796,16 +797,16 @@ class ReducerRunner:
                     y=embedding_vis[:, 1],
                     z=embedding_vis[:, 2],
                     mode='markers',
-                    marker=dict(size=2, opacity=0.7)
+                    marker={"size": 2, "opacity": 0.7}
                 ))
 
             fig.update_layout(
                 title=f"{title} - 3D Embedding",
-                scene=dict(
-                    xaxis_title="Dimension 1",
-                    yaxis_title="Dimension 2",
-                    zaxis_title="Dimension 3"
-                ),
+                scene={
+                    "xaxis_title": "Dimension 1",
+                    "yaxis_title": "Dimension 2",
+                    "zaxis_title": "Dimension 3"
+                },
                 width=900,
                 height=700
             )
@@ -814,6 +815,7 @@ class ReducerRunner:
 
     @staticmethod
     def available_sklearn():
+        """Return available sklearn dataset loaders, fetchers, and generators."""
         loads = tuple(a for a in dir(skds) if a.startswith("load_") and callable(getattr(skds, a)))
         fetches = tuple(a for a in dir(skds) if a.startswith("fetch_") and callable(getattr(skds, a)))
         makes = tuple(a for a in dir(skds) if a.startswith("make_") and callable(getattr(skds, a)))
@@ -821,4 +823,5 @@ class ReducerRunner:
 
     @staticmethod
     def available_cytof():
+        """Return available CyTOF datasets."""
         return tuple(_CYTOF_REGISTRY.keys())

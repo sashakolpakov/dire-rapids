@@ -46,15 +46,23 @@ def _compile_metric(spec):
       - KeOps path:  x: LazyTensor(A,1,D), y: LazyTensor(1,B,D) -> LazyTensor(A,B)
 
     If spec is None or 'euclidean'/'l2', return None (fast-path Euclidean stays in backend).
-    If spec is str, it's eval'ed with {'x': x, 'y': y} and no builtins.
+    Named metrics like 'euclidean', 'l2', 'inner_product' return None (handled by backend).
+    If spec is str expression, it's eval'ed with {'x': x, 'y': y} and no builtins.
     If spec is callable, it's returned unchanged.
+
+    Returns
+    -------
+    callable or None
+        None for backend-native metrics, callable for custom metrics
     """
     if spec is None:
         return None
     if isinstance(spec, str):
         expr = spec.strip().lower()
-        if expr in ("euclidean", "l2"):
-            return None  # use built-in fast Euclidean
+        # These named metrics can be handled by backends (cuVS, PyTorch)
+        if expr in ("euclidean", "l2", "sqeuclidean", "inner_product", "cosine"):
+            return None  # use built-in backend metric
+        # Custom expression - compile to callable
         def _expr_metric(x, y, _expr=spec):
             # Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.
             # Works for both torch.Tensor and KeOps LazyTensor.
@@ -245,6 +253,12 @@ class DiRePyTorch(TransformerMixin):
         self.random_state = random_state if random_state is not None else np.random.randint(0, 2 ** 32)
         self.use_exact_repulsion = use_exact_repulsion
 
+        # Seed random number generators for reproducibility
+        torch.manual_seed(self.random_state)
+        np.random.seed(self.random_state)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.random_state)
+
         # Custom metric for k-NN only (layout forces remain Euclidean):
         self.metric_spec = metric
         self._metric_fn = _compile_metric(self.metric_spec)
@@ -420,24 +434,43 @@ class DiRePyTorch(TransformerMixin):
                 # Ensure contiguity for PyKeOps
                 X_i = LazyTensor(X_chunk[:, None, :].contiguous())  # (chunk_size, 1, D)
                 X_j = LazyTensor(X_torch[None, :, :].contiguous())   # (1, N, D)
-                
-                # Compute squared distances
-                D_ij = ((X_i - X_j) ** 2).sum(-1)  # (chunk_size, N) LazyTensor
-                
+
+                # Compute distances using custom metric or default Euclidean
+                if self._metric_fn is not None:
+                    # Custom metric - works with LazyTensor
+                    D_ij = self._metric_fn(X_i, X_j)  # (chunk_size, N) LazyTensor
+                else:
+                    # Fast built-in Euclidean (squared distances)
+                    D_ij = ((X_i - X_j) ** 2).sum(-1)  # (chunk_size, N) LazyTensor
+
                 # Find k+1 nearest neighbors (including self)
                 knn_dists, knn_indices = D_ij.Kmin_argKmin(K=self.n_neighbors + 1, dim=1)
-                
-                # Remove self and convert to actual distances
+
+                # Remove self
                 chunk_indices = knn_indices[:, 1:].cpu().numpy()
-                chunk_distances = torch.sqrt(knn_dists[:, 1:]).cpu().numpy()
+                # For custom metrics, distances are already in metric space
+                # For Euclidean, convert from squared to actual distances
+                if self._metric_fn is None:
+                    chunk_distances = torch.sqrt(knn_dists[:, 1:]).cpu().numpy()
+                else:
+                    chunk_distances = knn_dists[:, 1:].cpu().numpy()
             else:
                 # Use PyTorch for HIGH dimensional data (MUCH faster!)
-                distances = torch.cdist(X_chunk, X_torch, p=2)
-                knn_dists, knn_indices = torch.topk(distances, k=self.n_neighbors + 1, 
+                if self._metric_fn is not None:
+                    # Custom metric - compute pairwise distances manually
+                    # Broadcast: X_chunk: (chunk, 1, D), X_torch: (1, N, D) -> (chunk, N)
+                    X_i = X_chunk.unsqueeze(1)  # (chunk, 1, D)
+                    X_j = X_torch.unsqueeze(0)  # (1, N, D)
+                    distances = self._metric_fn(X_i, X_j)  # (chunk, N)
+                else:
+                    # Fast built-in Euclidean distance
+                    distances = torch.cdist(X_chunk, X_torch, p=2)
+
+                knn_dists, knn_indices = torch.topk(distances, k=self.n_neighbors + 1,
                                                    dim=1, largest=False)
-                
+
                 # Remove self
-                chunk_indices = knn_indices[:, 1:].cpu().numpy()  
+                chunk_indices = knn_indices[:, 1:].cpu().numpy()
                 chunk_distances = knn_dists[:, 1:].cpu().numpy()
             
             all_knn_indices.append(chunk_indices)
@@ -795,6 +828,23 @@ class DiRePyTorch(TransformerMixin):
         self._n_samples = self._data.shape[0]
 
         self.logger.info(f"Processing {self._n_samples} samples with {self._data.shape[1]} features")
+
+        # Validate n_components
+        if self.n_components <= 0:
+            raise ValueError(f"n_components must be positive, got {self.n_components}")
+
+        # Validate n_neighbors
+        if self.n_neighbors <= 0:
+            raise ValueError(f"n_neighbors must be positive, got {self.n_neighbors}")
+
+        # Validate and adjust n_neighbors if necessary
+        if self.n_neighbors >= self._n_samples:
+            old_n_neighbors = self.n_neighbors
+            self.n_neighbors = self._n_samples - 1
+            self.logger.warning(
+                f"n_neighbors={old_n_neighbors} is >= n_samples={self._n_samples}. "
+                f"Adjusting n_neighbors to {self.n_neighbors}"
+            )
 
         # Find distribution kernel parameters
         self._find_ab_params()

@@ -6,8 +6,9 @@ import numpy as np
 from scipy import sparse
 from sklearn.neighbors import NearestNeighbors
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+matplotlib.use('Agg')
 
 # Generate circle
 n = 100
@@ -29,9 +30,9 @@ for i in range(n):
         global_edges.add(tuple(sorted([i, int(j)])))
 
     dist_threshold = np.percentile(local_dists, 80) * 1.5
-    for idx_j in range(len(local_neighborhood)):
+    for idx_j, j_val in enumerate(local_neighborhood):
         for idx_k in range(idx_j + 1, len(local_neighborhood)):
-            j = int(local_neighborhood[idx_j])
+            j = int(j_val)
             k_pt = int(local_neighborhood[idx_k])
             dist_jk = np.linalg.norm(data[j] - data[k_pt])
             if dist_jk < dist_threshold:

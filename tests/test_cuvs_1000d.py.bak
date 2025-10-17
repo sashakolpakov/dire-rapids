@@ -77,7 +77,7 @@ def test_backend(backend, X, name, **kwargs):
         
         return t_knn, total_time
         
-    except Exception as e:  # pylint: disable=broad-exception-caught
+    except (RuntimeError, MemoryError, ValueError) as e:
         print(f"❌ FAILED: {e}")
         traceback.print_exc()
         return None, None

@@ -1,7 +1,8 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+"""Configuration file for the Sphinx documentation builder.
+
+For the full list of built-in configuration values, see the documentation:
+https://www.sphinx-doc.org/en/master/usage/configuration.html
+"""
 
 import os
 import sys
@@ -15,7 +16,7 @@ sys.path.insert(0, os.path.abspath('..'))
 # -- Project information -----------------------------------------------------
 
 project = 'dire-rapids'
-copyright = '2024, Alexander Kolpakov (UATX), Igor Rivin (Temple University)'
+copyright = '2024, Alexander Kolpakov (UATX), Igor Rivin (Temple University)'  # pylint: disable=redefined-builtin
 author = 'Alexander Kolpakov (UATX), Igor Rivin (Temple University)'
 release = '0.1.0'
 

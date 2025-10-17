@@ -276,6 +276,26 @@ print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
 
 See [METRICS_README.md](METRICS_README.md) and [full documentation](https://sashakolpakov.github.io/dire-rapids/).
 
+### Atlas Topology Computation (Under Development)
+
+Local kNN atlas approach for computing H0/H1 topological features:
+
+```python
+from dire_rapids.atlas_cpu import compute_h0_h1_atlas_cpu
+from dire_rapids.atlas_gpu import compute_h0_h1_atlas_gpu
+
+# CPU: Compute local Betti numbers via Hodge Laplacian
+betti_curves, stats = compute_h0_h1_atlas_cpu(data, n_neighbors=30)
+print(f"H0 at radius {stats['radii'][10]:.3f}: {betti_curves[10, 0]}")
+
+# GPU: cuVS-accelerated kNN with giotto-ph for persistence
+betti_curves_gpu = compute_h0_h1_atlas_gpu(data, n_neighbors=30)
+```
+
+**Features:** kNN-based local patches, combinatorial Nystroem approximation, CPU/GPU backends, Betti curve extraction.
+
+**Status:** ⚠️ Active development - API may change. See `tests/test_atlas_*.py` for usage examples.
+
 ## Testing
 
 ```bash
