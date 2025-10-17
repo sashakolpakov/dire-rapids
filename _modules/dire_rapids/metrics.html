@@ -87,7 +87,6 @@
 <span class="sd">- ripser (CPU fallback)</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -101,7 +100,6 @@
 
 <span class="c1"># RAPIDS cuML imports</span>
 <span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">cuml</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">NearestNeighbors</span> <span class="k">as</span> <span class="n">cumlNearestNeighbors</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">train_test_split</span> <span class="k">as</span> <span class="n">cuml_train_test_split</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardScaler</span> <span class="k">as</span> <span class="n">cumlStandardScaler</span>
@@ -257,15 +255,14 @@
     <span class="c1"># Auto-select: giotto-ph &gt; ripser++ &gt; ripser</span>
     <span class="k">if</span> <span class="n">HAS_GIOTTO_PH</span><span class="p">:</span>
         <span class="k">return</span> <span class="s1">&#39;giotto-ph&#39;</span>
-    <span class="k">elif</span> <span class="n">HAS_RIPSER_PP</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">HAS_RIPSER_PP</span><span class="p">:</span>
         <span class="k">return</span> <span class="s1">&#39;ripser++&#39;</span>
-    <span class="k">elif</span> <span class="n">HAS_RIPSER</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">HAS_RIPSER</span><span class="p">:</span>
         <span class="k">return</span> <span class="s1">&#39;ripser&#39;</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;No persistence backend available. &quot;</span>
-            <span class="s2">&quot;Install giotto-ph (recommended), ripserplusplus, or ripser.&quot;</span>
-        <span class="p">)</span></div>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="s2">&quot;No persistence backend available. &quot;</span>
+        <span class="s2">&quot;Install giotto-ph (recommended), ripserplusplus, or ripser.&quot;</span>
+    <span class="p">)</span></div>
 
 
 
@@ -424,25 +421,25 @@
             <span class="k">return</span> <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span><span class="p">,</span> <span class="n">labels_sub</span>
 
         <span class="k">return</span> <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># CPU fallback</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
-        <span class="n">data_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="n">layout_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">layout</span><span class="p">)</span>
 
-        <span class="n">n_samples</span> <span class="o">=</span> <span class="n">data_np</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">random_numbers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span>
-        <span class="n">selected_indices</span> <span class="o">=</span> <span class="n">random_numbers</span> <span class="o">&lt;</span> <span class="n">threshold</span>
+    <span class="c1"># CPU fallback</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="n">data_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">layout_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">layout</span><span class="p">)</span>
 
-        <span class="n">data_sub</span> <span class="o">=</span> <span class="n">data_np</span><span class="p">[</span><span class="n">selected_indices</span><span class="p">]</span>
-        <span class="n">layout_sub</span> <span class="o">=</span> <span class="n">layout_np</span><span class="p">[</span><span class="n">selected_indices</span><span class="p">]</span>
+    <span class="n">n_samples</span> <span class="o">=</span> <span class="n">data_np</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">random_numbers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span>
+    <span class="n">selected_indices</span> <span class="o">=</span> <span class="n">random_numbers</span> <span class="o">&lt;</span> <span class="n">threshold</span>
 
-        <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">labels_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
-            <span class="n">labels_sub</span> <span class="o">=</span> <span class="n">labels_np</span><span class="p">[</span><span class="n">selected_indices</span><span class="p">]</span>
-            <span class="k">return</span> <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span><span class="p">,</span> <span class="n">labels_sub</span>
+    <span class="n">data_sub</span> <span class="o">=</span> <span class="n">data_np</span><span class="p">[</span><span class="n">selected_indices</span><span class="p">]</span>
+    <span class="n">layout_sub</span> <span class="o">=</span> <span class="n">layout_np</span><span class="p">[</span><span class="n">selected_indices</span><span class="p">]</span>
 
-        <span class="k">return</span> <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span></div>
+    <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">labels_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+        <span class="n">labels_sub</span> <span class="o">=</span> <span class="n">labels_np</span><span class="p">[</span><span class="n">selected_indices</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span><span class="p">,</span> <span class="n">labels_sub</span>
+
+    <span class="k">return</span> <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span></div>
 
 
 
@@ -816,7 +813,7 @@
         <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
 
         <span class="n">y_pred</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_test</span><span class="p">)</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">accuracy_score</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">accuracy_score</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
         <span class="n">accuracy</span> <span class="o">=</span> <span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_test</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">accuracy</span></div>
@@ -889,7 +886,7 @@
         <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_train</span><span class="p">,</span> <span class="n">y_train</span><span class="p">)</span>
 
         <span class="n">y_pred</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_test</span><span class="p">)</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">accuracy_score</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">accuracy_score</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
         <span class="n">accuracy</span> <span class="o">=</span> <span class="n">accuracy_score</span><span class="p">(</span><span class="n">y_test</span><span class="p">,</span> <span class="n">y_pred</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">accuracy</span></div>
@@ -1133,7 +1130,7 @@
     <span class="c1"># Select backend: GPU if requested and available, otherwise CPU</span>
     <span class="k">if</span> <span class="n">use_gpu</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_gpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_gpu</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_gpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_gpu</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
             <span class="k">return</span> <span class="n">compute_h0_h1_atlas_gpu</span><span class="p">(</span>
                 <span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
                 <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
@@ -1145,7 +1142,7 @@
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GPU atlas not available (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to CPU&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
 
     <span class="c1"># Use CPU implementation</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_cpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_cpu</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_cpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_cpu</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
     <span class="k">return</span> <span class="n">compute_h0_h1_atlas_cpu</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
         <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>

@@ -129,7 +129,7 @@
         <span class="k">def</span><span class="w"> </span><span class="nf">_expr_metric</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">_expr</span><span class="o">=</span><span class="n">spec</span><span class="p">):</span>
             <span class="c1"># Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.</span>
             <span class="c1"># Works for both torch.Tensor and KeOps LazyTensor.</span>
-            <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">_expr</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;__builtins__&quot;</span><span class="p">:</span> <span class="p">{}},</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">})</span>
+            <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">_expr</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;__builtins__&quot;</span><span class="p">:</span> <span class="p">{}},</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="n">y</span><span class="p">})</span>  <span class="c1"># pylint: disable=eval-used # Sandboxed eval for custom metrics</span>
         <span class="k">return</span> <span class="n">_expr_metric</span>
     <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">spec</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">spec</span>
@@ -561,8 +561,8 @@
 
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">init</span> <span class="o">==</span> <span class="s1">&#39;random&#39;</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Initializing with random projection&quot;</span><span class="p">)</span>
-            <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>  <span class="c1"># pylint: disable=no-member</span>
-            <span class="n">projection</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">)</span>
+            <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
+            <span class="n">projection</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">))</span>
             <span class="n">projection</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">projection</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
             <span class="n">embedding</span> <span class="o">=</span> <span class="n">X</span> <span class="o">@</span> <span class="n">projection</span>
 
@@ -989,7 +989,7 @@
         <span class="c1"># Subsample if needed</span>
         <span class="n">n_points</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">n_points</span> <span class="o">&gt;</span> <span class="n">max_points</span><span class="p">:</span>
-            <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+            <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
             <span class="n">subsample_idx</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">n_points</span><span class="p">,</span> <span class="n">max_points</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
             <span class="n">layout_vis</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span><span class="p">[</span><span class="n">subsample_idx</span><span class="p">]</span>
             <span class="n">labels_vis</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">subsample_idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
@@ -1127,12 +1127,12 @@
 
     <span class="c1"># Import here to avoid circular imports</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_cuvs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiReCuVS</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_cuvs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiReCuVS</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
         <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
         <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
 
-    <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch_memory_efficient</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorchMemoryEfficient</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch_memory_efficient</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorchMemoryEfficient</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
 
     <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;auto&#39;</span><span class="p">:</span>
         <span class="c1"># Auto-select best backend based on availability</span>
@@ -1146,10 +1146,9 @@
                 <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Auto-selected memory-efficient PyTorch backend (GPU)&quot;</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Auto-selected PyTorch backend (GPU)&quot;</span><span class="p">)</span>
-                <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Auto-selected PyTorch backend (GPU)&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="c1"># CPU fallback</span>
         <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
@@ -1160,7 +1159,7 @@
             <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;cuVS backend requested but RAPIDS not installed. &quot;</span>
@@ -1172,30 +1171,28 @@
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using RAPIDS cuVS backend&quot;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">DiReCuVS</span><span class="p">(</span><span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch&#39;</span><span class="p">:</span>
         <span class="c1"># Use PyTorch with auto device selection</span>
         <span class="k">if</span> <span class="n">memory_efficient</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using memory-efficient PyTorch backend&quot;</span><span class="p">)</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using memory-efficient PyTorch backend&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch backend&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch_gpu&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch_gpu&#39;</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;GPU requested but CUDA not available&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">memory_efficient</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using memory-efficient PyTorch backend (GPU)&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend (GPU)&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend (GPU)&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch_cpu&#39;</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch_cpu&#39;</span><span class="p">:</span>
         <span class="c1"># Force CPU even if GPU is available</span>
         <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend (forced CPU)&quot;</span><span class="p">)</span>
@@ -1209,11 +1206,10 @@
         <span class="n">reducer</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">reducer</span>
 
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Unknown backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">. &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;Choose from: &#39;auto&#39;, &#39;cuvs&#39;, &#39;pytorch&#39;, &#39;pytorch_gpu&#39;, &#39;pytorch_cpu&#39;&quot;</span>
-        <span class="p">)</span></div>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Unknown backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">. &quot;</span>
+        <span class="sa">f</span><span class="s2">&quot;Choose from: &#39;auto&#39;, &#39;cuvs&#39;, &#39;pytorch&#39;, &#39;pytorch_gpu&#39;, &#39;pytorch_cpu&#39;&quot;</span>
+    <span class="p">)</span></div>
 
 
 </pre></div>

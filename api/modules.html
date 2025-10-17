@@ -62,7 +62,6 @@
 <li class="toctree-l2"><a class="reference internal" href="#dire_rapids.create_dire"><code class="docutils literal notranslate"><span class="pre">create_dire()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#dire_rapids.ReducerRunner"><code class="docutils literal notranslate"><span class="pre">ReducerRunner</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#dire_rapids.ReducerRunner.config"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.config</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#dire_rapids.ReducerRunner.default_transform"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.default_transform()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#dire_rapids.ReducerRunner.__post_init__"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.__post_init__()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#dire_rapids.ReducerRunner.run"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.run()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#dire_rapids.ReducerRunner.available_sklearn"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.available_sklearn()</span></code></a></li>
@@ -776,20 +775,12 @@ falling back to available alternatives when possible.</p>
 - scikit-learn (any TransformerMixin-compatible class)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>config</strong> (<a class="reference internal" href="#dire_rapids.ReducerConfig" title="dire_rapids.ReducerConfig"><em>ReducerConfig</em></a>) – Configuration object containing reducer_class, reducer_kwargs, name, and visualize flag.</p></li>
-<li><p><strong>default_transform</strong> (<em>callable</em>) – Default transform to apply to data before reduction</p></li>
-</ul>
+<dd class="field-odd"><p><strong>config</strong> (<a class="reference internal" href="#dire_rapids.ReducerConfig" title="dire_rapids.ReducerConfig"><em>ReducerConfig</em></a>) – Configuration object containing reducer_class, reducer_kwargs, name, and visualize flag.</p>
 </dd>
 </dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="dire_rapids.ReducerRunner.config">
 <span class="sig-name descname"><span class="pre">config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#dire_rapids.ReducerConfig" title="dire_rapids.utils.ReducerConfig"><span class="pre">ReducerConfig</span></a></em><a class="headerlink" href="#dire_rapids.ReducerRunner.config" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="dire_rapids.ReducerRunner.default_transform">
-<span class="sig-name descname"><span class="pre">default_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#dire_rapids.ReducerRunner.default_transform" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
