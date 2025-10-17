@@ -247,7 +247,7 @@
 <span class="sd">    RuntimeError</span>
 <span class="sd">        If no persistence backend is available</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">global</span> <span class="n">_PERSISTENCE_BACKEND</span>
+    <span class="k">global</span> <span class="n">_PERSISTENCE_BACKEND</span>  <span class="c1"># pylint: disable=global-variable-not-assigned</span>
 
     <span class="k">if</span> <span class="n">_PERSISTENCE_BACKEND</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_PERSISTENCE_BACKEND</span>
@@ -450,7 +450,7 @@
 
 <div class="viewcode-block" id="make_knn_graph_gpu">
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.make_knn_graph_gpu">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">make_knn_graph_gpu</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">make_knn_graph_gpu</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">50000</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    GPU-accelerated kNN graph construction using cuML.</span>
 
@@ -461,7 +461,9 @@
 <span class="sd">    n_neighbors : int</span>
 <span class="sd">        Number of nearest neighbors</span>
 <span class="sd">    batch_size : int, optional</span>
-<span class="sd">        Batch size for processing (currently unused with cuML)</span>
+<span class="sd">        Batch size for querying neighbors (queries in batches against full dataset).</span>
+<span class="sd">        Default 50000 balances GPU memory and performance.</span>
+<span class="sd">        Set to None to query all at once.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -477,12 +479,30 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">data_gpu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
 
-    <span class="c1"># Use cuML NearestNeighbors</span>
+    <span class="n">n_samples</span> <span class="o">=</span> <span class="n">data_gpu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Fit on entire dataset</span>
     <span class="n">nn</span> <span class="o">=</span> <span class="n">cumlNearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">)</span>
     <span class="n">nn</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data_gpu</span><span class="p">)</span>
 
-    <span class="c1"># Query for neighbors (including self)</span>
-    <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">data_gpu</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">batch_size</span> <span class="o">&gt;=</span> <span class="n">n_samples</span><span class="p">:</span>
+        <span class="c1"># Query all at once</span>
+        <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">data_gpu</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Query in batches (each batch queries against full dataset for memory efficiency)</span>
+        <span class="k">if</span> <span class="n">HAS_CUPY</span><span class="p">:</span>
+            <span class="n">distances</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">start_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">end_idx</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start_idx</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+            <span class="c1"># Query batch against FULL dataset</span>
+            <span class="n">batch_distances</span><span class="p">,</span> <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">data_gpu</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">])</span>
+            <span class="n">distances</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch_distances</span>
+            <span class="n">indices</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch_indices</span>
 
     <span class="c1"># Convert to CuPy arrays if not already</span>
     <span class="k">if</span> <span class="n">HAS_CUPY</span><span class="p">:</span>
@@ -495,7 +515,7 @@
 
 <div class="viewcode-block" id="make_knn_graph_cpu">
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.make_knn_graph_cpu">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">make_knn_graph_cpu</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">make_knn_graph_cpu</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">10000</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    CPU fallback for kNN graph construction.</span>
 
@@ -506,18 +526,35 @@
 <span class="sd">    n_neighbors : int</span>
 <span class="sd">        Number of nearest neighbors</span>
 <span class="sd">    batch_size : int, optional</span>
-<span class="sd">        Unused for CPU version</span>
+<span class="sd">        Batch size for querying neighbors (queries in batches against full dataset).</span>
+<span class="sd">        Default 10000 provides good balance between memory and performance.</span>
+<span class="sd">        Set to None to query all at once.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    tuple : (distances, indices) arrays</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">data_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">n_samples</span> <span class="o">=</span> <span class="n">data_np</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
+    <span class="c1"># Fit on entire dataset</span>
     <span class="n">nn</span> <span class="o">=</span> <span class="n">NearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">)</span>
     <span class="n">nn</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data_np</span><span class="p">)</span>
 
-    <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">data_np</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">batch_size</span> <span class="o">&gt;=</span> <span class="n">n_samples</span><span class="p">:</span>
+        <span class="c1"># Query all at once</span>
+        <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">data_np</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Query in batches (each batch queries against full dataset for memory efficiency)</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">start_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">end_idx</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start_idx</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+            <span class="c1"># Query batch against FULL dataset</span>
+            <span class="n">batch_distances</span><span class="p">,</span> <span class="n">batch_indices</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">data_np</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">])</span>
+            <span class="n">distances</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch_distances</span>
+            <span class="n">indices</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch_indices</span>
 
     <span class="k">return</span> <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span></div>
 
@@ -932,7 +969,7 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="c1"># Subsample</span>
-    <span class="n">X_hd</span><span class="p">,</span> <span class="n">X_ld</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
+    <span class="n">X_hd</span><span class="p">,</span> <span class="n">X_ld</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
     <span class="p">)</span>
 
@@ -1004,7 +1041,7 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
     <span class="c1"># Subsample</span>
-    <span class="n">X_hd</span><span class="p">,</span> <span class="n">X_ld</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
+    <span class="n">X_hd</span><span class="p">,</span> <span class="n">X_ld</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
     <span class="p">)</span>
 
@@ -1189,8 +1226,8 @@
         <span class="n">layout_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">layout</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
 
     <span class="c1"># Compute H0 and H1 using kNN-Rips method</span>
-    <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
-    <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
+    <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
+    <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
 
     <span class="k">return</span> <span class="p">{</span>
         <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span><span class="p">],</span>
@@ -1273,8 +1310,8 @@
         <span class="n">k_neighbors</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;k_neighbors&#39;</span><span class="p">,</span> <span class="mi">30</span><span class="p">)</span>
         <span class="n">use_gpu</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;use_gpu&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 
-        <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
-        <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>
+        <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
+        <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
         <span class="n">diags_hd</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span><span class="p">]</span>
         <span class="n">diags_ld</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span><span class="p">]</span>
 
@@ -1750,9 +1787,11 @@
         <span class="k">if</span> <span class="n">HAS_GIOTTO_PH</span> <span class="ow">or</span> <span class="n">HAS_RIPSER_PP</span> <span class="ow">or</span> <span class="n">HAS_RIPSER</span><span class="p">:</span>
             <span class="n">backend</span> <span class="o">=</span> <span class="n">persistence_backend</span> <span class="ow">or</span> <span class="n">get_persistence_backend</span><span class="p">()</span>
             <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing topological metrics using backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+            <span class="c1"># Pass n_threads through backend_kwargs for giotto-ph</span>
+            <span class="n">backend_kw</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;n_threads&#39;</span><span class="p">:</span> <span class="n">n_threads</span><span class="p">}</span> <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;giotto-ph&#39;</span> <span class="k">else</span> <span class="p">{}</span>
             <span class="n">results</span><span class="p">[</span><span class="s1">&#39;topology&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_global_metrics</span><span class="p">(</span>
                 <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_homology_dim</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span>
-                <span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span>
+                <span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="n">backend_kw</span>
             <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Skipping topological metrics (no persistence backend available)&quot;</span><span class="p">)</span>

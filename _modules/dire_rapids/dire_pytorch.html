@@ -117,15 +117,23 @@
 <span class="sd">      - KeOps path:  x: LazyTensor(A,1,D), y: LazyTensor(1,B,D) -&gt; LazyTensor(A,B)</span>
 
 <span class="sd">    If spec is None or &#39;euclidean&#39;/&#39;l2&#39;, return None (fast-path Euclidean stays in backend).</span>
-<span class="sd">    If spec is str, it&#39;s eval&#39;ed with {&#39;x&#39;: x, &#39;y&#39;: y} and no builtins.</span>
+<span class="sd">    Named metrics like &#39;euclidean&#39;, &#39;l2&#39;, &#39;inner_product&#39; return None (handled by backend).</span>
+<span class="sd">    If spec is str expression, it&#39;s eval&#39;ed with {&#39;x&#39;: x, &#39;y&#39;: y} and no builtins.</span>
 <span class="sd">    If spec is callable, it&#39;s returned unchanged.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    callable or None</span>
+<span class="sd">        None for backend-native metrics, callable for custom metrics</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">expr</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">expr</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;euclidean&quot;</span><span class="p">,</span> <span class="s2">&quot;l2&quot;</span><span class="p">):</span>
-            <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># use built-in fast Euclidean</span>
+        <span class="c1"># These named metrics can be handled by backends (cuVS, PyTorch)</span>
+        <span class="k">if</span> <span class="n">expr</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;euclidean&quot;</span><span class="p">,</span> <span class="s2">&quot;l2&quot;</span><span class="p">,</span> <span class="s2">&quot;sqeuclidean&quot;</span><span class="p">,</span> <span class="s2">&quot;inner_product&quot;</span><span class="p">,</span> <span class="s2">&quot;cosine&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># use built-in backend metric</span>
+        <span class="c1"># Custom expression - compile to callable</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">_expr_metric</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">_expr</span><span class="o">=</span><span class="n">spec</span><span class="p">):</span>
             <span class="c1"># Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.</span>
             <span class="c1"># Works for both torch.Tensor and KeOps LazyTensor.</span>
@@ -320,6 +328,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">random_state</span> <span class="o">=</span> <span class="n">random_state</span> <span class="k">if</span> <span class="n">random_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">**</span> <span class="mi">32</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_exact_repulsion</span> <span class="o">=</span> <span class="n">use_exact_repulsion</span>
 
+        <span class="c1"># Seed random number generators for reproducibility</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">manual_seed_all</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
+
         <span class="c1"># Custom metric for k-NN only (layout forces remain Euclidean):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="o">=</span> <span class="n">metric</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="o">=</span> <span class="n">_compile_metric</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">)</span>
@@ -496,24 +510,43 @@
                 <span class="c1"># Ensure contiguity for PyKeOps</span>
                 <span class="n">X_i</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_chunk</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>  <span class="c1"># (chunk_size, 1, D)</span>
                 <span class="n">X_j</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_torch</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>   <span class="c1"># (1, N, D)</span>
-                
-                <span class="c1"># Compute squared distances</span>
-                <span class="n">D_ij</span> <span class="o">=</span> <span class="p">((</span><span class="n">X_i</span> <span class="o">-</span> <span class="n">X_j</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (chunk_size, N) LazyTensor</span>
-                
+
+                <span class="c1"># Compute distances using custom metric or default Euclidean</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Custom metric - works with LazyTensor</span>
+                    <span class="n">D_ij</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span><span class="p">(</span><span class="n">X_i</span><span class="p">,</span> <span class="n">X_j</span><span class="p">)</span>  <span class="c1"># (chunk_size, N) LazyTensor</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Fast built-in Euclidean (squared distances)</span>
+                    <span class="n">D_ij</span> <span class="o">=</span> <span class="p">((</span><span class="n">X_i</span> <span class="o">-</span> <span class="n">X_j</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (chunk_size, N) LazyTensor</span>
+
                 <span class="c1"># Find k+1 nearest neighbors (including self)</span>
                 <span class="n">knn_dists</span><span class="p">,</span> <span class="n">knn_indices</span> <span class="o">=</span> <span class="n">D_ij</span><span class="o">.</span><span class="n">Kmin_argKmin</span><span class="p">(</span><span class="n">K</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-                
-                <span class="c1"># Remove self and convert to actual distances</span>
+
+                <span class="c1"># Remove self</span>
                 <span class="n">chunk_indices</span> <span class="o">=</span> <span class="n">knn_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
-                <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:])</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                <span class="c1"># For custom metrics, distances are already in metric space</span>
+                <span class="c1"># For Euclidean, convert from squared to actual distances</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:])</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">knn_dists</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Use PyTorch for HIGH dimensional data (MUCH faster!)</span>
-                <span class="n">distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cdist</span><span class="p">(</span><span class="n">X_chunk</span><span class="p">,</span> <span class="n">X_torch</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-                <span class="n">knn_dists</span><span class="p">,</span> <span class="n">knn_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">topk</span><span class="p">(</span><span class="n">distances</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> 
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Custom metric - compute pairwise distances manually</span>
+                    <span class="c1"># Broadcast: X_chunk: (chunk, 1, D), X_torch: (1, N, D) -&gt; (chunk, N)</span>
+                    <span class="n">X_i</span> <span class="o">=</span> <span class="n">X_chunk</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (chunk, 1, D)</span>
+                    <span class="n">X_j</span> <span class="o">=</span> <span class="n">X_torch</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># (1, N, D)</span>
+                    <span class="n">distances</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span><span class="p">(</span><span class="n">X_i</span><span class="p">,</span> <span class="n">X_j</span><span class="p">)</span>  <span class="c1"># (chunk, N)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># Fast built-in Euclidean distance</span>
+                    <span class="n">distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cdist</span><span class="p">(</span><span class="n">X_chunk</span><span class="p">,</span> <span class="n">X_torch</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+                <span class="n">knn_dists</span><span class="p">,</span> <span class="n">knn_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">topk</span><span class="p">(</span><span class="n">distances</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
                                                    <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">largest</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                
+
                 <span class="c1"># Remove self</span>
-                <span class="n">chunk_indices</span> <span class="o">=</span> <span class="n">knn_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>  
+                <span class="n">chunk_indices</span> <span class="o">=</span> <span class="n">knn_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
                 <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">knn_dists</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
             
             <span class="n">all_knn_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk_indices</span><span class="p">)</span>
@@ -873,6 +906,23 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span><span class="si">}</span><span class="s2"> samples with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> features&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate n_components</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;n_components must be positive, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate n_neighbors</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;n_neighbors must be positive, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate and adjust n_neighbors if necessary</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span><span class="p">:</span>
+            <span class="n">old_n_neighbors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;n_neighbors=</span><span class="si">{</span><span class="n">old_n_neighbors</span><span class="si">}</span><span class="s2"> is &gt;= n_samples=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Adjusting n_neighbors to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
 
         <span class="c1"># Find distribution kernel parameters</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_find_ab_params</span><span class="p">()</span>

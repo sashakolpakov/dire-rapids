@@ -88,7 +88,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
 <span class="c1"># Import base class</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>  <span class="c1"># pylint: disable=cyclic-import</span>
 
 <span class="c1"># PyKeOps for efficient force computations</span>
 <span class="k">try</span><span class="p">:</span>
@@ -618,10 +618,11 @@
             <span class="c1"># Monitor memory before computation</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span> <span class="ow">and</span> <span class="n">iteration</span> <span class="o">%</span> <span class="mi">20</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">mem_available</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">mem_get_info</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="mf">1e9</span>
-                
+                <span class="n">mem_reserved</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">memory_reserved</span><span class="p">()</span> <span class="o">/</span> <span class="mf">1e9</span>
+
                 <span class="c1"># Warn if memory usage is getting high</span>
                 <span class="k">if</span> <span class="n">mem_available</span> <span class="o">&lt;</span> <span class="mf">2.0</span><span class="p">:</span>  <span class="c1"># Less than 2GB free</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Low GPU memory: </span><span class="si">{</span><span class="n">mem_available</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">GB free, </span><span class="si">{</span><span class="n">mem_before</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">GB used&quot;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Low GPU memory: </span><span class="si">{</span><span class="n">mem_available</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">GB free, </span><span class="si">{</span><span class="n">mem_reserved</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">GB used&quot;</span><span class="p">)</span>
             
             <span class="c1"># Compute forces with our memory-efficient method</span>
             <span class="n">forces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_forces</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">iteration</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_iter_layout</span><span class="p">)</span>

@@ -19,6 +19,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="dire_rapids.atlas_cpu module" href="dire_rapids.atlas_cpu.html" />
     <link rel="prev" title="dire_rapids.dire_cuvs module" href="dire_rapids.dire_cuvs.html" /> 
 </head>
 
@@ -85,6 +86,8 @@
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.metrics.evaluate_embedding"><code class="docutils literal notranslate"><span class="pre">evaluate_embedding()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.atlas_cpu.html">dire_rapids.atlas_cpu module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.atlas_gpu.html">dire_rapids.atlas_gpu module</a></li>
 </ul>
 </li>
 </ul>
@@ -264,14 +267,16 @@ the quality of dimensionality reduction embeddings, including:</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.make_knn_graph_gpu">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">make_knn_graph_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#make_knn_graph_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.make_knn_graph_gpu" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">make_knn_graph_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#make_knn_graph_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.make_knn_graph_gpu" title="Link to this definition"></a></dt>
 <dd><p>GPU-accelerated kNN graph construction using cuML.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>data</strong> (<em>array-like</em>) – Data points (n_samples, n_features)</p></li>
 <li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of nearest neighbors</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Batch size for processing (currently unused with cuML)</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Batch size for querying neighbors (queries in batches against full dataset).
+Default 50000 balances GPU memory and performance.
+Set to None to query all at once.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -285,14 +290,16 @@ the quality of dimensionality reduction embeddings, including:</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.make_knn_graph_cpu">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">make_knn_graph_cpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#make_knn_graph_cpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.make_knn_graph_cpu" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">make_knn_graph_cpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#make_knn_graph_cpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.make_knn_graph_cpu" title="Link to this definition"></a></dt>
 <dd><p>CPU fallback for kNN graph construction.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>data</strong> (<em>array-like</em>) – Data points</p></li>
 <li><p><strong>n_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of nearest neighbors</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Unused for CPU version</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Batch size for querying neighbors (queries in batches against full dataset).
+Default 10000 provides good balance between memory and performance.
+Set to None to query all at once.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -821,6 +828,7 @@ at different filtration values.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="dire_rapids.dire_cuvs.html" class="btn btn-neutral float-left" title="dire_rapids.dire_cuvs module" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="dire_rapids.atlas_cpu.html" class="btn btn-neutral float-right" title="dire_rapids.atlas_cpu module" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

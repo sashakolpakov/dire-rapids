@@ -86,7 +86,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
 <span class="c1"># Import base DIRE PyTorch implementation</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>  <span class="c1"># pylint: disable=cyclic-import</span>
 
 <span class="c1"># Try to import cuVS and CuPy</span>
 <span class="k">try</span><span class="p">:</span>
@@ -294,7 +294,13 @@
 <span class="sd">            If GPU is required but not available.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        
+
+        <span class="c1"># Seed CuPy random generator for cuML/cuVS operations (if available)</span>
+        <span class="k">if</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
+            <span class="n">cp</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Seeded CuPy random generator: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
         <span class="c1"># Auto-detect cuVS usage</span>
         <span class="k">if</span> <span class="n">use_cuvs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Use cuVS if available and we have a GPU</span>
@@ -374,50 +380,52 @@
         <span class="c1"># Very large dataset with moderate dimensions - graph-based</span>
         <span class="k">return</span> <span class="s1">&#39;cagra&#39;</span> <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">500</span> <span class="k">else</span> <span class="s1">&#39;ivf_pq&#39;</span>
     
-    <span class="k">def</span><span class="w"> </span><span class="nf">_build_cuvs_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_cuvs_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Build cuVS index for fast k-NN search.</span>
-<span class="sd">        </span>
+
 <span class="sd">        This private method constructs the appropriate cuVS index based on the</span>
 <span class="sd">        specified index type and data characteristics, with optimized parameters</span>
 <span class="sd">        for each index variant.</span>
-<span class="sd">        </span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        X_gpu : cupy.ndarray</span>
 <span class="sd">            Input data on GPU, shape (n_samples, n_features), dtype float32.</span>
 <span class="sd">        index_type : str</span>
 <span class="sd">            Type of index to build (&#39;flat&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;).</span>
-<span class="sd">            </span>
+<span class="sd">        metric : str, default=&#39;euclidean&#39;</span>
+<span class="sd">            Distance metric to use (&#39;euclidean&#39; or &#39;inner_product&#39;).</span>
+
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        cuVS index object or None</span>
 <span class="sd">            Built cuVS index ready for search operations.</span>
 <span class="sd">            Returns None for &#39;flat&#39; type (no index needed).</span>
-<span class="sd">            </span>
+
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
 <span class="sd">        Private method, should not be called directly. Used by _compute_knn().</span>
-<span class="sd">        </span>
+
 <span class="sd">        Index-Specific Optimizations:</span>
 <span class="sd">        - **IVF-Flat**: Adaptive n_lists based on dataset size and dimensionality</span>
-<span class="sd">        - **IVF-PQ**: Optimized PQ dimension and quantization parameters  </span>
+<span class="sd">        - **IVF-PQ**: Optimized PQ dimension and quantization parameters</span>
 <span class="sd">        - **CAGRA**: Graph-based parameters tuned for large datasets</span>
-<span class="sd">        </span>
+
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
 <span class="sd">            If unknown index_type is specified.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X_gpu</span><span class="o">.</span><span class="n">shape</span>
-        
-        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Building cuVS </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2"> index for </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> points in </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D...&quot;</span><span class="p">)</span>
-        
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Building cuVS </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2"> index for </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> points in </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D with </span><span class="si">{</span><span class="n">metric</span><span class="si">}</span><span class="s2"> metric...&quot;</span><span class="p">)</span>
+
         <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
             <span class="c1"># Exact search - no index needed</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using brute-force search (exact)&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
-            
+
         <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_flat&#39;</span><span class="p">:</span>
             <span class="c1"># IVF without compression</span>
             <span class="c1"># For high-D data, use more lists for better quantization</span>
@@ -426,68 +434,68 @@
                 <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span><span class="p">),</span> <span class="mi">8192</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">4096</span><span class="p">)</span>
-            
+
             <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
                 <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>  <span class="c1"># cuVS uses &#39;euclidean&#39; not &#39;l2_expanded&#39;</span>
+                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
                 <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
             <span class="p">)</span>
-            
+
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
                 <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
-            
+
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
-            
+
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-Flat index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists for </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D data&quot;</span><span class="p">)</span>
-            
+
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
             <span class="c1"># IVF with product quantization</span>
             <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">8192</span><span class="p">)</span>
             <span class="n">pq_dim</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">n_dims</span> <span class="o">//</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>  <span class="c1"># Reasonable PQ dimension</span>
-            
+
             <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
                 <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
                 <span class="n">pq_dim</span><span class="o">=</span><span class="n">pq_dim</span><span class="p">,</span>
                 <span class="n">pq_bits</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
                 <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
             <span class="p">)</span>
-            
+
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
                 <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
-            
+
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
-            
+
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-PQ index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists, PQ dim=</span><span class="si">{</span><span class="n">pq_dim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            
+
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span><span class="p">:</span>
             <span class="c1"># Graph-based index for very large datasets</span>
             <span class="n">build_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
-                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
                 <span class="n">graph_degree</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
                 <span class="n">intermediate_graph_degree</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
                 <span class="n">graph_build_algo</span><span class="o">=</span><span class="s1">&#39;nn_descent&#39;</span>
             <span class="p">)</span>
-            
+
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
                 <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
-            
+
             <span class="n">index</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
-            
+
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Built CAGRA graph-based index&quot;</span><span class="p">)</span>
-        
+
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown index type: </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        
+
         <span class="k">return</span> <span class="n">index</span>
     
-    <span class="k">def</span><span class="w"> </span><span class="nf">_search_cuvs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_search_cuvs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Search cuVS index for k nearest neighbors.</span>
-<span class="sd">        </span>
+
 <span class="sd">        This private method performs k-NN search using the built cuVS index,</span>
 <span class="sd">        with optimized search parameters for each index type.</span>
-<span class="sd">        </span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        index : cuVS index object or None</span>
@@ -498,51 +506,53 @@
 <span class="sd">            Query data on GPU, shape (n_samples, n_features), dtype float32.</span>
 <span class="sd">        k : int</span>
 <span class="sd">            Number of nearest neighbors to find (plus 1 for self).</span>
-<span class="sd">            </span>
+<span class="sd">        metric : str, default=&#39;euclidean&#39;</span>
+<span class="sd">            Distance metric to use (&#39;euclidean&#39; or &#39;inner_product&#39;).</span>
+
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        tuple of cupy.ndarray</span>
 <span class="sd">            distances : cupy.ndarray of shape (n_samples, k+1)</span>
 <span class="sd">                Distances to k+1 nearest neighbors (including self).</span>
-<span class="sd">            indices : cupy.ndarray of shape (n_samples, k+1)  </span>
+<span class="sd">            indices : cupy.ndarray of shape (n_samples, k+1)</span>
 <span class="sd">                Indices of k+1 nearest neighbors (including self).</span>
-<span class="sd">                </span>
+
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
 <span class="sd">        Private method, should not be called directly. Used by _compute_knn().</span>
-<span class="sd">        </span>
+
 <span class="sd">        Search Parameters:</span>
 <span class="sd">        - **IVF methods**: Adaptive n_probes based on index size</span>
 <span class="sd">        - **CAGRA**: Optimized search width and internal parameters</span>
 <span class="sd">        - **Flat**: Uses IVF-Flat with high probe count for near-exact results</span>
-<span class="sd">        </span>
+
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
 <span class="sd">            If unknown index_type is specified.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">X_gpu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        
+
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Searching for </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2"> nearest neighbors using cuVS </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
-        
+
         <span class="k">if</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
             <span class="c1"># For flat/brute force, just use IVF-Flat with many lists for exact search</span>
             <span class="c1"># This avoids dtype issues with brute_force module</span>
             <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">1024</span><span class="p">)</span>
-            
+
             <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
                 <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
                 <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
             <span class="p">)</span>
-            
+
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
-            
+
             <span class="c1"># Search with high probe count for near-exact results</span>
             <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
                 <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">n_lists</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>  <span class="c1"># High probe count for accuracy</span>
             <span class="p">)</span>
-            
+
             <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
                 <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
             <span class="p">)</span>
@@ -596,11 +606,11 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_compute_knn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">50000</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Compute k-NN using cuVS acceleration when available and beneficial.</span>
-<span class="sd">        </span>
+
 <span class="sd">        This method overrides the parent implementation to use cuVS for k-NN</span>
 <span class="sd">        computation when it provides performance benefits, automatically falling</span>
 <span class="sd">        back to PyTorch for cases where cuVS isn&#39;t optimal.</span>
-<span class="sd">        </span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        X : numpy.ndarray</span>
@@ -610,32 +620,42 @@
 <span class="sd">        use_fp16 : bool, optional</span>
 <span class="sd">            Use FP16 precision (used by fallback PyTorch method).</span>
 <span class="sd">            Note: cuVS requires float32, so FP16 is only used for PyTorch fallback.</span>
-<span class="sd">            </span>
+
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
 <span class="sd">        Private method, should not be called directly. Used by fit_transform().</span>
-<span class="sd">        </span>
+
 <span class="sd">        cuVS Usage Criteria:</span>
 <span class="sd">        - cuVS backend must be enabled and available</span>
 <span class="sd">        - Dataset size &gt;= 10,000 samples (cuVS overhead not worth it for smaller datasets)</span>
 <span class="sd">        - Dimensionality &lt;= 2,048 (cuVS works best for moderate dimensions)</span>
-<span class="sd">        </span>
+<span class="sd">        - Only native metrics supported (euclidean, inner_product)</span>
+
 <span class="sd">        If criteria aren&#39;t met, falls back to parent PyTorch implementation.</span>
-<span class="sd">        </span>
+
 <span class="sd">        Side Effects</span>
 <span class="sd">        ------------</span>
 <span class="sd">        Sets self._knn_indices and self._knn_distances with computed k-NN graph.</span>
 <span class="sd">        Cleans up GPU memory after computation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
-        
+
+        <span class="c1"># Check if custom metric expression/callable is specified</span>
+        <span class="c1"># cuVS only supports named metrics like &#39;euclidean&#39;, &#39;inner_product&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Custom metric expressions/callables not supported by cuVS. &quot;</span>
+                <span class="s2">&quot;Falling back to PyTorch backend for k-NN.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">)</span>
+
         <span class="c1"># Decide whether to use cuVS</span>
         <span class="n">use_cuvs_for_this</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="ow">and</span> 
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="ow">and</span>
             <span class="n">n_samples</span> <span class="o">&gt;=</span> <span class="mi">10000</span> <span class="ow">and</span>  <span class="c1"># cuVS overhead not worth it for small datasets</span>
             <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">2048</span>  <span class="c1"># cuVS works best for moderate dimensions</span>
         <span class="p">)</span>
-        
+
         <span class="k">if</span> <span class="ow">not</span> <span class="n">use_cuvs_for_this</span><span class="p">:</span>
             <span class="c1"># Fall back to PyTorch implementation</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend for k-NN&quot;</span><span class="p">)</span>
@@ -643,24 +663,35 @@
         
         <span class="c1"># Use cuVS for k-NN</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">-NN graph using cuVS...&quot;</span><span class="p">)</span>
-        
+
+        <span class="c1"># Determine which metric to use for cuVS</span>
+        <span class="c1"># Default to euclidean, but allow named metrics</span>
+        <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;euclidean&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">metric_lower</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">metric_lower</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">,</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">):</span>
+                <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;euclidean&#39;</span>
+            <span class="k">elif</span> <span class="n">metric_lower</span> <span class="o">==</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">:</span>
+                <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;inner_product&#39;</span>
+            <span class="c1"># Note: cuVS doesn&#39;t support cosine directly, would need normalization</span>
+
         <span class="c1"># Convert to CuPy array</span>
         <span class="c1"># Note: cuVS requires float32, not float16</span>
         <span class="c1"># cuVS also requires C-contiguous (row-major) arrays</span>
         <span class="n">X_gpu</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;C&#39;</span><span class="p">)</span>
-        
+
         <span class="c1"># Select index type</span>
         <span class="n">index_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_cuvs_index_type</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">)</span>
-        
+
         <span class="c1"># Build index</span>
         <span class="k">if</span> <span class="n">index_type</span> <span class="o">!=</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_cuvs_index</span><span class="p">(</span><span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_cuvs_index</span><span class="p">(</span><span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">cuvs_metric</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span>
         
         <span class="c1"># Search for k-NN</span>
         <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_search_cuvs</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span> <span class="n">cuvs_metric</span>
         <span class="p">)</span>
         
         <span class="c1"># Convert to CuPy arrays first, then remove self (first neighbor) and convert to numpy</span>
