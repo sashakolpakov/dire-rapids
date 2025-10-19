@@ -119,150 +119,13 @@
     <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.svm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearSVC</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">KNeighborsClassifier</span>
 
-<span class="c1"># Persistence backends</span>
-<span class="n">_PERSISTENCE_BACKEND</span> <span class="o">=</span> <span class="kc">None</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">gph</span><span class="w"> </span><span class="kn">import</span> <span class="n">ripser_parallel</span>
-    <span class="n">HAS_GIOTTO_PH</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">HAS_GIOTTO_PH</span> <span class="o">=</span> <span class="kc">False</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">ripserplusplus</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rpp</span>
-    <span class="n">HAS_RIPSER_PP</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">HAS_RIPSER_PP</span> <span class="o">=</span> <span class="kc">False</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">ripser</span><span class="w"> </span><span class="kn">import</span> <span class="n">ripser</span>
-    <span class="n">HAS_RIPSER</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">HAS_RIPSER</span> <span class="o">=</span> <span class="kc">False</span>
-
 <span class="c1"># Additional dependencies for persistence</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">persim</span><span class="w"> </span><span class="kn">import</span> <span class="n">wasserstein</span><span class="p">,</span> <span class="n">bottleneck</span>
-    <span class="n">HAS_PERSIM</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">HAS_PERSIM</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;persim not available. Wasserstein and bottleneck distances will not be available.&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">ot</span>
-    <span class="n">HAS_OT</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">HAS_OT</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;POT (Python Optimal Transport) not available. EMD distance will not be available.&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
-
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">fastdtw</span><span class="w"> </span><span class="kn">import</span> <span class="n">fastdtw</span>
     <span class="n">HAS_DTW</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">HAS_DTW</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;fastdtw not available. DTW distance will not be available.&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
-
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">twed</span><span class="w"> </span><span class="kn">import</span> <span class="n">twed</span>
-    <span class="n">HAS_TWED</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">HAS_TWED</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;twed not available. TWED distance will not be available.&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
-
-
-<span class="c1">#</span>
-<span class="c1"># Persistence backend management</span>
-<span class="c1">#</span>
-
-
-<div class="viewcode-block" id="get_available_persistence_backends">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.get_available_persistence_backends">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">get_available_persistence_backends</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Get list of available persistence computation backends.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    dict : Dictionary mapping backend names to availability status</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s1">&#39;fast&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>  <span class="c1"># Always available, uses graph-based H0/H1 only</span>
-        <span class="s1">&#39;giotto-ph&#39;</span><span class="p">:</span> <span class="n">HAS_GIOTTO_PH</span><span class="p">,</span>
-        <span class="s1">&#39;ripser++&#39;</span><span class="p">:</span> <span class="n">HAS_RIPSER_PP</span><span class="p">,</span>
-        <span class="s1">&#39;ripser&#39;</span><span class="p">:</span> <span class="n">HAS_RIPSER</span>
-    <span class="p">}</span></div>
-
-
-
-<div class="viewcode-block" id="set_persistence_backend">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.set_persistence_backend">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">set_persistence_backend</span><span class="p">(</span><span class="n">backend</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Set the persistence computation backend.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    backend : str or None</span>
-<span class="sd">        Backend to use: &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto-selection</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        If specified backend is not available</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">global</span> <span class="n">_PERSISTENCE_BACKEND</span>
-
-    <span class="k">if</span> <span class="n">backend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_PERSISTENCE_BACKEND</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">return</span>
-
-    <span class="n">available</span> <span class="o">=</span> <span class="n">get_available_persistence_backends</span><span class="p">()</span>
-
-    <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">available</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Unknown backend &#39;</span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&#39;. Available: </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">available</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">available</span><span class="p">[</span><span class="n">backend</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Backend &#39;</span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&#39; is not available. Install the required package.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">_PERSISTENCE_BACKEND</span> <span class="o">=</span> <span class="n">backend</span></div>
-
-
-
-<div class="viewcode-block" id="get_persistence_backend">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.get_persistence_backend">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">get_persistence_backend</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Get the current persistence backend (with auto-selection if None).</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    str : Name of the selected backend</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    RuntimeError</span>
-<span class="sd">        If no persistence backend is available</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">global</span> <span class="n">_PERSISTENCE_BACKEND</span>  <span class="c1"># pylint: disable=global-variable-not-assigned</span>
-
-    <span class="k">if</span> <span class="n">_PERSISTENCE_BACKEND</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_PERSISTENCE_BACKEND</span>
-
-    <span class="c1"># Auto-select: giotto-ph &gt; ripser++ &gt; ripser</span>
-    <span class="k">if</span> <span class="n">HAS_GIOTTO_PH</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s1">&#39;giotto-ph&#39;</span>
-    <span class="k">if</span> <span class="n">HAS_RIPSER_PP</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s1">&#39;ripser++&#39;</span>
-    <span class="k">if</span> <span class="n">HAS_RIPSER</span><span class="p">:</span>
-        <span class="k">return</span> <span class="s1">&#39;ripser&#39;</span>
-    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-        <span class="s2">&quot;No persistence backend available. &quot;</span>
-        <span class="s2">&quot;Install giotto-ph (recommended), ripserplusplus, or ripser.&quot;</span>
-    <span class="p">)</span></div>
 
 
 
@@ -1132,9 +995,9 @@
 <div class="viewcode-block" id="compute_h0_h1_knn">
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_h0_h1_knn">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
-                     <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_distances</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+                     <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute H0/H1 using local kNN atlas approach.</span>
+<span class="sd">    Compute H0/H1 Betti numbers using local kNN atlas approach.</span>
 
 <span class="sd">    Build dense local triangulations around each point, then merge consistently.</span>
 <span class="sd">    This avoids the &quot;holes&quot; problem of global sparse kNN graphs.</span>
@@ -1156,93 +1019,44 @@
 <span class="sd">        Higher values create more dense, overlapping patches.</span>
 <span class="sd">    use_gpu : bool</span>
 <span class="sd">        Whether to use GPU acceleration (if available)</span>
-<span class="sd">    return_distances : bool</span>
-<span class="sd">        If True, also return edge-to-distance mapping for persistence diagrams</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    tuple : (h0_diagram, h1_diagram) or (h0_diagram, h1_diagram, edge_distances)</span>
-<span class="sd">        Persistence diagrams with [birth, death] pairs</span>
+<span class="sd">    tuple : (beta_0, beta_1)</span>
+<span class="sd">        Betti numbers: β₀ (connected components), β₁ (loops)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Select backend: GPU if requested and available, otherwise CPU</span>
-    <span class="k">if</span> <span class="n">use_gpu</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_gpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_gpu</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
-            <span class="k">return</span> <span class="n">compute_h0_h1_atlas_gpu</span><span class="p">(</span>
-                <span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
-                <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
-                <span class="n">overlap_factor</span><span class="o">=</span><span class="n">overlap_factor</span><span class="p">,</span>
-                <span class="n">return_distances</span><span class="o">=</span><span class="n">return_distances</span>
-            <span class="p">)</span>
-        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="c1"># Fall back to CPU if GPU not available</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GPU atlas not available (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to CPU&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
+    <span class="c1"># Use compute_betti_curve with n_steps=1 to get Betti numbers at full complex</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.betti_curve</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_betti_curve</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
 
-    <span class="c1"># Use CPU implementation</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">.atlas_cpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_h0_h1_atlas_cpu</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
-    <span class="k">return</span> <span class="n">compute_h0_h1_atlas_cpu</span><span class="p">(</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">compute_betti_curve</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
         <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
         <span class="n">overlap_factor</span><span class="o">=</span><span class="n">overlap_factor</span><span class="p">,</span>
-        <span class="n">return_distances</span><span class="o">=</span><span class="n">return_distances</span>
-    <span class="p">)</span></div>
+        <span class="n">n_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Extract Betti numbers from the result</span>
+    <span class="n">beta_0</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;beta_0&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">beta_1</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;beta_1&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span></div>
 
 
 
 
-<div class="viewcode-block" id="compute_persistence_diagrams_fast">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_persistence_diagrams_fast">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_persistence_diagrams_fast</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+
+
+<div class="viewcode-block" id="compute_global_metrics">
+<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_global_metrics">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_global_metrics</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+                          <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                          <span class="n">overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">metrics_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Fast computation of H0/H1 persistence diagrams using kNN-based sparse Rips.</span>
+<span class="sd">    Compute global topological metrics based on Betti curve comparison.</span>
 
-<span class="sd">    Much faster than full Vietoris-Rips as it only uses kNN graph (O(nk) vs O(n²) edges).</span>
-<span class="sd">    Builds Rips complex from kNN edges and computes persistence via Ripser.</span>
-
-<span class="sd">    Note: Does NOT subsample internally - expects already-subsampled data.</span>
-<span class="sd">    This avoids double subsampling when called from compute_global_metrics.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    data : array-like</span>
-<span class="sd">        High-dimensional data (already subsampled if needed)</span>
-<span class="sd">    layout : array-like</span>
-<span class="sd">        Low-dimensional embedding (already subsampled if needed)</span>
-<span class="sd">    k_neighbors : int</span>
-<span class="sd">        Number of neighbors for kNN graph (default 30, recommended &gt;= 20)</span>
-<span class="sd">    use_gpu : bool</span>
-<span class="sd">        Whether to use GPU for kNN computation (default True)</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    dict : {&#39;data&#39;: [h0_diag, h1_diag], &#39;layout&#39;: [h0_diag, h1_diag], &#39;backend&#39;: &#39;fast&#39;}</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Convert to NumPy if needed</span>
-    <span class="k">if</span> <span class="n">HAS_CUPY</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">cp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-        <span class="n">data_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-        <span class="n">layout_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">layout</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">data_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-        <span class="n">layout_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">layout</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-
-    <span class="c1"># Compute H0 and H1 using kNN-Rips method</span>
-    <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
-    <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
-
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span><span class="p">],</span>
-        <span class="s1">&#39;layout&#39;</span><span class="p">:</span> <span class="p">[</span><span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span><span class="p">],</span>
-        <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;fast&#39;</span>
-    <span class="p">}</span></div>
-
-
-
-<div class="viewcode-block" id="compute_persistence_diagrams">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_persistence_diagrams">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_persistence_diagrams</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-                                <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute persistence diagrams for data and layout.</span>
+<span class="sd">    Computes Betti curves for high-dimensional data and low-dimensional embedding</span>
+<span class="sd">    using the atlas approach, then compares them using fastDTW distance.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -1250,52 +1064,47 @@
 <span class="sd">        High-dimensional data</span>
 <span class="sd">    layout : array-like</span>
 <span class="sd">        Low-dimensional embedding</span>
-<span class="sd">    max_dim : int</span>
-<span class="sd">        Maximum homology dimension</span>
 <span class="sd">    subsample_threshold : float</span>
 <span class="sd">        Subsampling probability (must be between 0.0 and 1.0)</span>
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
-<span class="sd">    backend : str, optional</span>
-<span class="sd">        Persistence backend: &#39;fast&#39;, &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
-<span class="sd">    backend_kwargs : dict, optional</span>
-<span class="sd">        Backend-specific parameters passed to the backend, using defaults unless specified:</span>
-<span class="sd">        - &#39;fast&#39;: k_neighbors=30, use_gpu=True</span>
-<span class="sd">        - &#39;giotto-ph&#39;: n_threads=-1, collapse_edges=True, return_generators=False</span>
-<span class="sd">        - &#39;ripser++&#39;: Any valid parameters for ripserplusplus.run()</span>
-<span class="sd">        - &#39;ripser&#39;: Any valid parameters for ripser.ripser()</span>
+<span class="sd">    n_steps : int</span>
+<span class="sd">        Number of points for Betti curves</span>
+<span class="sd">    k_neighbors : int</span>
+<span class="sd">        Size of local neighborhood for atlas approach (default 20)</span>
+<span class="sd">    density_threshold : float</span>
+<span class="sd">        Percentile threshold for edge inclusion (0-1, default 0.8)</span>
+<span class="sd">    overlap_factor : float</span>
+<span class="sd">        Factor for expanding local neighborhoods (default 1.5)</span>
+<span class="sd">    use_gpu : bool</span>
+<span class="sd">        Whether to use GPU acceleration</span>
+<span class="sd">    metrics_only : bool</span>
+<span class="sd">        If True, return only metrics; otherwise include betti curves</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    dict : {&#39;data&#39;: diagrams_hd, &#39;layout&#39;: diagrams_ld, &#39;backend&#39;: backend_used}</span>
+<span class="sd">    dict : Dictionary containing DTW distances for β₀ and β₁ curves</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
+<span class="sd">        If fastdtw is not available</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="c1"># Initialize backend_kwargs if not provided</span>
-    <span class="k">if</span> <span class="n">backend_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">backend_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">HAS_DTW</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;fastdtw not available. Install it with: pip install fastdtw&quot;</span><span class="p">)</span>
 
-    <span class="c1"># Select backend</span>
-    <span class="k">if</span> <span class="n">backend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">backend</span> <span class="o">=</span> <span class="n">get_persistence_backend</span><span class="p">()</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># Validate backend</span>
-        <span class="n">available</span> <span class="o">=</span> <span class="n">get_available_persistence_backends</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">available</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">available</span><span class="p">[</span><span class="n">backend</span><span class="p">]:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Backend &#39;</span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&#39; not available. Use one of </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">available</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.betti_curve</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_betti_curve</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
 
-    <span class="c1"># Subsample ONCE</span>
+    <span class="c1"># Subsample data</span>
     <span class="n">data_sub</span><span class="p">,</span> <span class="n">layout_sub</span> <span class="o">=</span> <span class="n">threshold_subsample_gpu</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span>
     <span class="p">)</span>
 
-    <span class="c1"># Convert to NumPy for persistence computation</span>
+    <span class="c1"># Convert to NumPy if needed</span>
     <span class="k">if</span> <span class="n">HAS_CUPY</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_sub</span><span class="p">,</span> <span class="n">cp</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
         <span class="n">data_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">data_sub</span><span class="p">)</span>
         <span class="n">layout_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">layout_sub</span><span class="p">)</span>
@@ -1303,405 +1112,74 @@
         <span class="n">data_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data_sub</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
         <span class="n">layout_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">layout_sub</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
 
-    <span class="c1"># Compute persistence diagrams based on backend</span>
-    <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;fast&#39;</span><span class="p">:</span>
-        <span class="c1"># Use fast kNN-Laplacian computation</span>
-        <span class="c1"># Extract parameters with defaults</span>
-        <span class="n">k_neighbors</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;k_neighbors&#39;</span><span class="p">,</span> <span class="mi">30</span><span class="p">)</span>
-        <span class="n">use_gpu</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;use_gpu&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-
-        <span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
-        <span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span> <span class="o">=</span> <span class="n">compute_h0_h1_knn</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">)</span>  <span class="c1"># pylint: disable=unbalanced-tuple-unpacking</span>
-        <span class="n">diags_hd</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0_hd</span><span class="p">,</span> <span class="n">h1_hd</span><span class="p">]</span>
-        <span class="n">diags_ld</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0_ld</span><span class="p">,</span> <span class="n">h1_ld</span><span class="p">]</span>
-
-    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;giotto-ph&#39;</span><span class="p">:</span>
-        <span class="c1"># Use giotto-ph (fastest CPU option)</span>
-        <span class="c1"># Extract parameters with defaults</span>
-        <span class="n">n_threads</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;n_threads&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">collapse_edges</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;collapse_edges&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
-        <span class="n">return_generators</span> <span class="o">=</span> <span class="n">backend_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;return_generators&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
-
-        <span class="n">result_hd</span> <span class="o">=</span> <span class="n">ripser_parallel</span><span class="p">(</span>
-            <span class="n">data_np</span><span class="p">,</span>
-            <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span>
-            <span class="n">collapse_edges</span><span class="o">=</span><span class="n">collapse_edges</span><span class="p">,</span>
-            <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span><span class="p">,</span>
-            <span class="n">return_generators</span><span class="o">=</span><span class="n">return_generators</span>
-        <span class="p">)</span>
-        <span class="n">result_ld</span> <span class="o">=</span> <span class="n">ripser_parallel</span><span class="p">(</span>
-            <span class="n">layout_np</span><span class="p">,</span>
-            <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span>
-            <span class="n">collapse_edges</span><span class="o">=</span><span class="n">collapse_edges</span><span class="p">,</span>
-            <span class="n">n_threads</span><span class="o">=</span><span class="n">n_threads</span><span class="p">,</span>
-            <span class="n">return_generators</span><span class="o">=</span><span class="n">return_generators</span>
-        <span class="p">)</span>
-        <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">result_hd</span><span class="p">[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-        <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">result_ld</span><span class="p">[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-
-    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;ripser++&#39;</span><span class="p">:</span>
-        <span class="c1"># Use GPU-accelerated ripser++</span>
-        <span class="c1"># Pass through all kwargs to rpp.run()</span>
-        <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">rpp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-        <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">rpp</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-
-    <span class="k">elif</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;ripser&#39;</span><span class="p">:</span>
-        <span class="c1"># Use standard CPU ripser</span>
-        <span class="c1"># Pass through all kwargs to ripser()</span>
-        <span class="n">diags_hd</span> <span class="o">=</span> <span class="n">ripser</span><span class="p">(</span><span class="n">data_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-        <span class="n">diags_ld</span> <span class="o">=</span> <span class="n">ripser</span><span class="p">(</span><span class="n">layout_np</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="n">max_dim</span><span class="p">,</span> <span class="o">**</span><span class="n">backend_kwargs</span><span class="p">)[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>
-
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="n">diags_hd</span><span class="p">,</span> <span class="s1">&#39;layout&#39;</span><span class="p">:</span> <span class="n">diags_ld</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="n">backend</span><span class="p">}</span></div>
-
-
-
-<div class="viewcode-block" id="betti_curve">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.betti_curve">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">betti_curve</span><span class="p">(</span><span class="n">diagram</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute Betti curve from a persistence diagram.</span>
-
-<span class="sd">    A Betti curve shows the number of topological features that persist</span>
-<span class="sd">    at different filtration values.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    diagram : array-like</span>
-<span class="sd">        Persistence diagram as list of (birth, death) tuples</span>
-<span class="sd">    n_steps : int</span>
-<span class="sd">        Number of points in the curve</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    tuple : (filtration_values, betti_numbers)</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">diagram</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_steps</span><span class="p">)</span>
-
-    <span class="c1"># Filter out infinite death times</span>
-    <span class="n">finite_diagram</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">diagram</span> <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">]</span>
-
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">finite_diagram</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_steps</span><span class="p">)</span>
-
-    <span class="n">max_dist</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">finite_diagram</span><span class="p">])</span>
-    <span class="n">axis_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_dist</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">)</span>
-    <span class="n">axis_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_steps</span><span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">axis_x</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">b</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">diagram</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">b</span> <span class="o">&lt;</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="n">d</span><span class="p">:</span>
-                <span class="n">axis_y</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
-
-    <span class="k">return</span> <span class="n">axis_x</span><span class="p">,</span> <span class="n">axis_y</span></div>
-
-
-
-<div class="viewcode-block" id="compute_dtw">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_dtw">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_dtw</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">,</span> <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">,</span> <span class="n">norm_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute Dynamic Time Warping distance between Betti curves.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    axis_x_hd, axis_y_hd : array-like</span>
-<span class="sd">        High-dimensional Betti curve</span>
-<span class="sd">    axis_x_ld, axis_y_ld : array-like</span>
-<span class="sd">        Low-dimensional Betti curve</span>
-<span class="sd">    norm_factor : float</span>
-<span class="sd">        Normalization factor</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    float : DTW distance</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">HAS_DTW</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;fastdtw not available, returning NaN&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
-
-    <span class="n">seq0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">)))</span>
-    <span class="n">seq1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">)))</span>
-    <span class="n">dist_dtw</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">fastdtw</span><span class="p">(</span><span class="n">seq0</span><span class="p">,</span> <span class="n">seq1</span><span class="p">,</span> <span class="n">dist</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">dist_dtw</span> <span class="o">*</span> <span class="n">norm_factor</span></div>
-
-
-
-<div class="viewcode-block" id="compute_twed">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_twed">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_twed</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">,</span> <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">,</span> <span class="n">norm_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute Time Warp Edit Distance between Betti curves.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    axis_x_hd, axis_y_hd : array-like</span>
-<span class="sd">        High-dimensional Betti curve</span>
-<span class="sd">    axis_x_ld, axis_y_ld : array-like</span>
-<span class="sd">        Low-dimensional Betti curve</span>
-<span class="sd">    norm_factor : float</span>
-<span class="sd">        Normalization factor</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    float : TWED distance</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">HAS_TWED</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;twed not available, returning NaN&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
-
-    <span class="n">dist_twed</span> <span class="o">=</span> <span class="n">twed</span><span class="p">(</span>
-        <span class="n">axis_y_hd</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-        <span class="n">axis_y_ld</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-        <span class="n">axis_x_hd</span><span class="p">,</span>
-        <span class="n">axis_x_ld</span><span class="p">,</span>
-        <span class="n">p</span><span class="o">=</span><span class="mi">2</span>
+    <span class="c1"># Compute Betti curves for high-dimensional data</span>
+    <span class="n">result_hd</span> <span class="o">=</span> <span class="n">compute_betti_curve</span><span class="p">(</span>
+        <span class="n">data_np</span><span class="p">,</span>
+        <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
+        <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
+        <span class="n">overlap_factor</span><span class="o">=</span><span class="n">overlap_factor</span><span class="p">,</span>
+        <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+        <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span>
     <span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">dist_twed</span> <span class="o">*</span> <span class="n">norm_factor</span></div>
+    <span class="c1"># Compute Betti curves for low-dimensional embedding</span>
+    <span class="n">result_ld</span> <span class="o">=</span> <span class="n">compute_betti_curve</span><span class="p">(</span>
+        <span class="n">layout_np</span><span class="p">,</span>
+        <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
+        <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
+        <span class="n">overlap_factor</span><span class="o">=</span><span class="n">overlap_factor</span><span class="p">,</span>
+        <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+        <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span>
+    <span class="p">)</span>
 
+    <span class="c1"># Extract Betti curves</span>
+    <span class="n">filtration_hd</span> <span class="o">=</span> <span class="n">result_hd</span><span class="p">[</span><span class="s1">&#39;filtration_values&#39;</span><span class="p">]</span>
+    <span class="n">beta_0_hd</span> <span class="o">=</span> <span class="n">result_hd</span><span class="p">[</span><span class="s1">&#39;beta_0&#39;</span><span class="p">]</span>
+    <span class="n">beta_1_hd</span> <span class="o">=</span> <span class="n">result_hd</span><span class="p">[</span><span class="s1">&#39;beta_1&#39;</span><span class="p">]</span>
 
+    <span class="n">filtration_ld</span> <span class="o">=</span> <span class="n">result_ld</span><span class="p">[</span><span class="s1">&#39;filtration_values&#39;</span><span class="p">]</span>
+    <span class="n">beta_0_ld</span> <span class="o">=</span> <span class="n">result_ld</span><span class="p">[</span><span class="s1">&#39;beta_0&#39;</span><span class="p">]</span>
+    <span class="n">beta_1_ld</span> <span class="o">=</span> <span class="n">result_ld</span><span class="p">[</span><span class="s1">&#39;beta_1&#39;</span><span class="p">]</span>
 
-<div class="viewcode-block" id="compute_emd">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_emd">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_emd</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">,</span> <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">,</span> <span class="n">adjust_mass</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">norm_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute Earth Mover&#39;s Distance between Betti curves.</span>
+    <span class="c1"># Compute DTW distances between Betti curves</span>
+    <span class="c1"># For β₀ curves</span>
+    <span class="n">seq0_beta0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">filtration_hd</span><span class="p">,</span> <span class="n">beta_0_hd</span><span class="p">])</span>
+    <span class="n">seq1_beta0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">filtration_ld</span><span class="p">,</span> <span class="n">beta_0_ld</span><span class="p">])</span>
+    <span class="n">dtw_beta0</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">fastdtw</span><span class="p">(</span><span class="n">seq0_beta0</span><span class="p">,</span> <span class="n">seq1_beta0</span><span class="p">,</span> <span class="n">dist</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    axis_x_hd, axis_y_hd : array-like</span>
-<span class="sd">        High-dimensional Betti curve</span>
-<span class="sd">    axis_x_ld, axis_y_ld : array-like</span>
-<span class="sd">        Low-dimensional Betti curve</span>
-<span class="sd">    adjust_mass : bool</span>
-<span class="sd">        Whether to adjust for different total masses</span>
-<span class="sd">    norm_factor : float</span>
-<span class="sd">        Normalization factor</span>
+    <span class="c1"># For β₁ curves</span>
+    <span class="n">seq0_beta1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">filtration_hd</span><span class="p">,</span> <span class="n">beta_1_hd</span><span class="p">])</span>
+    <span class="n">seq1_beta1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">filtration_ld</span><span class="p">,</span> <span class="n">beta_1_ld</span><span class="p">])</span>
+    <span class="n">dtw_beta1</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">fastdtw</span><span class="p">(</span><span class="n">seq0_beta1</span><span class="p">,</span> <span class="n">seq1_beta1</span><span class="p">,</span> <span class="n">dist</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    float : EMD distance</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">HAS_OT</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;POT not available, returning NaN&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+    <span class="c1"># Normalize by number of points</span>
+    <span class="n">n_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_np</span><span class="p">)</span>
+    <span class="n">dtw_beta0</span> <span class="o">/=</span> <span class="n">n_points</span>
+    <span class="n">dtw_beta1</span> <span class="o">/=</span> <span class="n">n_points</span>
 
-    <span class="n">sum_hd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis_y_hd</span><span class="p">)</span>
-    <span class="n">sum_ld</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis_y_ld</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">sum_hd</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">sum_ld</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="mf">0.0</span>
-
-    <span class="n">axis_y_hd_norm</span> <span class="o">=</span> <span class="n">axis_y_hd</span> <span class="o">/</span> <span class="n">sum_hd</span>
-    <span class="n">axis_y_ld_norm</span> <span class="o">=</span> <span class="n">axis_y_ld</span> <span class="o">/</span> <span class="n">sum_ld</span>
-
-    <span class="n">dist_emd</span> <span class="o">=</span> <span class="n">ot</span><span class="o">.</span><span class="n">emd2_1d</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_hd_norm</span><span class="p">,</span> <span class="n">axis_y_ld_norm</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">adjust_mass</span><span class="p">:</span>
-        <span class="n">dist_emd</span> <span class="o">*=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">([</span><span class="n">sum_hd</span> <span class="o">/</span> <span class="n">sum_ld</span><span class="p">,</span> <span class="n">sum_ld</span> <span class="o">/</span> <span class="n">sum_hd</span><span class="p">])</span>
-
-    <span class="k">return</span> <span class="n">dist_emd</span> <span class="o">*</span> <span class="n">norm_factor</span></div>
-
-
-
-<div class="viewcode-block" id="compute_wasserstein">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_wasserstein">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_wasserstein</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span><span class="p">,</span> <span class="n">norm_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute Wasserstein distance between persistence diagrams.</span>
-
-<span class="sd">    Simple implementation matching dire-jax (no special handling for infinite features).</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    diag_hd, diag_ld : array-like</span>
-<span class="sd">        Persistence diagrams (birth, death) pairs</span>
-<span class="sd">    norm_factor : float</span>
-<span class="sd">        Normalization factor</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    float : Wasserstein distance</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">HAS_PERSIM</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;persim not available, returning NaN&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
-
-    <span class="n">dist_wass</span> <span class="o">=</span> <span class="n">wasserstein</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span><span class="p">)</span>
-    <span class="n">dist_wass</span> <span class="o">*=</span> <span class="n">norm_factor</span>
-    <span class="k">return</span> <span class="n">dist_wass</span></div>
-
-
-
-<div class="viewcode-block" id="compute_bottleneck">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_bottleneck">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_bottleneck</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span><span class="p">,</span> <span class="n">norm_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute bottleneck distance between persistence diagrams.</span>
-
-<span class="sd">    Handles infinite death times by:</span>
-<span class="sd">    1. Computing bottleneck on finite features</span>
-<span class="sd">    2. Taking max with birth time difference for infinite features</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    diag_hd, diag_ld : array-like</span>
-<span class="sd">        Persistence diagrams (birth, death) pairs</span>
-<span class="sd">    norm_factor : float</span>
-<span class="sd">        Normalization factor</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    float : Bottleneck distance</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">HAS_PERSIM</span><span class="p">:</span>
-        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;persim not available, returning NaN&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
-
-    <span class="n">diag_hd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">)</span>
-    <span class="n">diag_ld</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">diag_ld</span><span class="p">)</span>
-
-    <span class="c1"># Separate finite and infinite features</span>
-    <span class="n">finite_mask_hd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="n">diag_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="n">finite_mask_ld</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">diag_ld</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="n">diag_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-
-    <span class="n">diag_hd_finite</span> <span class="o">=</span> <span class="n">diag_hd</span><span class="p">[</span><span class="n">finite_mask_hd</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-    <span class="n">diag_ld_finite</span> <span class="o">=</span> <span class="n">diag_ld</span><span class="p">[</span><span class="n">finite_mask_ld</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-
-    <span class="c1"># Compute bottleneck on finite features</span>
-    <span class="n">dist_bott_finite</span> <span class="o">=</span> <span class="n">bottleneck</span><span class="p">(</span><span class="n">diag_hd_finite</span><span class="p">,</span> <span class="n">diag_ld_finite</span><span class="p">)</span>
-
-    <span class="c1"># Handle infinite features by comparing birth times</span>
-    <span class="n">diag_hd_inf</span> <span class="o">=</span> <span class="n">diag_hd</span><span class="p">[</span><span class="o">~</span><span class="n">finite_mask_hd</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">~</span><span class="n">finite_mask_hd</span><span class="p">)</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-    <span class="n">diag_ld_inf</span> <span class="o">=</span> <span class="n">diag_ld</span><span class="p">[</span><span class="o">~</span><span class="n">finite_mask_ld</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">~</span><span class="n">finite_mask_ld</span><span class="p">)</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-
-    <span class="n">dist_bott_inf</span> <span class="o">=</span> <span class="mf">0.0</span>
-    <span class="k">if</span> <span class="n">diag_hd_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">diag_ld_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="c1"># Extract birth times of infinite features</span>
-        <span class="n">births_hd</span> <span class="o">=</span> <span class="n">diag_hd_inf</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_hd_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-        <span class="n">births_ld</span> <span class="o">=</span> <span class="n">diag_ld_inf</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">diag_ld_inf</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-
-        <span class="c1"># Compute bottleneck distance on birth times</span>
-        <span class="k">if</span> <span class="n">births_hd</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">births_hd_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">births_hd</span><span class="p">,</span> <span class="n">births_hd</span><span class="p">])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">births_hd_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-
-        <span class="k">if</span> <span class="n">births_ld</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">births_ld_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="n">births_ld</span><span class="p">,</span> <span class="n">births_ld</span><span class="p">])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">births_ld_pairs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
-
-        <span class="n">dist_bott_inf</span> <span class="o">=</span> <span class="n">bottleneck</span><span class="p">(</span><span class="n">births_hd_pairs</span><span class="p">,</span> <span class="n">births_ld_pairs</span><span class="p">)</span>
-
-    <span class="c1"># Bottleneck distance is the maximum</span>
-    <span class="n">dist_bott</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">dist_bott_finite</span><span class="p">,</span> <span class="n">dist_bott_inf</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">dist_bott</span> <span class="o">*</span> <span class="n">norm_factor</span></div>
-
-
-
-<div class="viewcode-block" id="compute_global_metrics">
-<a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.compute_global_metrics">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">compute_global_metrics</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">dimension</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
-                          <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">metrics_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute global topological metrics based on persistence homology.</span>
-
-<span class="sd">    Computes distances between persistence diagrams and Betti curves:</span>
-<span class="sd">    - DTW, TWED, EMD for Betti curves</span>
-<span class="sd">    - Wasserstein, Bottleneck for persistence diagrams</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    data : array-like</span>
-<span class="sd">        High-dimensional data</span>
-<span class="sd">    layout : array-like</span>
-<span class="sd">        Low-dimensional embedding</span>
-<span class="sd">    dimension : int</span>
-<span class="sd">        Maximum homology dimension</span>
-<span class="sd">    subsample_threshold : float</span>
-<span class="sd">        Subsampling probability (must be between 0.0 and 1.0)</span>
-<span class="sd">    random_state : int</span>
-<span class="sd">        Random seed</span>
-<span class="sd">    n_steps : int</span>
-<span class="sd">        Number of points for Betti curves</span>
-<span class="sd">    metrics_only : bool</span>
-<span class="sd">        If True, return only metrics; otherwise include diagrams and curves</span>
-<span class="sd">    backend : str, optional</span>
-<span class="sd">        Persistence backend: &#39;fast&#39;, &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
-<span class="sd">    backend_kwargs : dict, optional</span>
-<span class="sd">        Backend-specific parameters. See compute_persistence_diagrams() for details.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    dict : Dictionary containing metrics (and optionally diagrams and betti curves)</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        If subsample_threshold is not between 0.0 and 1.0</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">subsample_threshold</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;subsample_threshold must be between 0.0 and 1.0, got </span><span class="si">{</span><span class="n">subsample_threshold</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">metrics</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s1">&#39;dtw&#39;</span><span class="p">:</span> <span class="p">[],</span>
-        <span class="s1">&#39;twed&#39;</span><span class="p">:</span> <span class="p">[],</span>
-        <span class="s1">&#39;emd&#39;</span><span class="p">:</span> <span class="p">[],</span>
-        <span class="s1">&#39;wass&#39;</span><span class="p">:</span> <span class="p">[],</span>
-        <span class="s1">&#39;bott&#39;</span><span class="p">:</span> <span class="p">[]</span>
+        <span class="s1">&#39;dtw_beta0&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">dtw_beta0</span><span class="p">),</span>
+        <span class="s1">&#39;dtw_beta1&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">dtw_beta1</span><span class="p">)</span>
     <span class="p">}</span>
-
-    <span class="n">betti_curves</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="p">[],</span>
-        <span class="s1">&#39;layout&#39;</span><span class="p">:</span> <span class="p">[]</span>
-    <span class="p">}</span>
-
-    <span class="c1"># Compute persistence diagrams (subsamples once internally)</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">compute_persistence_diagrams</span><span class="p">(</span>
-        <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_dim</span><span class="o">=</span><span class="n">dimension</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="n">subsample_threshold</span><span class="p">,</span>
-        <span class="n">random_state</span><span class="o">=</span><span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="n">backend_kwargs</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Get number of points after subsampling (from result data)</span>
-    <span class="n">n_points</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>  <span class="c1"># H0 diagram length</span>
-
-    <span class="n">diags</span> <span class="o">=</span> <span class="n">result</span>
-    <span class="n">backend_used</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;backend&#39;</span><span class="p">,</span> <span class="s1">&#39;unknown&#39;</span><span class="p">)</span>
-
-    <span class="c1"># Compute metrics for each dimension</span>
-    <span class="k">for</span> <span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">diags</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">],</span> <span class="n">diags</span><span class="p">[</span><span class="s1">&#39;layout&#39;</span><span class="p">]):</span>
-        <span class="c1"># Compute Betti curves</span>
-        <span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span> <span class="o">=</span> <span class="n">betti_curve</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">)</span>
-        <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span> <span class="o">=</span> <span class="n">betti_curve</span><span class="p">(</span><span class="n">diag_ld</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">)</span>
-
-        <span class="n">betti_curves</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">))</span>
-        <span class="n">betti_curves</span><span class="p">[</span><span class="s1">&#39;layout&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">))</span>
-
-        <span class="c1"># Compute distances on Betti curves</span>
-        <span class="n">norm_factor</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">n_points</span>
-        <span class="n">dist_dtw</span> <span class="o">=</span> <span class="n">compute_dtw</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">,</span> <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">,</span> <span class="n">norm_factor</span><span class="p">)</span>
-        <span class="n">dist_twed</span> <span class="o">=</span> <span class="n">compute_twed</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">,</span> <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">,</span> <span class="n">norm_factor</span><span class="p">)</span>
-        <span class="n">dist_emd</span> <span class="o">=</span> <span class="n">compute_emd</span><span class="p">(</span><span class="n">axis_x_hd</span><span class="p">,</span> <span class="n">axis_y_hd</span><span class="p">,</span> <span class="n">axis_x_ld</span><span class="p">,</span> <span class="n">axis_y_ld</span><span class="p">,</span> <span class="n">adjust_mass</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">norm_factor</span><span class="o">=</span><span class="n">norm_factor</span><span class="p">)</span>
-
-        <span class="c1"># Compute distances on persistence diagrams</span>
-        <span class="n">dist_wass</span> <span class="o">=</span> <span class="n">compute_wasserstein</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span><span class="p">,</span> <span class="n">norm_factor</span><span class="p">)</span>
-        <span class="n">dist_bott</span> <span class="o">=</span> <span class="n">compute_bottleneck</span><span class="p">(</span><span class="n">diag_hd</span><span class="p">,</span> <span class="n">diag_ld</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>  <span class="c1"># No normalization for bottleneck</span>
-
-        <span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;dtw&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dist_dtw</span><span class="p">)</span>
-        <span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;twed&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dist_twed</span><span class="p">)</span>
-        <span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;emd&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dist_emd</span><span class="p">)</span>
-        <span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;wass&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dist_wass</span><span class="p">)</span>
-        <span class="n">metrics</span><span class="p">[</span><span class="s1">&#39;bott&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dist_bott</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">metrics_only</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="n">backend_used</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;atlas&#39;</span><span class="p">}</span>
 
-    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span> <span class="s1">&#39;diags&#39;</span><span class="p">:</span> <span class="n">diags</span><span class="p">,</span> <span class="s1">&#39;bettis&#39;</span><span class="p">:</span> <span class="n">betti_curves</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="n">backend_used</span><span class="p">}</span></div>
+    <span class="c1"># Include Betti curves if requested</span>
+    <span class="n">betti_curves</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;data&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;filtration&#39;</span><span class="p">:</span> <span class="n">filtration_hd</span><span class="p">,</span>
+            <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">beta_0_hd</span><span class="p">,</span>
+            <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">beta_1_hd</span>
+        <span class="p">},</span>
+        <span class="s1">&#39;layout&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;filtration&#39;</span><span class="p">:</span> <span class="n">filtration_ld</span><span class="p">,</span>
+            <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">beta_0_ld</span><span class="p">,</span>
+            <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">beta_1_ld</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span> <span class="s1">&#39;bettis&#39;</span><span class="p">:</span> <span class="n">betti_curves</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;atlas&#39;</span><span class="p">}</span></div>
 
 
 
@@ -1713,8 +1191,7 @@
 <div class="viewcode-block" id="evaluate_embedding">
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.evaluate_embedding">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_embedding</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-                      <span class="n">max_homology_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                      <span class="n">persistence_backend</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_threads</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">compute_distortion</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                      <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_distortion</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                       <span class="n">compute_context</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_topology</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Comprehensive evaluation of a dimensionality reduction embedding.</span>
@@ -1733,16 +1210,10 @@
 <span class="sd">        Number of neighbors for kNN metrics</span>
 <span class="sd">    subsample_threshold : float</span>
 <span class="sd">        Subsampling probability for all metrics (must be between 0.0 and 1.0, default 0.5)</span>
-<span class="sd">    max_homology_dim : int</span>
-<span class="sd">        Maximum homology dimension for persistence</span>
 <span class="sd">    random_state : int</span>
 <span class="sd">        Random seed</span>
 <span class="sd">    use_gpu : bool</span>
 <span class="sd">        Whether to use GPU acceleration</span>
-<span class="sd">    persistence_backend : str, optional</span>
-<span class="sd">        Persistence backend: &#39;giotto-ph&#39;, &#39;ripser++&#39;, &#39;ripser&#39;, or None for auto</span>
-<span class="sd">    n_threads : int</span>
-<span class="sd">        Number of threads for giotto-ph (-1 for all cores)</span>
 <span class="sd">    compute_distortion : bool</span>
 <span class="sd">        Whether to compute distortion metrics (default True)</span>
 <span class="sd">    compute_context : bool</span>
@@ -1782,19 +1253,13 @@
             <span class="n">random_state</span><span class="p">,</span> <span class="n">use_gpu</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
 
-    <span class="c1"># Global topological metrics</span>
+    <span class="c1"># Global topological metrics using Betti curve comparison</span>
     <span class="k">if</span> <span class="n">compute_topology</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">HAS_GIOTTO_PH</span> <span class="ow">or</span> <span class="n">HAS_RIPSER_PP</span> <span class="ow">or</span> <span class="n">HAS_RIPSER</span><span class="p">:</span>
-            <span class="n">backend</span> <span class="o">=</span> <span class="n">persistence_backend</span> <span class="ow">or</span> <span class="n">get_persistence_backend</span><span class="p">()</span>
-            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing topological metrics using backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
-            <span class="c1"># Pass n_threads through backend_kwargs for giotto-ph</span>
-            <span class="n">backend_kw</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;n_threads&#39;</span><span class="p">:</span> <span class="n">n_threads</span><span class="p">}</span> <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;giotto-ph&#39;</span> <span class="k">else</span> <span class="p">{}</span>
-            <span class="n">results</span><span class="p">[</span><span class="s1">&#39;topology&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_global_metrics</span><span class="p">(</span>
-                <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">max_homology_dim</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span>
-                <span class="n">random_state</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">backend_kwargs</span><span class="o">=</span><span class="n">backend_kw</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Skipping topological metrics (no persistence backend available)&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing topological metrics using Betti curve comparison...&quot;</span><span class="p">)</span>
+        <span class="n">results</span><span class="p">[</span><span class="s1">&#39;topology&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_global_metrics</span><span class="p">(</span>
+            <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span>
+            <span class="n">random_state</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span>
+        <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">results</span></div>
 
