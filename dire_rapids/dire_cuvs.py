@@ -393,9 +393,10 @@ class DiReCuVS(DiRePyTorch):
             self.logger.info(f"Built IVF-PQ index with {n_lists} lists, PQ dim={pq_dim}")
 
         elif index_type == 'cagra':
-            # Graph-based index for very large datasets
+            cagra_metric = 'sqeuclidean' if metric == 'euclidean' else metric
+
             build_params = cagra.IndexParams(
-                metric=metric,
+                metric=cagra_metric,
                 graph_degree=32,
                 intermediate_graph_degree=64,
                 build_algo='nn_descent'
