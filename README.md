@@ -212,7 +212,7 @@ General-purpose framework for running dimensionality reduction algorithms with a
 ### Quick Start with ReducerRunner
 
 ```python
-from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
+from dire_rapids.utils import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire
 
 # Create a configuration
@@ -242,7 +242,7 @@ result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_
 
 ```python
 from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
-from dire_rapids.dire_pytorch import ReducerConfig
+from dire_rapids.utils import ReducerConfig
 from dire_rapids import create_dire
 
 # Compare default reducers (DiRe, cuML UMAP, cuML TSNE)

@@ -178,7 +178,7 @@ The **ReducerRunner** framework provides a unified interface for running and com
 ### Basic Usage
 
 ```python
-from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
+from dire_rapids.utils import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire
 
 # Create configuration
@@ -205,7 +205,7 @@ result = runner.run("cytof:levine13")
 
 ```python
 from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
-from dire_rapids.dire_pytorch import ReducerConfig
+from dire_rapids.utils import ReducerConfig
 from dire_rapids import create_dire
 
 # Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
@@ -238,7 +238,7 @@ Comprehensive benchmarking notebook:
   - Context: SVM/kNN classification accuracy
   - Topology: DTW distances between Betti curves
 
-### ReducerRunner (in dire_rapids.dire_pytorch)
+### ReducerRunner (in dire_rapids.utils)
 General-purpose framework for dimensionality reduction:
 - **ReducerRunner** class for running any sklearn-compatible reducer
 - **ReducerConfig** dataclass for configuring reducers

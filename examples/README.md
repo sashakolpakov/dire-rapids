@@ -14,12 +14,12 @@ See `../benchmarking/dire_rapids_benchmarks.ipynb` for complete examples.
 - `reducer_runner_demo.py` - Basic ReducerRunner usage with sklearn and OpenML datasets
 - `reducer_runner_dire_datasets.py` - Using DiRe geometric datasets (disk, sphere, ellipsoid)
 - `compare_reducers_demo.py` - Comparing multiple reducers with metrics
-- `../benchmarking/reducer_runner.py` - Main ReducerRunner implementation
+- `../dire_rapids/utils.py` - Main ReducerRunner and ReducerConfig implementation
 - `../benchmarking/compare_reducers.py` - Reducer comparison framework (use with `%run` in notebooks)
 
 **Quick Start:**
 ```python
-from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
+from dire_rapids.utils import ReducerRunner, ReducerConfig
 from dire_rapids import create_dire
 
 # Create configuration
@@ -50,18 +50,13 @@ Compare embeddings using topological and geometric metrics.
 
 **Quick Start:**
 ```python
-from dire_rapids.metrics import compute_global_metrics
+from dire_rapids.metrics import evaluate_embedding
 
-# Compare embeddings
-metrics = compute_global_metrics(
-    high_dim_data,
-    low_dim_embedding,
-    subsample_threshold=0.1,
-    n_steps=100,
-    use_gpu=False
-)
-print(f"DTW β₀: {metrics['metrics']['dtw_beta0']:.6f}")
-print(f"DTW β₁: {metrics['metrics']['dtw_beta1']:.6f}")
+# Full evaluation with topology
+results = evaluate_embedding(data, layout, labels, compute_topology=True)
+print(f"Stress: {results['local']['stress']:.4f}")
+print(f"DTW β₀: {results['topology']['metrics']['dtw_beta0']:.6f}")
+print(f"DTW β₁: {results['topology']['metrics']['dtw_beta1']:.6f}")
 ```
 
 ### 3. Financial Market Microstructure Analysis

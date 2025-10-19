@@ -190,7 +190,7 @@ Framework for running sklearn-compatible reducers with automatic data loading an
 
 .. code-block:: python
 
-   from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
+   from dire_rapids.utils import ReducerRunner, ReducerConfig
    from dire_rapids import create_dire
 
    config = ReducerConfig(
