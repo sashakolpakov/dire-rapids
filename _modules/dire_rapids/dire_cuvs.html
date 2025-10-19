@@ -469,9 +469,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-PQ index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists, PQ dim=</span><span class="si">{</span><span class="n">pq_dim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span><span class="p">:</span>
-            <span class="c1"># Graph-based index for very large datasets</span>
+            <span class="n">cagra_metric</span> <span class="o">=</span> <span class="s1">&#39;sqeuclidean&#39;</span> <span class="k">if</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;euclidean&#39;</span> <span class="k">else</span> <span class="n">metric</span>
+
             <span class="n">build_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
-                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="n">cagra_metric</span><span class="p">,</span>
                 <span class="n">graph_degree</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
                 <span class="n">intermediate_graph_degree</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
                 <span class="n">build_algo</span><span class="o">=</span><span class="s1">&#39;nn_descent&#39;</span>
