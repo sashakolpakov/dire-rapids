@@ -608,7 +608,8 @@ class DiRePyTorch(TransformerMixin):
             chunk_size = min(1000, n_samples)  # Smaller chunks for CPU
 
         # Process in chunks to manage memory
-        knn_indices_torch = torch.tensor(self._knn_indices, device=self.device)
+        # Convert to long dtype for indexing (cuVS returns uint32, PyTorch requires int64)
+        knn_indices_torch = torch.tensor(self._knn_indices, dtype=torch.long, device=self.device)
         
         for start_idx in range(0, n_samples, chunk_size):
             end_idx = min(start_idx + chunk_size, n_samples)

@@ -256,39 +256,42 @@ class DiReCuVS(DiRePyTorch):
         self.cuvs_search_params = cuvs_search_params
         self.cuvs_index = None
     
-    def _select_cuvs_index_type(self, n_samples, n_dims):
+    def _select_cuvs_index_type(self, n_samples, n_dims, metric='sqeuclidean'):
         """
         Automatically select optimal cuVS index type based on data characteristics.
-        
+
         This private method uses heuristics to select the most appropriate cuVS index
-        type based on dataset size, dimensionality, and performance trade-offs.
-        
+        type based on dataset size, dimensionality, metric, and performance trade-offs.
+
         Parameters
         ----------
         n_samples : int
             Number of samples in the dataset.
         n_dims : int
             Number of dimensions/features per sample.
-            
+        metric : str, default='sqeuclidean'
+            Distance metric to use. CAGRA only supports 'sqeuclidean' and 'inner_product'.
+
         Returns
         -------
         str
             Selected cuVS index type ('flat', 'ivf_flat', 'ivf_pq', or 'cagra').
-            
+
         Notes
         -----
         Private method, should not be called directly. Used by _compute_knn().
-        
+
         Selection Heuristics:
         - **< 50K samples**: 'flat' (exact search)
         - **50K-500K samples or >500D**: 'ivf_flat' (good balance)
         - **500K-5M samples**: 'ivf_pq' (memory efficient)
-        - **> 5M samples and ≤500D**: 'cagra' (best performance)
+        - **> 5M samples and ≤500D**: 'cagra' (best performance, if metric is supported)
         - **> 5M samples and >500D**: 'ivf_pq' (high-D fallback)
+        - **cosine metric**: Forces IVF method (CAGRA doesn't support cosine)
         """
         if self.cuvs_index_type != 'auto':
             return self.cuvs_index_type
-        
+
         # Decision tree based on scale and dimensionality
         # For high dimensions (>500), prefer IVF methods over graph-based
         if n_samples < 50000:
@@ -301,8 +304,13 @@ class DiReCuVS(DiRePyTorch):
         if n_samples < 5000000:
             # Large dataset - IVF with compression
             return 'ivf_pq'
-        # Very large dataset with moderate dimensions - graph-based
-        return 'cagra' if n_dims <= 500 else 'ivf_pq'
+        # Very large dataset with moderate dimensions
+        # CAGRA is best for performance, but only if metric is supported
+        if n_dims <= 500 and metric in ('sqeuclidean', 'euclidean', 'inner_product'):
+            return 'cagra'
+        else:
+            # Fallback to IVF-PQ for unsupported metrics (e.g., cosine) or high-D
+            return 'ivf_pq'
     
     def _build_cuvs_index(self, X_gpu, index_type, metric='euclidean'):
         """
@@ -393,7 +401,25 @@ class DiReCuVS(DiRePyTorch):
             self.logger.info(f"Built IVF-PQ index with {n_lists} lists, PQ dim={pq_dim}")
 
         elif index_type == 'cagra':
-            cagra_metric = 'sqeuclidean' if metric == 'euclidean' else metric
+            # CAGRA only supports sqeuclidean and inner_product metrics
+            if metric == 'euclidean':
+                cagra_metric = 'sqeuclidean'
+            elif metric == 'sqeuclidean':
+                cagra_metric = 'sqeuclidean'
+            elif metric == 'inner_product':
+                cagra_metric = 'inner_product'
+            elif metric == 'cosine':
+                raise ValueError(
+                    "CAGRA index does not support cosine metric. "
+                    "Use IVF-Flat or IVF-PQ index types for cosine distance, "
+                    "or normalize your data and use inner_product metric."
+                )
+            else:
+                raise ValueError(
+                    f"CAGRA index does not support metric '{metric}'. "
+                    f"Valid metrics: ['sqeuclidean', 'inner_product'] "
+                    f"(euclidean is automatically converted to sqeuclidean)."
+                )
 
             build_params = cagra.IndexParams(
                 metric=cagra_metric,
@@ -407,7 +433,7 @@ class DiReCuVS(DiRePyTorch):
 
             index = cagra.build(build_params, X_gpu)
 
-            self.logger.info("Built CAGRA graph-based index")
+            self.logger.info(f"Built CAGRA graph-based index with {cagra_metric} metric")
 
         else:
             raise ValueError(f"Unknown index type: {index_type}")
@@ -590,23 +616,28 @@ class DiReCuVS(DiRePyTorch):
         self.logger.info(f"Computing {self.n_neighbors}-NN graph using cuVS...")
 
         # Determine which metric to use for cuVS
-        # Default to euclidean, but allow named metrics
-        cuvs_metric = 'euclidean'
+        # Default to sqeuclidean (cuVS default), but allow named metrics
+        cuvs_metric = 'sqeuclidean'
         if self.metric_spec is not None and isinstance(self.metric_spec, str):
             metric_lower = self.metric_spec.strip().lower()
-            if metric_lower in ('euclidean', 'l2', 'sqeuclidean'):
+            if metric_lower in ('euclidean', 'l2'):
                 cuvs_metric = 'euclidean'
+            elif metric_lower == 'sqeuclidean':
+                cuvs_metric = 'sqeuclidean'
             elif metric_lower == 'inner_product':
                 cuvs_metric = 'inner_product'
-            # Note: cuVS doesn't support cosine directly, would need normalization
+            elif metric_lower == 'cosine':
+                # Supported by IVF-Flat, IVF-PQ, and flat index types
+                # Note: CAGRA does not support cosine, will be validated in _build_cuvs_index
+                cuvs_metric = 'cosine'
 
         # Convert to CuPy array
         # Note: cuVS requires float32, not float16
         # cuVS also requires C-contiguous (row-major) arrays
         X_gpu = cp.asarray(X, dtype=cp.float32, order='C')
 
-        # Select index type
-        index_type = self._select_cuvs_index_type(n_samples, n_dims)
+        # Select index type (pass metric to avoid selecting CAGRA for unsupported metrics)
+        index_type = self._select_cuvs_index_type(n_samples, n_dims, cuvs_metric)
 
         # Build index
         if index_type != 'flat':
