@@ -398,7 +398,7 @@ class DiReCuVS(DiRePyTorch):
                 metric=metric,
                 graph_degree=32,
                 intermediate_graph_degree=64,
-                graph_build_algo='nn_descent'
+                build_algo='nn_descent'
             )
 
             if self.cuvs_build_params:
