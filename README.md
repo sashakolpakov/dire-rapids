@@ -260,53 +260,37 @@ results = compare_reducers("digits", reducers=reducers)
 
 ## Metrics Module
 
-Comprehensive evaluation metrics for dimensionality reduction quality with GPU acceleration:
+Evaluation metrics for dimensionality reduction quality:
 
 ```python
 from dire_rapids.metrics import evaluate_embedding
 
-results = evaluate_embedding(data, layout, labels)
+# Full evaluation
+results = evaluate_embedding(data, layout, labels, compute_topology=True)
 print(f"Stress: {results['local']['stress']:.4f}")
 print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
+print(f"DTW β₀: {results['topology']['metrics']['dtw_beta0']:.6f}")
+print(f"DTW β₁: {results['topology']['metrics']['dtw_beta1']:.6f}")
 ```
 
-**Available metrics:** distortion (stress, neighborhood preservation), context (SVM/kNN classification), topology (persistence diagrams, Betti curves, Wasserstein/bottleneck distances).
+**Metrics:**
+- **Distortion**: stress, neighborhood preservation
+- **Context**: SVM/kNN classification accuracy
+- **Topology**: DTW distances between Betti curves (β₀, β₁)
 
-**Persistence backends:** giotto-ph (recommended), ripser++ (GPU), ripser (CPU). Auto-selected.
-
-See [METRICS_README.md](METRICS_README.md) and [full documentation](https://sashakolpakov.github.io/dire-rapids/).
-
-### Atlas Topology Computation (Under Development)
-
-Local kNN atlas approach for computing H0/H1 topological features:
-
-```python
-from dire_rapids.atlas_cpu import compute_h0_h1_atlas_cpu
-from dire_rapids.atlas_gpu import compute_h0_h1_atlas_gpu
-
-# CPU: Compute local Betti numbers via Hodge Laplacian
-betti_curves, stats = compute_h0_h1_atlas_cpu(data, n_neighbors=30)
-print(f"H0 at radius {stats['radii'][10]:.3f}: {betti_curves[10, 0]}")
-
-# GPU: cuVS-accelerated kNN with giotto-ph for persistence
-betti_curves_gpu = compute_h0_h1_atlas_gpu(data, n_neighbors=30)
-```
-
-**Features:** kNN-based local patches, combinatorial Nystroem approximation, CPU/GPU backends, Betti curve extraction.
-
-**Status:** ⚠️ Active development - API may change. See `tests/test_atlas_*.py` for usage examples.
+See [METRICS_README.md](METRICS_README.md) and [examples/metrics_swiss_roll.py](examples/metrics_swiss_roll.py).
 
 ## Testing
 
 ```bash
-# Run basic CPU tests
-pytest tests/test_cpu_basic.py -v
+# Run CPU tests (CI)
+pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v
 
 # Run all tests
 pytest tests/ -v
 
-# Test metrics module
-python examples/metrics_simple_test.py
+# Test comprehensive suite
+python tests/test_comprehensive.py
 ```
 
 ### Citation

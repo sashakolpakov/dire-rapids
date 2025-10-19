@@ -1,21 +1,18 @@
 dire-rapids
 ===========
 
-PyTorch and RAPIDS (cuVS/cuML) accelerated dimensionality reduction.
-
-**dire-rapids** provides high-performance dimensionality reduction using the DiRe algorithm
-with multiple backend implementations optimized for different scales and hardware configurations.
+PyTorch and RAPIDS accelerated dimensionality reduction.
 
 Features
 --------
 
-* **Multiple backends**: PyTorch, memory-efficient PyTorch, and RAPIDS cuVS
-* **Automatic backend selection** based on hardware and dataset characteristics
-* **Custom distance metrics** for k-NN computation (string expressions or callables)
-* **GPU acceleration** with CUDA support
-* **Memory-efficient processing** for large datasets (>100K points)
-* **High-performance visualizations** with WebGL rendering (handles 100K+ points)
-* **Scikit-learn compatible API**
+* Multiple backends: PyTorch, memory-efficient, RAPIDS cuVS
+* Automatic backend selection
+* Custom distance metrics for k-NN
+* GPU acceleration with CUDA
+* Memory-efficient processing (>100K points)
+* WebGL visualization (100K+ points)
+* Scikit-learn compatible API
 
 Backends
 --------
@@ -142,125 +139,80 @@ Automatic Backend Selection
 Metrics Module
 ~~~~~~~~~~~~~~
 
-Comprehensive evaluation metrics for dimensionality reduction quality:
+Evaluation metrics for dimensionality reduction quality:
 
 .. code-block:: python
 
    from dire_rapids.metrics import evaluate_embedding
 
-   # Comprehensive evaluation
-   results = evaluate_embedding(data, layout, labels)
+   # Full evaluation
+   results = evaluate_embedding(data, layout, labels, compute_topology=True)
 
-   # Access metrics
    print(f"Stress: {results['local']['stress']:.4f}")
    print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
-   print(f"Wasserstein: {results['topology']['metrics']['wass'][0]:.6f}")
+   print(f"DTW β₀: {results['topology']['metrics']['dtw_beta0']:.6f}")
+   print(f"DTW β₁: {results['topology']['metrics']['dtw_beta1']:.6f}")
 
-**Available metrics:**
+**Metrics:**
 
 * **Distortion**: stress, neighborhood preservation
-* **Context**: SVM/kNN classification accuracy preservation
-* **Topology**: persistence diagrams, Betti curves, Wasserstein/bottleneck distances
-
-**Persistence backends** (auto-selected): giotto-ph, ripser++, ripser
+* **Context**: SVM/kNN classification accuracy
+* **Topology**: DTW distances between Betti curves (β₀, β₁) via kNN-atlas approach and Hodge Laplacians
 
 See :doc:`api/dire_rapids.metrics` for full API reference.
 
 Custom Distance Metrics
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-DiRe supports custom distance metrics for k-nearest neighbor computation:
+Custom metrics for k-nearest neighbor computation:
 
 .. code-block:: python
 
-   # Using L1 (Manhattan) distance
-   reducer = DiRePyTorch(
-       metric='(x - y).abs().sum(-1)',
-       n_neighbors=32
-   )
+   # L1 distance
+   reducer = DiRePyTorch(metric='(x - y).abs().sum(-1)', n_neighbors=32)
    embedding = reducer.fit_transform(X)
 
-   # Using custom callable metric
+   # Cosine distance
    def cosine_distance(x, y):
-       return 1 - (x * y).sum(-1) / (
-           x.norm(dim=-1, keepdim=True) *
-           y.norm(dim=-1, keepdim=True) + 1e-8
-       )
+       return 1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)
 
    reducer = DiRePyTorch(metric=cosine_distance)
    embedding = reducer.fit_transform(X)
 
-   # Custom metrics work with all backends
-   reducer = create_dire(
-       metric='(x - y).abs().sum(-1)',  # L1 distance
-       memory_efficient=True
-   )
-   embedding = reducer.fit_transform(X)
+**Metric types:** ``None``/``'euclidean'``/``'l2'`` (default), string expressions, callable functions
 
-**Supported metric types:**
-
-* ``None`` or ``'euclidean'``/``'l2'``: Fast built-in Euclidean (default)
-* **String expressions**: Evaluated tensor expressions using ``x`` and ``y``
-* **Callable functions**: Custom Python functions taking ``(x, y)`` tensors
-
-Note: Layout forces remain Euclidean regardless of k-NN metric for optimal performance.
+Note: Layout forces use Euclidean distance regardless of k-NN metric.
 
 ReducerRunner Framework
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-General-purpose framework for running any dimensionality reduction algorithm with automatic data loading, visualization, and metrics computation. Replaces the previous ``DiReRunner`` and supports any sklearn-compatible reducer. See ``benchmarking/dire_rapids_benchmarks.ipynb`` for complete examples.
+Framework for running sklearn-compatible reducers with automatic data loading and metrics.
 
 .. code-block:: python
 
    from dire_rapids.dire_pytorch import ReducerRunner, ReducerConfig
    from dire_rapids import create_dire
 
-   # Create configuration
    config = ReducerConfig(
        name="DiRe",
        reducer_class=create_dire,
        reducer_kwargs={"n_neighbors": 16},
-       visualize=True,
-       categorical_labels=True,
-       max_points=10000  # Max points for WebGL visualization (subsamples if larger)
+       visualize=True
    )
 
-   # Run on dataset
    runner = ReducerRunner(config=config)
    result = runner.run("sklearn:blobs")
-   result = runner.run("dire:sphere_uniform", dataset_kwargs={"n_features": 10, "n_samples": 1000})
-
-   # For large datasets, increase max_points
-   config.max_points = 50000
    result = runner.run("cytof:levine32")
 
-**Data sources:**
+**Data sources:** ``sklearn:name``, ``openml:name``, ``cytof:name``, ``dire:name``, ``file:path``
 
-* ``sklearn:name`` - sklearn datasets (blobs, digits, iris, wine, moons, swiss_roll, etc.)
-* ``openml:name`` - OpenML datasets by name or ID
-* ``cytof:name`` - CyTOF datasets (levine13, levine32)
-* ``dire:name`` - DiRe geometric datasets (``disk_uniform``, ``sphere_uniform``, ``ellipsoid_uniform``)
-* ``file:path`` - Local files (.csv, .npy, .npz, .parquet)
-
-**Reducer comparison:**
+**Compare reducers:**
 
 .. code-block:: python
 
-   from benchmarking.compare_reducers import compare_reducers, print_comparison_summary
-   from dire_rapids.dire_pytorch import ReducerConfig
-   from dire_rapids import create_dire
+   from benchmarking.compare_reducers import compare_reducers
 
-   # Compare default reducers (DiRe, cuML UMAP, cuML TSNE)
-   results = compare_reducers("sklearn:blobs", metrics=['distortion', 'context'])
-   print_comparison_summary(results)
-
-   # Compare specific reducers
-   from cuml import UMAP
-   reducers = [
-       ReducerConfig("DiRe", create_dire, {"n_neighbors": 16}),
-       ReducerConfig("UMAP", UMAP, {"n_neighbors": 15})
-   ]
-   results = compare_reducers("digits", reducers=reducers)
+   results = compare_reducers("sklearn:digits", metrics=['distortion', 'context', 'topology'])
 
 Indices and tables
 ==================

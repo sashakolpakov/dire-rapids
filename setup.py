@@ -24,7 +24,6 @@ setup(
         "plotly>=5.0.0",
         "psutil>=5.8.0",
         "websockets>=10.3,<16.0.0",
-        "ripser>=0.6.0",
         "fastdtw>=0.3.0",
     ],
 

@@ -124,7 +124,8 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
 
     # Create filtration values based on edge distances
     all_distances = np.array(list(edge_distances.values()))
-    filtration_values = np.percentile(all_distances, np.linspace(0, 100, n_steps))
+    # Reverse order: from max (100) to min (0) so n_steps=1 gives full complex
+    filtration_values = np.percentile(all_distances, np.linspace(100, 0, n_steps))
 
     # Arrays to store results
     beta_0_curve = []
@@ -297,7 +298,7 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
         index = brute_force.build(data_gpu, metric="euclidean")
         distances_gpu, indices_gpu = brute_force.search(index, data_gpu, k_neighbors + 1)
     else:
-        nn = cumlNearestNeighbors(n_neighbors=k_neighbors + 1, metric='euclidean')
+        nn = cumlNearestNeighbors(n_neighbors=k_neighbors + 1, metric='euclidean')  # pylint: disable=used-before-assignment
         nn.fit(data_gpu)
         distances_gpu, indices_gpu = nn.kneighbors(data_gpu)
         distances_gpu = cp.asarray(distances_gpu)
@@ -363,7 +364,8 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
 
     # Create filtration values
     all_distances = np.array(list(edge_distances.values()))
-    filtration_values = np.percentile(all_distances, np.linspace(0, 100, n_steps))
+    # Reverse order: from max (100) to min (0) so n_steps=1 gives full complex
+    filtration_values = np.percentile(all_distances, np.linspace(100, 0, n_steps))
 
     beta_0_curve = []
     beta_1_curve = []

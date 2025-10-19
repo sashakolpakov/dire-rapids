@@ -159,7 +159,7 @@ def test_imports():
 
     global DiRe, DiReMemoryEfficient
     global compute_stress, compute_neighbor_score, evaluate_embedding
-    global compute_h0_h1_atlas_cpu, compute_h0_h1_atlas_gpu
+    global compute_h0_h1_knn
 
     from dire_rapids.dire_pytorch import DiRe
     print("  ✓ DiRe")
@@ -170,19 +170,10 @@ def test_imports():
     from dire_rapids.metrics import (
         compute_stress,
         compute_neighbor_score,
-        evaluate_embedding
+        evaluate_embedding,
+        compute_h0_h1_knn
     )
-    print("  ✓ metrics")
-
-    from dire_rapids.atlas_cpu import compute_h0_h1_atlas_cpu
-    print("  ✓ atlas_cpu")
-
-    try:
-        from dire_rapids.atlas_gpu import compute_h0_h1_atlas_gpu
-        print("  ✓ atlas_gpu")
-    except ImportError as e:
-        print(f"  ⚠ atlas_gpu not available: {e}")
-        compute_h0_h1_atlas_gpu = None
+    print("  ✓ metrics (including compute_h0_h1_knn)")
 
     print("All imports successful")
 
@@ -430,15 +421,15 @@ def test_full_metrics_cpu():
     )
     layout = model.fit_transform(X)
 
-    print("\nEvaluating embedding (distortion + context, no topology)...")
+    print("\nEvaluating embedding (distortion + context + topology)...")
     results = evaluate_embedding(
         X, layout, labels=y,
         n_neighbors=15,
-        subsample_threshold=1.0,
+        subsample_threshold=0.1,
         use_gpu=False,
         compute_distortion=True,
         compute_context=True,
-        compute_topology=False  # Skip topology for speed
+        compute_topology=True
     )
 
     print("\nResults:")
@@ -450,8 +441,18 @@ def test_full_metrics_cpu():
         print(f"  SVM: {results['context']['svm']}")
         print(f"  kNN: {results['context']['knn']}")
 
+    if 'topology' in results:
+        print(f"  Topology:")
+        if 'metrics' in results['topology']:
+            topo = results['topology']['metrics']
+            if 'dtw_beta0' in topo:
+                print(f"    DTW β₀: {topo['dtw_beta0']:.6f}")
+            if 'dtw_beta1' in topo:
+                print(f"    DTW β₁: {topo['dtw_beta1']:.6f}")
+
     assert 'local' in results, "Missing local metrics"
     assert 'context' in results, "Missing context metrics"
+    assert 'topology' in results, "Missing topology metrics"
 
     print("Full metrics CPU test passed")
 
@@ -476,20 +477,16 @@ def test_atlas_cpu():
     print(f"Computing H0/H1 for circle with {n_samples} points...")
     print("Parameters: k_neighbors=20, density_threshold=0.8")
 
-    h0, h1 = compute_h0_h1_atlas_cpu(
+    beta_0, beta_1 = compute_h0_h1_knn(
         data,
         k_neighbors=20,
-        density_threshold=0.8
+        density_threshold=0.8,
+        use_gpu=False
     )
-
-    beta_0 = len(h0[h0[:, 1] == np.inf])
-    beta_1 = len(h1[h1[:, 1] == np.inf])
 
     print(f"\nResults:")
     print(f"  β₀ (connected components): {beta_0}")
     print(f"  β₁ (loops): {beta_1}")
-    print(f"  H0 diagram shape: {h0.shape}")
-    print(f"  H1 diagram shape: {h1.shape}")
 
     # Circle should have 1 component and 1 loop
     assert beta_0 == 1, f"Expected β₀=1 for circle, got {beta_0}"
@@ -504,8 +501,8 @@ def test_atlas_cpu():
 
 def test_atlas_gpu():
     """Test atlas GPU implementation."""
-    if not (cp is not None and compute_h0_h1_atlas_gpu is not None):
-        print("⚠ CuPy or atlas_gpu not available, skipping")
+    if cp is None:
+        print("⚠ CuPy not available, skipping")
         return
 
     print("Testing atlas GPU implementation...")
@@ -522,20 +519,16 @@ def test_atlas_gpu():
     print(f"Computing H0/H1 for circle with {n_samples} points...")
     print("Parameters: k_neighbors=20, density_threshold=0.8")
 
-    h0, h1 = compute_h0_h1_atlas_gpu(
+    beta_0, beta_1 = compute_h0_h1_knn(
         data,
         k_neighbors=20,
-        density_threshold=0.8
+        density_threshold=0.8,
+        use_gpu=True
     )
-
-    beta_0 = len(h0[h0[:, 1] == np.inf])
-    beta_1 = len(h1[h1[:, 1] == np.inf])
 
     print(f"\nResults:")
     print(f"  β₀ (connected components): {beta_0}")
     print(f"  β₁ (loops): {beta_1}")
-    print(f"  H0 diagram shape: {h0.shape}")
-    print(f"  H1 diagram shape: {h1.shape}")
 
     # Circle should have 1 component and 1 loop
     assert beta_0 == 1, f"Expected β₀=1 for circle, got {beta_0}"

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `test_comprehensive.py` script runs a complete test suite for dire-rapids on the MNIST 70k dataset, testing both CPU and GPU implementations.
+The `test_comprehensive.py` script runs a complete test suite for dire-rapids on the MNIST 70k dataset, testing both CPU and GPU implementations including the new atlas-based topological metrics.
 
 ## Quick Start
 
@@ -57,17 +57,20 @@ python test_comprehensive.py
    - Skipped if unavailable
 
 ### 8. **Full Metrics Evaluation CPU** (Critical)
-   - Local metrics (stress, neighbor)
-   - Context metrics (SVM, kNN)
-   - 1,000 sample subset
+   - Local metrics (stress, neighbor preservation)
+   - Context metrics (SVM, kNN classification accuracy)
+   - Topology metrics (DTW β₀ and β₁ between Betti curves)
+   - 1,000 sample subset with subsample_threshold=0.1
 
 ### 9. **Atlas CPU** (Critical)
-   - H0/H1 topology computation
-   - Tested on synthetic circle
-   - Validates Betti numbers
+   - H0/H1 Betti number computation using atlas approach
+   - Uses `compute_h0_h1_knn` from metrics module
+   - Tested on synthetic circle (300 points)
+   - Validates: β₀=1 (connected components), β₁=1 (loops)
+   - Uses Hodge Laplacian eigenvalue analysis
 
 ### 10. **Atlas GPU** (Non-critical)
-   - GPU-accelerated atlas
+   - GPU-accelerated atlas approach
    - Tested on synthetic circle
    - Skipped if CuPy unavailable
 

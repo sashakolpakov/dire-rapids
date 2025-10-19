@@ -1,62 +1,40 @@
 # Metrics Module
 
-Comprehensive evaluation metrics for dimensionality reduction quality with GPU acceleration.
+Evaluation metrics for dimensionality reduction quality.
 
 ## Quick Start
 
 ```python
 from dire_rapids.metrics import evaluate_embedding
 
-results = evaluate_embedding(data, layout, labels)
+results = evaluate_embedding(data, layout, labels, compute_topology=True)
 print(f"Stress: {results['local']['stress']:.4f}")
 print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
-print(f"Wasserstein: {results['topology']['metrics']['wass'][0]:.6f}")
+print(f"DTW β₀: {results['topology']['metrics']['dtw_beta0']:.6f}")
+print(f"DTW β₁: {results['topology']['metrics']['dtw_beta1']:.6f}")
 ```
 
-## Metrics Categories
+## Metrics
 
 1. **Distortion**: stress, neighborhood preservation
 2. **Context**: SVM/kNN classification accuracy
-3. **Topology**: persistence diagrams, Betti curves, distances
+3. **Topology**: DTW distances between Betti curves (β₀, β₁)
 
 ## Installation
 
 ```bash
-# Core
-pip install numpy cupy cuml scikit-learn
+pip install numpy scikit-learn fastdtw
 
-# Persistence backends (choose one or more)
-pip install giotto-ph         # Recommended
-pip install ripserplusplus    # GPU
-pip install ripser            # CPU fallback
-
-# Distance metrics
-pip install persim POT fastdtw twed
+# Optional GPU acceleration
+pip install cupy cuml
 ```
-
-## Persistence Backends
-
-Multiple backends with automatic selection:
-
-```python
-from dire_rapids.metrics import set_persistence_backend
-
-set_persistence_backend('giotto-ph')  # or 'ripser++', 'ripser', None (auto)
-```
-
-| Backend | Speed | GPU | Multi-threaded |
-|---------|-------|-----|----------------|
-| giotto-ph | Fastest | No | Yes |
-| ripser++ | Fast | Yes | No |
-| ripser | Moderate | No | No |
 
 ## Examples
 
 ```bash
-python examples/metrics_simple_test.py
-python examples/metrics_evaluation.py
+python examples/metrics_swiss_roll.py
 ```
 
 ## Documentation
 
-See full API documentation at: [https://sashakolpakov.github.io/dire-rapids/](https://sashakolpakov.github.io/dire-rapids/)
+Full API: [https://sashakolpakov.github.io/dire-rapids/](https://sashakolpakov.github.io/dire-rapids/)

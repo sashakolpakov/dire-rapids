@@ -50,3 +50,7 @@ NOTES_*.md
 
 # Backup files
 *.bak
+
+# PNG files (except those in /images)
+*.png
+!images/*.png

@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.insert(0, '/Users/sasha/dire-rapids')
 
-from dire_rapids.atlas_cpu import compute_h0_h1_atlas_cpu
+from dire_rapids.metrics import compute_h0_h1_knn
 
 def test_circle(n_samples, noise, k_local, density_threshold, label):
     """Test on circle with given parameters."""
@@ -17,11 +17,8 @@ def test_circle(n_samples, noise, k_local, density_threshold, label):
     y = np.sin(theta) + rng.randn(n_samples) * noise
     data = np.column_stack([x, y]).astype(np.float32)
 
-    h0, h1 = compute_h0_h1_atlas_cpu(data, k_neighbors=k_local,
-                                      density_threshold=density_threshold)
-
-    beta_0 = len(h0[h0[:, 1] == np.inf])
-    beta_1 = len(h1[h1[:, 1] == np.inf])
+    beta_0, beta_1 = compute_h0_h1_knn(data, k_neighbors=k_local,
+                                       density_threshold=density_threshold, use_gpu=False)
 
     status = "✓" if beta_0 == 1 and beta_1 == 1 else "✗"
     print(f"{label:40s}: β₀={beta_0}, β₁={beta_1} {status}")

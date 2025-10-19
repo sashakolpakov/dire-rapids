@@ -37,25 +37,31 @@ result = runner.run("sklearn:blobs")
 
 ### 2. Metrics Evaluation
 
-Comprehensive evaluation of dimensionality reduction quality with GPU acceleration.
+Compare embeddings using topological and geometric metrics.
 
 **Files:**
-- `metrics_simple_test.py` - Basic functionality test
-- `metrics_evaluation.py` - Full demo of all metrics (distortion, context, topology)
+- `metrics_swiss_roll.py` - Compare DiRePyTorch vs Kernel PCA embeddings
 
 **Features:**
-- Distortion metrics: stress, neighborhood preservation
-- Context metrics: SVM/kNN classification accuracy
-- Topological metrics: persistence diagrams, Betti curves, distances
-- Multiple persistence backends (giotto-ph, ripser++, ripser)
+- Topological metrics: DTW distance between Betti curves (β₀ and β₁)
+- Geometric metrics: Procrustes analysis
+- Side-by-side visualization with Betti curve comparison
+- Atlas approach with subsampling for efficient topology computation
 
 **Quick Start:**
 ```python
-from dire_rapids.metrics import evaluate_embedding
+from dire_rapids.metrics import compute_global_metrics
 
-results = evaluate_embedding(data, layout, labels)
-print(f"Stress: {results['local']['stress']:.4f}")
-print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
+# Compare embeddings
+metrics = compute_global_metrics(
+    high_dim_data,
+    low_dim_embedding,
+    subsample_threshold=0.1,
+    n_steps=100,
+    use_gpu=False
+)
+print(f"DTW β₀: {metrics['metrics']['dtw_beta0']:.6f}")
+print(f"DTW β₁: {metrics['metrics']['dtw_beta1']:.6f}")
 ```
 
 ### 3. Financial Market Microstructure Analysis

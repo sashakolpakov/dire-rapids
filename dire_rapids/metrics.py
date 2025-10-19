@@ -48,42 +48,7 @@ except ImportError:
     from sklearn.svm import LinearSVC
     from sklearn.neighbors import KNeighborsClassifier
 
-# Persistence backends
-_PERSISTENCE_BACKEND = None
-
-try:
-    from gph import ripser_parallel
-    HAS_GIOTTO_PH = True
-except ImportError:
-    HAS_GIOTTO_PH = False
-
-try:
-    import ripserplusplus as rpp
-    HAS_RIPSER_PP = True
-except ImportError:
-    HAS_RIPSER_PP = False
-
-try:
-    from ripser import ripser
-    HAS_RIPSER = True
-except ImportError:
-    HAS_RIPSER = False
-
 # Additional dependencies for persistence
-try:
-    from persim import wasserstein, bottleneck
-    HAS_PERSIM = True
-except ImportError:
-    HAS_PERSIM = False
-    warnings.warn("persim not available. Wasserstein and bottleneck distances will not be available.", UserWarning)
-
-try:
-    import ot
-    HAS_OT = True
-except ImportError:
-    HAS_OT = False
-    warnings.warn("POT (Python Optimal Transport) not available. EMD distance will not be available.", UserWarning)
-
 try:
     from fastdtw import fastdtw
     HAS_DTW = True
@@ -91,99 +56,6 @@ except ImportError:
     HAS_DTW = False
     warnings.warn("fastdtw not available. DTW distance will not be available.", UserWarning)
 
-try:
-    from twed import twed
-    HAS_TWED = True
-except ImportError:
-    HAS_TWED = False
-    warnings.warn("twed not available. TWED distance will not be available.", UserWarning)
-
-
-#
-# Persistence backend management
-#
-
-
-def get_available_persistence_backends():
-    """
-    Get list of available persistence computation backends.
-
-    Returns
-    -------
-    dict : Dictionary mapping backend names to availability status
-    """
-    return {
-        'fast': True,  # Always available, uses graph-based H0/H1 only
-        'giotto-ph': HAS_GIOTTO_PH,
-        'ripser++': HAS_RIPSER_PP,
-        'ripser': HAS_RIPSER
-    }
-
-
-def set_persistence_backend(backend):
-    """
-    Set the persistence computation backend.
-
-    Parameters
-    ----------
-    backend : str or None
-        Backend to use: 'giotto-ph', 'ripser++', 'ripser', or None for auto-selection
-
-    Raises
-    ------
-    ValueError
-        If specified backend is not available
-    """
-    global _PERSISTENCE_BACKEND
-
-    if backend is None:
-        _PERSISTENCE_BACKEND = None
-        return
-
-    available = get_available_persistence_backends()
-
-    if backend not in available:
-        raise ValueError(
-            f"Unknown backend '{backend}'. Available: {list(available.keys())}"
-        )
-
-    if not available[backend]:
-        raise ValueError(
-            f"Backend '{backend}' is not available. Install the required package."
-        )
-
-    _PERSISTENCE_BACKEND = backend
-
-
-def get_persistence_backend():
-    """
-    Get the current persistence backend (with auto-selection if None).
-
-    Returns
-    -------
-    str : Name of the selected backend
-
-    Raises
-    ------
-    RuntimeError
-        If no persistence backend is available
-    """
-    global _PERSISTENCE_BACKEND  # pylint: disable=global-variable-not-assigned
-
-    if _PERSISTENCE_BACKEND is not None:
-        return _PERSISTENCE_BACKEND
-
-    # Auto-select: giotto-ph > ripser++ > ripser
-    if HAS_GIOTTO_PH:
-        return 'giotto-ph'
-    if HAS_RIPSER_PP:
-        return 'ripser++'
-    if HAS_RIPSER:
-        return 'ripser'
-    raise RuntimeError(
-        "No persistence backend available. "
-        "Install giotto-ph (recommended), ripserplusplus, or ripser."
-    )
 
 
 #
@@ -1008,9 +880,9 @@ def compute_context_measures(data, layout, labels, subsample_threshold=0.5, n_ne
 
 
 def compute_h0_h1_knn(data, k_neighbors=20, density_threshold=0.8, overlap_factor=1.5,
-                     use_gpu=True, return_distances=False):
+                     use_gpu=True):
     """
-    Compute H0/H1 using local kNN atlas approach.
+    Compute H0/H1 Betti numbers using local kNN atlas approach.
 
     Build dense local triangulations around each point, then merge consistently.
     This avoids the "holes" problem of global sparse kNN graphs.
@@ -1032,87 +904,41 @@ def compute_h0_h1_knn(data, k_neighbors=20, density_threshold=0.8, overlap_facto
         Higher values create more dense, overlapping patches.
     use_gpu : bool
         Whether to use GPU acceleration (if available)
-    return_distances : bool
-        If True, also return edge-to-distance mapping for persistence diagrams
 
     Returns
     -------
-    tuple : (h0_diagram, h1_diagram) or (h0_diagram, h1_diagram, edge_distances)
-        Persistence diagrams with [birth, death] pairs
+    tuple : (beta_0, beta_1)
+        Betti numbers: β₀ (connected components), β₁ (loops)
     """
-    # Select backend: GPU if requested and available, otherwise CPU
-    if use_gpu:
-        try:
-            from .atlas_gpu import compute_h0_h1_atlas_gpu  # pylint: disable=import-outside-toplevel
-            return compute_h0_h1_atlas_gpu(
-                data, k_neighbors=k_neighbors,
-                density_threshold=density_threshold,
-                overlap_factor=overlap_factor,
-                return_distances=return_distances
-            )
-        except ImportError as e:
-            # Fall back to CPU if GPU not available
-            warnings.warn(f"GPU atlas not available ({e}), falling back to CPU", UserWarning)
+    # Use compute_betti_curve with n_steps=1 to get Betti numbers at full complex
+    from .betti_curve import compute_betti_curve  # pylint: disable=import-outside-toplevel
 
-    # Use CPU implementation
-    from .atlas_cpu import compute_h0_h1_atlas_cpu  # pylint: disable=import-outside-toplevel
-    return compute_h0_h1_atlas_cpu(
+    result = compute_betti_curve(
         data, k_neighbors=k_neighbors,
         density_threshold=density_threshold,
         overlap_factor=overlap_factor,
-        return_distances=return_distances
+        n_steps=1,
+        use_gpu=use_gpu
     )
 
+    # Extract Betti numbers from the result
+    beta_0 = int(result['beta_0'][0])
+    beta_1 = int(result['beta_1'][0])
+
+    return beta_0, beta_1
 
 
-def compute_persistence_diagrams_fast(data, layout, k_neighbors=30, use_gpu=True):
+
+
+
+def compute_global_metrics(data, layout, subsample_threshold=0.5, random_state=42,
+                          n_steps=100, k_neighbors=20, density_threshold=0.8,
+                          overlap_factor=1.5, use_gpu=False, metrics_only=True):
     """
-    Fast computation of H0/H1 persistence diagrams using kNN-based sparse Rips.
+    Compute global topological metrics based on Betti curve comparison.
 
-    Much faster than full Vietoris-Rips as it only uses kNN graph (O(nk) vs O(n²) edges).
-    Builds Rips complex from kNN edges and computes persistence via Ripser.
-
-    Note: Does NOT subsample internally - expects already-subsampled data.
-    This avoids double subsampling when called from compute_global_metrics.
-
-    Parameters
-    ----------
-    data : array-like
-        High-dimensional data (already subsampled if needed)
-    layout : array-like
-        Low-dimensional embedding (already subsampled if needed)
-    k_neighbors : int
-        Number of neighbors for kNN graph (default 30, recommended >= 20)
-    use_gpu : bool
-        Whether to use GPU for kNN computation (default True)
-
-    Returns
-    -------
-    dict : {'data': [h0_diag, h1_diag], 'layout': [h0_diag, h1_diag], 'backend': 'fast'}
-    """
-    # Convert to NumPy if needed
-    if HAS_CUPY and isinstance(data, cp.ndarray):
-        data_np = cp.asnumpy(data)
-        layout_np = cp.asnumpy(layout)
-    else:
-        data_np = np.asarray(data, dtype=np.float32)
-        layout_np = np.asarray(layout, dtype=np.float32)
-
-    # Compute H0 and H1 using kNN-Rips method
-    h0_hd, h1_hd = compute_h0_h1_knn(data_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
-    h0_ld, h1_ld = compute_h0_h1_knn(layout_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
-
-    return {
-        'data': [h0_hd, h1_hd],
-        'layout': [h0_ld, h1_ld],
-        'backend': 'fast'
-    }
-
-
-def compute_persistence_diagrams(data, layout, max_dim=1, subsample_threshold=0.5,
-                                random_state=42, backend=None, backend_kwargs=None):
-    """
-    Compute persistence diagrams for data and layout.
+    Computes Betti curves for high-dimensional data and low-dimensional embedding
+    using the atlas approach, then compares them using fastDTW distance.
 
     Parameters
     ----------
@@ -1120,52 +946,47 @@ def compute_persistence_diagrams(data, layout, max_dim=1, subsample_threshold=0.
         High-dimensional data
     layout : array-like
         Low-dimensional embedding
-    max_dim : int
-        Maximum homology dimension
     subsample_threshold : float
         Subsampling probability (must be between 0.0 and 1.0)
     random_state : int
         Random seed
-    backend : str, optional
-        Persistence backend: 'fast', 'giotto-ph', 'ripser++', 'ripser', or None for auto
-    backend_kwargs : dict, optional
-        Backend-specific parameters passed to the backend, using defaults unless specified:
-        - 'fast': k_neighbors=30, use_gpu=True
-        - 'giotto-ph': n_threads=-1, collapse_edges=True, return_generators=False
-        - 'ripser++': Any valid parameters for ripserplusplus.run()
-        - 'ripser': Any valid parameters for ripser.ripser()
+    n_steps : int
+        Number of points for Betti curves
+    k_neighbors : int
+        Size of local neighborhood for atlas approach (default 20)
+    density_threshold : float
+        Percentile threshold for edge inclusion (0-1, default 0.8)
+    overlap_factor : float
+        Factor for expanding local neighborhoods (default 1.5)
+    use_gpu : bool
+        Whether to use GPU acceleration
+    metrics_only : bool
+        If True, return only metrics; otherwise include betti curves
 
     Returns
     -------
-    dict : {'data': diagrams_hd, 'layout': diagrams_ld, 'backend': backend_used}
+    dict : Dictionary containing DTW distances for β₀ and β₁ curves
 
     Raises
     ------
     ValueError
         If subsample_threshold is not between 0.0 and 1.0
+        If fastdtw is not available
     """
     if not 0.0 <= subsample_threshold <= 1.0:
         raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
 
-    # Initialize backend_kwargs if not provided
-    if backend_kwargs is None:
-        backend_kwargs = {}
+    if not HAS_DTW:
+        raise ValueError("fastdtw not available. Install it with: pip install fastdtw")
 
-    # Select backend
-    if backend is None:
-        backend = get_persistence_backend()
-    else:
-        # Validate backend
-        available = get_available_persistence_backends()
-        if backend not in available or not available[backend]:
-            raise ValueError(f"Backend '{backend}' not available. Use one of {list(available.keys())}")
+    from .betti_curve import compute_betti_curve  # pylint: disable=import-outside-toplevel
 
-    # Subsample ONCE
+    # Subsample data
     data_sub, layout_sub = threshold_subsample_gpu(
         data, layout, threshold=subsample_threshold, random_state=random_state
     )
 
-    # Convert to NumPy for persistence computation
+    # Convert to NumPy if needed
     if HAS_CUPY and isinstance(data_sub, cp.ndarray):
         data_np = cp.asnumpy(data_sub)
         layout_np = cp.asnumpy(layout_sub)
@@ -1173,384 +994,74 @@ def compute_persistence_diagrams(data, layout, max_dim=1, subsample_threshold=0.
         data_np = np.asarray(data_sub, dtype=np.float32)
         layout_np = np.asarray(layout_sub, dtype=np.float32)
 
-    # Compute persistence diagrams based on backend
-    if backend == 'fast':
-        # Use fast kNN-Laplacian computation
-        # Extract parameters with defaults
-        k_neighbors = backend_kwargs.get('k_neighbors', 30)
-        use_gpu = backend_kwargs.get('use_gpu', True)
-
-        h0_hd, h1_hd = compute_h0_h1_knn(data_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
-        h0_ld, h1_ld = compute_h0_h1_knn(layout_np, k_neighbors=k_neighbors, use_gpu=use_gpu)  # pylint: disable=unbalanced-tuple-unpacking
-        diags_hd = [h0_hd, h1_hd]
-        diags_ld = [h0_ld, h1_ld]
-
-    elif backend == 'giotto-ph':
-        # Use giotto-ph (fastest CPU option)
-        # Extract parameters with defaults
-        n_threads = backend_kwargs.get('n_threads', -1)
-        collapse_edges = backend_kwargs.get('collapse_edges', True)
-        return_generators = backend_kwargs.get('return_generators', False)
-
-        result_hd = ripser_parallel(
-            data_np,
-            maxdim=max_dim,
-            collapse_edges=collapse_edges,
-            n_threads=n_threads,
-            return_generators=return_generators
-        )
-        result_ld = ripser_parallel(
-            layout_np,
-            maxdim=max_dim,
-            collapse_edges=collapse_edges,
-            n_threads=n_threads,
-            return_generators=return_generators
-        )
-        diags_hd = result_hd['dgms']
-        diags_ld = result_ld['dgms']
-
-    elif backend == 'ripser++':
-        # Use GPU-accelerated ripser++
-        # Pass through all kwargs to rpp.run()
-        diags_hd = rpp.run(data_np, maxdim=max_dim, **backend_kwargs)['dgms']
-        diags_ld = rpp.run(layout_np, maxdim=max_dim, **backend_kwargs)['dgms']
-
-    elif backend == 'ripser':
-        # Use standard CPU ripser
-        # Pass through all kwargs to ripser()
-        diags_hd = ripser(data_np, maxdim=max_dim, **backend_kwargs)['dgms']
-        diags_ld = ripser(layout_np, maxdim=max_dim, **backend_kwargs)['dgms']
-
-    else:
-        raise ValueError(f"Unknown backend: {backend}")
-
-    return {'data': diags_hd, 'layout': diags_ld, 'backend': backend}
-
-
-def betti_curve(diagram, n_steps=100):
-    """
-    Compute Betti curve from a persistence diagram.
-
-    A Betti curve shows the number of topological features that persist
-    at different filtration values.
-
-    Parameters
-    ----------
-    diagram : array-like
-        Persistence diagram as list of (birth, death) tuples
-    n_steps : int
-        Number of points in the curve
-
-    Returns
-    -------
-    tuple : (filtration_values, betti_numbers)
-    """
-    if len(diagram) == 0:
-        return np.linspace(0, 1, n_steps), np.zeros(n_steps)
-
-    # Filter out infinite death times
-    finite_diagram = [x for x in diagram if x[1] != np.inf]
-
-    if len(finite_diagram) == 0:
-        return np.linspace(0, 1, n_steps), np.zeros(n_steps)
-
-    max_dist = np.max([x[1] for x in finite_diagram])
-    axis_x = np.linspace(0, max_dist, n_steps)
-    axis_y = np.zeros(n_steps)
-
-    for i, x in enumerate(axis_x):
-        for b, d in diagram:
-            if b < x < d:
-                axis_y[i] += 1
-
-    return axis_x, axis_y
-
-
-def compute_dtw(axis_x_hd, axis_y_hd, axis_x_ld, axis_y_ld, norm_factor=1.0):
-    """
-    Compute Dynamic Time Warping distance between Betti curves.
-
-    Parameters
-    ----------
-    axis_x_hd, axis_y_hd : array-like
-        High-dimensional Betti curve
-    axis_x_ld, axis_y_ld : array-like
-        Low-dimensional Betti curve
-    norm_factor : float
-        Normalization factor
-
-    Returns
-    -------
-    float : DTW distance
-    """
-    if not HAS_DTW:
-        warnings.warn("fastdtw not available, returning NaN")
-        return np.nan
-
-    seq0 = np.array(list(zip(axis_x_hd, axis_y_hd)))
-    seq1 = np.array(list(zip(axis_x_ld, axis_y_ld)))
-    dist_dtw, _ = fastdtw(seq0, seq1, dist=2)
-
-    return dist_dtw * norm_factor
-
-
-def compute_twed(axis_x_hd, axis_y_hd, axis_x_ld, axis_y_ld, norm_factor=1.0):
-    """
-    Compute Time Warp Edit Distance between Betti curves.
-
-    Parameters
-    ----------
-    axis_x_hd, axis_y_hd : array-like
-        High-dimensional Betti curve
-    axis_x_ld, axis_y_ld : array-like
-        Low-dimensional Betti curve
-    norm_factor : float
-        Normalization factor
-
-    Returns
-    -------
-    float : TWED distance
-    """
-    if not HAS_TWED:
-        warnings.warn("twed not available, returning NaN")
-        return np.nan
-
-    dist_twed = twed(
-        axis_y_hd.reshape(-1, 1),
-        axis_y_ld.reshape(-1, 1),
-        axis_x_hd,
-        axis_x_ld,
-        p=2
+    # Compute Betti curves for high-dimensional data
+    result_hd = compute_betti_curve(
+        data_np,
+        k_neighbors=k_neighbors,
+        density_threshold=density_threshold,
+        overlap_factor=overlap_factor,
+        n_steps=n_steps,
+        use_gpu=use_gpu
     )
 
-    return dist_twed * norm_factor
+    # Compute Betti curves for low-dimensional embedding
+    result_ld = compute_betti_curve(
+        layout_np,
+        k_neighbors=k_neighbors,
+        density_threshold=density_threshold,
+        overlap_factor=overlap_factor,
+        n_steps=n_steps,
+        use_gpu=use_gpu
+    )
 
+    # Extract Betti curves
+    filtration_hd = result_hd['filtration_values']
+    beta_0_hd = result_hd['beta_0']
+    beta_1_hd = result_hd['beta_1']
 
-def compute_emd(axis_x_hd, axis_y_hd, axis_x_ld, axis_y_ld, adjust_mass=False, norm_factor=1.0):
-    """
-    Compute Earth Mover's Distance between Betti curves.
+    filtration_ld = result_ld['filtration_values']
+    beta_0_ld = result_ld['beta_0']
+    beta_1_ld = result_ld['beta_1']
 
-    Parameters
-    ----------
-    axis_x_hd, axis_y_hd : array-like
-        High-dimensional Betti curve
-    axis_x_ld, axis_y_ld : array-like
-        Low-dimensional Betti curve
-    adjust_mass : bool
-        Whether to adjust for different total masses
-    norm_factor : float
-        Normalization factor
+    # Compute DTW distances between Betti curves
+    # For β₀ curves
+    seq0_beta0 = np.column_stack([filtration_hd, beta_0_hd])
+    seq1_beta0 = np.column_stack([filtration_ld, beta_0_ld])
+    dtw_beta0, _ = fastdtw(seq0_beta0, seq1_beta0, dist=2)
 
-    Returns
-    -------
-    float : EMD distance
-    """
-    if not HAS_OT:
-        warnings.warn("POT not available, returning NaN")
-        return np.nan
+    # For β₁ curves
+    seq0_beta1 = np.column_stack([filtration_hd, beta_1_hd])
+    seq1_beta1 = np.column_stack([filtration_ld, beta_1_ld])
+    dtw_beta1, _ = fastdtw(seq0_beta1, seq1_beta1, dist=2)
 
-    sum_hd = np.sum(axis_y_hd)
-    sum_ld = np.sum(axis_y_ld)
+    # Normalize by number of points
+    n_points = len(data_np)
+    dtw_beta0 /= n_points
+    dtw_beta1 /= n_points
 
-    if sum_hd == 0 or sum_ld == 0:
-        return 0.0
-
-    axis_y_hd_norm = axis_y_hd / sum_hd
-    axis_y_ld_norm = axis_y_ld / sum_ld
-
-    dist_emd = ot.emd2_1d(axis_x_hd, axis_x_ld, axis_y_hd_norm, axis_y_ld_norm, metric='euclidean')
-
-    if adjust_mass:
-        dist_emd *= np.max([sum_hd / sum_ld, sum_ld / sum_hd])
-
-    return dist_emd * norm_factor
-
-
-def compute_wasserstein(diag_hd, diag_ld, norm_factor=1.0):
-    """
-    Compute Wasserstein distance between persistence diagrams.
-
-    Simple implementation matching dire-jax (no special handling for infinite features).
-
-    Parameters
-    ----------
-    diag_hd, diag_ld : array-like
-        Persistence diagrams (birth, death) pairs
-    norm_factor : float
-        Normalization factor
-
-    Returns
-    -------
-    float : Wasserstein distance
-    """
-    if not HAS_PERSIM:
-        warnings.warn("persim not available, returning NaN")
-        return np.nan
-
-    dist_wass = wasserstein(diag_hd, diag_ld)
-    dist_wass *= norm_factor
-    return dist_wass
-
-
-def compute_bottleneck(diag_hd, diag_ld, norm_factor=1.0):
-    """
-    Compute bottleneck distance between persistence diagrams.
-
-    Handles infinite death times by:
-    1. Computing bottleneck on finite features
-    2. Taking max with birth time difference for infinite features
-
-    Parameters
-    ----------
-    diag_hd, diag_ld : array-like
-        Persistence diagrams (birth, death) pairs
-    norm_factor : float
-        Normalization factor
-
-    Returns
-    -------
-    float : Bottleneck distance
-    """
-    if not HAS_PERSIM:
-        warnings.warn("persim not available, returning NaN")
-        return np.nan
-
-    diag_hd = np.asarray(diag_hd)
-    diag_ld = np.asarray(diag_ld)
-
-    # Separate finite and infinite features
-    finite_mask_hd = np.isfinite(diag_hd[:, 1]) if diag_hd.size > 0 else np.array([], dtype=bool)
-    finite_mask_ld = np.isfinite(diag_ld[:, 1]) if diag_ld.size > 0 else np.array([], dtype=bool)
-
-    diag_hd_finite = diag_hd[finite_mask_hd] if diag_hd.size > 0 else np.array([[0, 0]])
-    diag_ld_finite = diag_ld[finite_mask_ld] if diag_ld.size > 0 else np.array([[0, 0]])
-
-    # Compute bottleneck on finite features
-    dist_bott_finite = bottleneck(diag_hd_finite, diag_ld_finite)
-
-    # Handle infinite features by comparing birth times
-    diag_hd_inf = diag_hd[~finite_mask_hd] if diag_hd.size > 0 and np.any(~finite_mask_hd) else np.array([])
-    diag_ld_inf = diag_ld[~finite_mask_ld] if diag_ld.size > 0 and np.any(~finite_mask_ld) else np.array([])
-
-    dist_bott_inf = 0.0
-    if diag_hd_inf.size > 0 or diag_ld_inf.size > 0:
-        # Extract birth times of infinite features
-        births_hd = diag_hd_inf[:, 0] if diag_hd_inf.size > 0 else np.array([])
-        births_ld = diag_ld_inf[:, 0] if diag_ld_inf.size > 0 else np.array([])
-
-        # Compute bottleneck distance on birth times
-        if births_hd.size > 0:
-            births_hd_pairs = np.column_stack([births_hd, births_hd])
-        else:
-            births_hd_pairs = np.array([[0, 0]])
-
-        if births_ld.size > 0:
-            births_ld_pairs = np.column_stack([births_ld, births_ld])
-        else:
-            births_ld_pairs = np.array([[0, 0]])
-
-        dist_bott_inf = bottleneck(births_hd_pairs, births_ld_pairs)
-
-    # Bottleneck distance is the maximum
-    dist_bott = max(dist_bott_finite, dist_bott_inf)
-    return dist_bott * norm_factor
-
-
-def compute_global_metrics(data, layout, dimension=1, subsample_threshold=0.5, random_state=42,
-                          n_steps=100, metrics_only=True, backend=None, backend_kwargs=None):
-    """
-    Compute global topological metrics based on persistence homology.
-
-    Computes distances between persistence diagrams and Betti curves:
-    - DTW, TWED, EMD for Betti curves
-    - Wasserstein, Bottleneck for persistence diagrams
-
-    Parameters
-    ----------
-    data : array-like
-        High-dimensional data
-    layout : array-like
-        Low-dimensional embedding
-    dimension : int
-        Maximum homology dimension
-    subsample_threshold : float
-        Subsampling probability (must be between 0.0 and 1.0)
-    random_state : int
-        Random seed
-    n_steps : int
-        Number of points for Betti curves
-    metrics_only : bool
-        If True, return only metrics; otherwise include diagrams and curves
-    backend : str, optional
-        Persistence backend: 'fast', 'giotto-ph', 'ripser++', 'ripser', or None for auto
-    backend_kwargs : dict, optional
-        Backend-specific parameters. See compute_persistence_diagrams() for details.
-
-    Returns
-    -------
-    dict : Dictionary containing metrics (and optionally diagrams and betti curves)
-
-    Raises
-    ------
-    ValueError
-        If subsample_threshold is not between 0.0 and 1.0
-    """
-    if not 0.0 <= subsample_threshold <= 1.0:
-        raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {subsample_threshold}")
     metrics = {
-        'dtw': [],
-        'twed': [],
-        'emd': [],
-        'wass': [],
-        'bott': []
+        'dtw_beta0': float(dtw_beta0),
+        'dtw_beta1': float(dtw_beta1)
     }
-
-    betti_curves = {
-        'data': [],
-        'layout': []
-    }
-
-    # Compute persistence diagrams (subsamples once internally)
-    result = compute_persistence_diagrams(
-        data, layout, max_dim=dimension, subsample_threshold=subsample_threshold,
-        random_state=random_state, backend=backend, backend_kwargs=backend_kwargs
-    )
-
-    # Get number of points after subsampling (from result data)
-    n_points = len(result['data'][0])  # H0 diagram length
-
-    diags = result
-    backend_used = result.get('backend', 'unknown')
-
-    # Compute metrics for each dimension
-    for diag_hd, diag_ld in zip(diags['data'], diags['layout']):
-        # Compute Betti curves
-        axis_x_hd, axis_y_hd = betti_curve(diag_hd, n_steps=n_steps)
-        axis_x_ld, axis_y_ld = betti_curve(diag_ld, n_steps=n_steps)
-
-        betti_curves['data'].append((axis_x_hd, axis_y_hd))
-        betti_curves['layout'].append((axis_x_ld, axis_y_ld))
-
-        # Compute distances on Betti curves
-        norm_factor = 1.0 / n_points
-        dist_dtw = compute_dtw(axis_x_hd, axis_y_hd, axis_x_ld, axis_y_ld, norm_factor)
-        dist_twed = compute_twed(axis_x_hd, axis_y_hd, axis_x_ld, axis_y_ld, norm_factor)
-        dist_emd = compute_emd(axis_x_hd, axis_y_hd, axis_x_ld, axis_y_ld, adjust_mass=True, norm_factor=norm_factor)
-
-        # Compute distances on persistence diagrams
-        dist_wass = compute_wasserstein(diag_hd, diag_ld, norm_factor)
-        dist_bott = compute_bottleneck(diag_hd, diag_ld, 1.0)  # No normalization for bottleneck
-
-        metrics['dtw'].append(dist_dtw)
-        metrics['twed'].append(dist_twed)
-        metrics['emd'].append(dist_emd)
-        metrics['wass'].append(dist_wass)
-        metrics['bott'].append(dist_bott)
 
     if metrics_only:
-        return {'metrics': metrics, 'backend': backend_used}
+        return {'metrics': metrics, 'backend': 'atlas'}
 
-    return {'metrics': metrics, 'diags': diags, 'bettis': betti_curves, 'backend': backend_used}
+    # Include Betti curves if requested
+    betti_curves = {
+        'data': {
+            'filtration': filtration_hd,
+            'beta_0': beta_0_hd,
+            'beta_1': beta_1_hd
+        },
+        'layout': {
+            'filtration': filtration_ld,
+            'beta_0': beta_0_ld,
+            'beta_1': beta_1_ld
+        }
+    }
+
+    return {'metrics': metrics, 'bettis': betti_curves, 'backend': 'atlas'}
 
 
 #
@@ -1559,8 +1070,7 @@ def compute_global_metrics(data, layout, dimension=1, subsample_threshold=0.5, r
 
 
 def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_threshold=0.5,
-                      max_homology_dim=1, random_state=42, use_gpu=True,
-                      persistence_backend=None, n_threads=-1, compute_distortion=True,
+                      random_state=42, use_gpu=True, compute_distortion=True,
                       compute_context=True, compute_topology=True, **kwargs):
     """
     Comprehensive evaluation of a dimensionality reduction embedding.
@@ -1579,16 +1089,10 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
         Number of neighbors for kNN metrics
     subsample_threshold : float
         Subsampling probability for all metrics (must be between 0.0 and 1.0, default 0.5)
-    max_homology_dim : int
-        Maximum homology dimension for persistence
     random_state : int
         Random seed
     use_gpu : bool
         Whether to use GPU acceleration
-    persistence_backend : str, optional
-        Persistence backend: 'giotto-ph', 'ripser++', 'ripser', or None for auto
-    n_threads : int
-        Number of threads for giotto-ph (-1 for all cores)
     compute_distortion : bool
         Whether to compute distortion metrics (default True)
     compute_context : bool
@@ -1628,18 +1132,12 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
             random_state, use_gpu, **kwargs
         )
 
-    # Global topological metrics
+    # Global topological metrics using Betti curve comparison
     if compute_topology:
-        if HAS_GIOTTO_PH or HAS_RIPSER_PP or HAS_RIPSER:
-            backend = persistence_backend or get_persistence_backend()
-            print(f"Computing topological metrics using backend: {backend}...")
-            # Pass n_threads through backend_kwargs for giotto-ph
-            backend_kw = {'n_threads': n_threads} if backend == 'giotto-ph' else {}
-            results['topology'] = compute_global_metrics(
-                data, layout, max_homology_dim, subsample_threshold,
-                random_state, backend=backend, backend_kwargs=backend_kw
-            )
-        else:
-            warnings.warn("Skipping topological metrics (no persistence backend available)")
+        print("Computing topological metrics using Betti curve comparison...")
+        results['topology'] = compute_global_metrics(
+            data, layout, subsample_threshold,
+            random_state, n_steps=100, use_gpu=use_gpu
+        )
 
     return results

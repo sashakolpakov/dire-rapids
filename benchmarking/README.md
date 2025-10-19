@@ -212,7 +212,8 @@ from dire_rapids import create_dire
 results = compare_reducers(
     "sklearn:blobs",
     dataset_kwargs={"n_samples": 1000, "n_features": 50},
-    metrics=['distortion', 'context', 'topology']
+    metrics=['distortion', 'context', 'topology'],
+    subsample_threshold=0.1  # Use 10% of data for topological metrics
 )
 print_comparison_summary(results)
 
@@ -229,13 +230,13 @@ results = compare_reducers("sklearn:digits", reducers=reducers)
 ## Benchmark Scripts
 
 ### dire_rapids_benchmarks.ipynb
-Comprehensive Jupyter notebook with benchmarking results:
-- **ReducerRunner** framework for easy data loading and algorithm execution
+Comprehensive benchmarking notebook:
+- **ReducerRunner** for data loading and algorithm execution
 - **compare_reducers** for comparing DiRe, UMAP, and t-SNE
-- Performance on various datasets (MNIST, Levine-13, etc.)
-- Visualization of embeddings with plotly
-- Global and local structure preservation analysis
-- Comprehensive metrics (distortion, context, topology)
+- Comprehensive metrics:
+  - Distortion: stress, neighbor preservation
+  - Context: SVM/kNN classification accuracy
+  - Topology: DTW distances between Betti curves
 
 ### ReducerRunner (in dire_rapids.dire_pytorch)
 General-purpose framework for dimensionality reduction:
@@ -251,12 +252,13 @@ General-purpose framework for dimensionality reduction:
 - Supports both categorical and continuous labels
 
 ### compare_reducers.py
-Framework for comparing multiple reducers:
-- Run multiple reducers on the same dataset
-- Automatic quality metrics computation
-- Summary table generation
-- Default set of reducers (DiRe, cuML UMAP, cuML TSNE)
-- Custom reducer configurations
+Framework for comparing reducers:
+- Automatic quality metrics:
+  - Distortion: stress, neighbor preservation
+  - Context: SVM/kNN classification accuracy
+  - Topology: DTW distances between Betti curves (β₀ and β₁)
+- Default reducers: DiRe, cuML UMAP, cuML TSNE
+- Flexible subsampling for topology metrics
 
 ### benchmark_mnist.py
 Tests DIRE performance on MNIST dataset with various configurations:

@@ -16,9 +16,6 @@ torch>=2.0.0
 # PyKeOps for CPU (will compile for CPU backend)
 pykeops>=2.1.0
 
-# Persistence homology - ripser as primary backend
-ripser>=0.6.0
-
 # Betti curve distance metrics
 fastdtw>=0.3.0
 

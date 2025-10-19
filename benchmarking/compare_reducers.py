@@ -250,10 +250,10 @@ def _print_metrics(metrics: Dict[str, Any]) -> None:
         print("  Topology metrics:")
         if 'metrics' in metrics['topology']:
             topo = metrics['topology']['metrics']
-            if 'wass' in topo:
-                print(f"    Wasserstein: {topo['wass'][0]:.6f}")
-            if 'bottleneck' in topo:
-                print(f"    Bottleneck: {topo['bottleneck'][0]:.6f}")
+            if 'dtw_beta0' in topo:
+                print(f"    DTW β₀: {topo['dtw_beta0']:.6f}")
+            if 'dtw_beta1' in topo:
+                print(f"    DTW β₁: {topo['dtw_beta1']:.6f}")
 
 
 def print_comparison_summary(results: Dict[str, Dict[str, Any]]) -> None:
@@ -263,8 +263,8 @@ def print_comparison_summary(results: Dict[str, Dict[str, Any]]) -> None:
     print(f"{'='*80}\n")
 
     # Print table header
-    print(f"{'Reducer':<15} {'Time(s)':<10} {'Stress':<10} {'SVM Score':<12} {'kNN Score':<12} {'Wasserstein':<12}")
-    print("-" * 95)
+    print(f"{'Reducer':<15} {'Time(s)':<10} {'Stress':<10} {'SVM Score':<12} {'kNN Score':<12} {'DTW β₀':<12} {'DTW β₁':<12}")
+    print("-" * 107)
 
     for name, result in results.items():
         if 'error' in result:
@@ -285,9 +285,14 @@ def print_comparison_summary(results: Dict[str, Dict[str, Any]]) -> None:
         if 'context' in result.get('metrics', {}) and 'knn' in result['metrics']['context']:
             knn_str = f"{result['metrics']['context']['knn'][2]:.4f}"  # Context score (log ratio)
 
-        wass_str = "-"
+        dtw_beta0_str = "-"
+        dtw_beta1_str = "-"
         if 'topology' in result.get('metrics', {}):
-            if 'metrics' in result['metrics']['topology'] and 'wass' in result['metrics']['topology']['metrics']:
-                wass_str = f"{result['metrics']['topology']['metrics']['wass'][0]:.6f}"
+            if 'metrics' in result['metrics']['topology']:
+                topo = result['metrics']['topology']['metrics']
+                if 'dtw_beta0' in topo:
+                    dtw_beta0_str = f"{topo['dtw_beta0']:.6f}"
+                if 'dtw_beta1' in topo:
+                    dtw_beta1_str = f"{topo['dtw_beta1']:.6f}"
 
-        print(f"{name:<15} {time_str:<10} {stress_str:<10} {svm_str:<12} {knn_str:<12} {wass_str:<12}")
+        print(f"{name:<15} {time_str:<10} {stress_str:<10} {svm_str:<12} {knn_str:<12} {dtw_beta0_str:<12} {dtw_beta1_str:<12}")
