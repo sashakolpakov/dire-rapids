@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dire_rapids &mdash; dire-rapids 0.1.0 documentation</title>
+  <title>dire_rapids &mdash; dire-rapids 0.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=01f34227"></script>
+      <script src="../_static/documentation_options.js?v=938c9ccc"></script>
       <script src="../_static/doctools.js?v=9a2dae69"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
@@ -92,6 +92,8 @@
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_pytorch_memory_efficient.html">dire_rapids.dire_pytorch_memory_efficient module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html">dire_rapids.dire_cuvs module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.betti_curve.html">dire_rapids.betti_curve module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html">dire_rapids.utils module</a></li>
 </ul>
 </li>
 </ul>
@@ -766,7 +768,7 @@ falling back to available alternatives when possible.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="dire_rapids.ReducerRunner">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.</span></span><span class="sig-name descname"><span class="pre">ReducerRunner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#dire_rapids.ReducerConfig" title="dire_rapids.utils.ReducerConfig"><span class="pre">ReducerConfig</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#ReducerRunner"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.ReducerRunner" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.</span></span><span class="sig-name descname"><span class="pre">ReducerRunner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig" title="dire_rapids.utils.ReducerConfig"><span class="pre">ReducerConfig</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#ReducerRunner"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.ReducerRunner" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>General-purpose runner for dimensionality reduction algorithms.</p>
 <p>Supports:
@@ -780,7 +782,7 @@ falling back to available alternatives when possible.</p>
 </dl>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="dire_rapids.ReducerRunner.config">
-<span class="sig-name descname"><span class="pre">config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#dire_rapids.ReducerConfig" title="dire_rapids.utils.ReducerConfig"><span class="pre">ReducerConfig</span></a></em><a class="headerlink" href="#dire_rapids.ReducerRunner.config" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">config</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig" title="dire_rapids.utils.ReducerConfig"><span class="pre">ReducerConfig</span></a></em><a class="headerlink" href="#dire_rapids.ReducerRunner.config" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -829,7 +831,7 @@ falling back to available alternatives when possible.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="dire_rapids.ReducerRunner.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#dire_rapids.ReducerConfig" title="dire_rapids.utils.ReducerConfig"><span class="pre">ReducerConfig</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#dire_rapids.ReducerRunner.__init__" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig" title="dire_rapids.utils.ReducerConfig"><span class="pre">ReducerConfig</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#dire_rapids.ReducerRunner.__init__" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -1195,6 +1197,41 @@ selection and logging to inform users about the acceleration being used.</p>
 <li class="toctree-l2"><a class="reference internal" href="dire_rapids.metrics.html#dire_rapids.metrics.evaluate_embedding"><code class="docutils literal notranslate"><span class="pre">evaluate_embedding()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="dire_rapids.betti_curve.html">dire_rapids.betti_curve module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.betti_curve.html#dire_rapids.betti_curve.compute_betti_curve_cpu"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_cpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.betti_curve.html#dire_rapids.betti_curve.compute_betti_curve_gpu"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_gpu()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.betti_curve.html#dire_rapids.betti_curve.compute_betti_curve"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dire_rapids.utils.html">dire_rapids.utils module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.rand_point_disk"><code class="docutils literal notranslate"><span class="pre">rand_point_disk()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.rand_point_sphere"><code class="docutils literal notranslate"><span class="pre">rand_point_sphere()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.elgen"><code class="docutils literal notranslate"><span class="pre">elgen</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.elgen.__init__"><code class="docutils literal notranslate"><span class="pre">elgen.__init__()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.rand_point_ell"><code class="docutils literal notranslate"><span class="pre">rand_point_ell()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig"><code class="docutils literal notranslate"><span class="pre">ReducerConfig</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig.name"><code class="docutils literal notranslate"><span class="pre">ReducerConfig.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig.reducer_class"><code class="docutils literal notranslate"><span class="pre">ReducerConfig.reducer_class</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig.reducer_kwargs"><code class="docutils literal notranslate"><span class="pre">ReducerConfig.reducer_kwargs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig.visualize"><code class="docutils literal notranslate"><span class="pre">ReducerConfig.visualize</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig.categorical_labels"><code class="docutils literal notranslate"><span class="pre">ReducerConfig.categorical_labels</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig.max_points"><code class="docutils literal notranslate"><span class="pre">ReducerConfig.max_points</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerConfig.__init__"><code class="docutils literal notranslate"><span class="pre">ReducerConfig.__init__()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerRunner"><code class="docutils literal notranslate"><span class="pre">ReducerRunner</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerRunner.config"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.config</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerRunner.__post_init__"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.__post_init__()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerRunner.run"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerRunner.available_sklearn"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.available_sklearn()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerRunner.available_cytof"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.available_cytof()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dire_rapids.utils.html#dire_rapids.utils.ReducerRunner.__init__"><code class="docutils literal notranslate"><span class="pre">ReducerRunner.__init__()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 </div>
 </section>
@@ -1211,7 +1248,7 @@ selection and logging to inform users about the acceleration being used.</p>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2024, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
+    <p>&#169; Copyright 2025, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
