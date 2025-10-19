@@ -332,39 +332,42 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span></div>
 
     
-    <span class="k">def</span><span class="w"> </span><span class="nf">_select_cuvs_index_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select_cuvs_index_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;sqeuclidean&#39;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Automatically select optimal cuVS index type based on data characteristics.</span>
-<span class="sd">        </span>
+
 <span class="sd">        This private method uses heuristics to select the most appropriate cuVS index</span>
-<span class="sd">        type based on dataset size, dimensionality, and performance trade-offs.</span>
-<span class="sd">        </span>
+<span class="sd">        type based on dataset size, dimensionality, metric, and performance trade-offs.</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        n_samples : int</span>
 <span class="sd">            Number of samples in the dataset.</span>
 <span class="sd">        n_dims : int</span>
 <span class="sd">            Number of dimensions/features per sample.</span>
-<span class="sd">            </span>
+<span class="sd">        metric : str, default=&#39;sqeuclidean&#39;</span>
+<span class="sd">            Distance metric to use. CAGRA only supports &#39;sqeuclidean&#39; and &#39;inner_product&#39;.</span>
+
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        str</span>
 <span class="sd">            Selected cuVS index type (&#39;flat&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, or &#39;cagra&#39;).</span>
-<span class="sd">            </span>
+
 <span class="sd">        Notes</span>
 <span class="sd">        -----</span>
 <span class="sd">        Private method, should not be called directly. Used by _compute_knn().</span>
-<span class="sd">        </span>
+
 <span class="sd">        Selection Heuristics:</span>
 <span class="sd">        - **&lt; 50K samples**: &#39;flat&#39; (exact search)</span>
 <span class="sd">        - **50K-500K samples or &gt;500D**: &#39;ivf_flat&#39; (good balance)</span>
 <span class="sd">        - **500K-5M samples**: &#39;ivf_pq&#39; (memory efficient)</span>
-<span class="sd">        - **&gt; 5M samples and ≤500D**: &#39;cagra&#39; (best performance)</span>
+<span class="sd">        - **&gt; 5M samples and ≤500D**: &#39;cagra&#39; (best performance, if metric is supported)</span>
 <span class="sd">        - **&gt; 5M samples and &gt;500D**: &#39;ivf_pq&#39; (high-D fallback)</span>
+<span class="sd">        - **cosine metric**: Forces IVF method (CAGRA doesn&#39;t support cosine)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span> <span class="o">!=</span> <span class="s1">&#39;auto&#39;</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span>
-        
+
         <span class="c1"># Decision tree based on scale and dimensionality</span>
         <span class="c1"># For high dimensions (&gt;500), prefer IVF methods over graph-based</span>
         <span class="k">if</span> <span class="n">n_samples</span> <span class="o">&lt;</span> <span class="mi">50000</span><span class="p">:</span>
@@ -377,8 +380,13 @@
         <span class="k">if</span> <span class="n">n_samples</span> <span class="o">&lt;</span> <span class="mi">5000000</span><span class="p">:</span>
             <span class="c1"># Large dataset - IVF with compression</span>
             <span class="k">return</span> <span class="s1">&#39;ivf_pq&#39;</span>
-        <span class="c1"># Very large dataset with moderate dimensions - graph-based</span>
-        <span class="k">return</span> <span class="s1">&#39;cagra&#39;</span> <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">500</span> <span class="k">else</span> <span class="s1">&#39;ivf_pq&#39;</span>
+        <span class="c1"># Very large dataset with moderate dimensions</span>
+        <span class="c1"># CAGRA is best for performance, but only if metric is supported</span>
+        <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">500</span> <span class="ow">and</span> <span class="n">metric</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="s1">&#39;cagra&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Fallback to IVF-PQ for unsupported metrics (e.g., cosine) or high-D</span>
+            <span class="k">return</span> <span class="s1">&#39;ivf_pq&#39;</span>
     
     <span class="k">def</span><span class="w"> </span><span class="nf">_build_cuvs_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -469,7 +477,25 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-PQ index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists, PQ dim=</span><span class="si">{</span><span class="n">pq_dim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span><span class="p">:</span>
-            <span class="n">cagra_metric</span> <span class="o">=</span> <span class="s1">&#39;sqeuclidean&#39;</span> <span class="k">if</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;euclidean&#39;</span> <span class="k">else</span> <span class="n">metric</span>
+            <span class="c1"># CAGRA only supports sqeuclidean and inner_product metrics</span>
+            <span class="k">if</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;euclidean&#39;</span><span class="p">:</span>
+                <span class="n">cagra_metric</span> <span class="o">=</span> <span class="s1">&#39;sqeuclidean&#39;</span>
+            <span class="k">elif</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">:</span>
+                <span class="n">cagra_metric</span> <span class="o">=</span> <span class="s1">&#39;sqeuclidean&#39;</span>
+            <span class="k">elif</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">:</span>
+                <span class="n">cagra_metric</span> <span class="o">=</span> <span class="s1">&#39;inner_product&#39;</span>
+            <span class="k">elif</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;cosine&#39;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;CAGRA index does not support cosine metric. &quot;</span>
+                    <span class="s2">&quot;Use IVF-Flat or IVF-PQ index types for cosine distance, &quot;</span>
+                    <span class="s2">&quot;or normalize your data and use inner_product metric.&quot;</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;CAGRA index does not support metric &#39;</span><span class="si">{</span><span class="n">metric</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Valid metrics: [&#39;sqeuclidean&#39;, &#39;inner_product&#39;] &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(euclidean is automatically converted to sqeuclidean).&quot;</span>
+                <span class="p">)</span>
 
             <span class="n">build_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
                 <span class="n">metric</span><span class="o">=</span><span class="n">cagra_metric</span><span class="p">,</span>
@@ -483,7 +509,7 @@
 
             <span class="n">index</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Built CAGRA graph-based index&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built CAGRA graph-based index with </span><span class="si">{</span><span class="n">cagra_metric</span><span class="si">}</span><span class="s2"> metric&quot;</span><span class="p">)</span>
 
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown index type: </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
@@ -666,23 +692,28 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">-NN graph using cuVS...&quot;</span><span class="p">)</span>
 
         <span class="c1"># Determine which metric to use for cuVS</span>
-        <span class="c1"># Default to euclidean, but allow named metrics</span>
-        <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;euclidean&#39;</span>
+        <span class="c1"># Default to sqeuclidean (cuVS default), but allow named metrics</span>
+        <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;sqeuclidean&#39;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="n">metric_lower</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">metric_lower</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">,</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">metric_lower</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">):</span>
                 <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;euclidean&#39;</span>
+            <span class="k">elif</span> <span class="n">metric_lower</span> <span class="o">==</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">:</span>
+                <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;sqeuclidean&#39;</span>
             <span class="k">elif</span> <span class="n">metric_lower</span> <span class="o">==</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">:</span>
                 <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;inner_product&#39;</span>
-            <span class="c1"># Note: cuVS doesn&#39;t support cosine directly, would need normalization</span>
+            <span class="k">elif</span> <span class="n">metric_lower</span> <span class="o">==</span> <span class="s1">&#39;cosine&#39;</span><span class="p">:</span>
+                <span class="c1"># Supported by IVF-Flat, IVF-PQ, and flat index types</span>
+                <span class="c1"># Note: CAGRA does not support cosine, will be validated in _build_cuvs_index</span>
+                <span class="n">cuvs_metric</span> <span class="o">=</span> <span class="s1">&#39;cosine&#39;</span>
 
         <span class="c1"># Convert to CuPy array</span>
         <span class="c1"># Note: cuVS requires float32, not float16</span>
         <span class="c1"># cuVS also requires C-contiguous (row-major) arrays</span>
         <span class="n">X_gpu</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;C&#39;</span><span class="p">)</span>
 
-        <span class="c1"># Select index type</span>
-        <span class="n">index_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_cuvs_index_type</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">)</span>
+        <span class="c1"># Select index type (pass metric to avoid selecting CAGRA for unsupported metrics)</span>
+        <span class="n">index_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_cuvs_index_type</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">cuvs_metric</span><span class="p">)</span>
 
         <span class="c1"># Build index</span>
         <span class="k">if</span> <span class="n">index_type</span> <span class="o">!=</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
