@@ -135,7 +135,13 @@ with multiple backend implementations:</p>
 <li><p><strong>DiReCuVS</strong>: RAPIDS cuVS/cuML accelerated implementation for massive datasets</p></li>
 </ul>
 <p>The package automatically selects the best available backend based on system capabilities
-and dataset characteristics.</p>
+and dataset characteristics. When cuVS is not available, the memory-efficient PyTorch backend
+is automatically selected for better GPU memory management.</p>
+<p><strong>Backend Selection Priority:</strong>
+1. RAPIDS cuVS (if available and GPU present)
+2. PyTorch Memory-Efficient (if GPU present but cuVS unavailable, or memory_efficient=True)
+3. PyTorch Standard (if GPU present and memory_efficient=False)
+4. PyTorch CPU (fallback)</p>
 <p>Additionally, the package provides comprehensive metrics for evaluating dimensionality
 reduction quality through the <strong>metrics</strong> module, which includes:</p>
 <ul class="simple">
@@ -147,7 +153,7 @@ reduction quality through the <strong>metrics</strong> module, which includes:</
 <p>Basic usage with automatic backend selection:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
 
-<span class="c1"># Create reducer with optimal backend</span>
+<span class="c1"># Create reducer with optimal backend (auto-selects memory-efficient if cuVS unavailable)</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">()</span>
 
 <span class="c1"># Fit and transform data</span>
@@ -155,10 +161,13 @@ reduction quality through the <strong>metrics</strong> module, which includes:</
 </pre></div>
 </div>
 <p>Force a specific backend:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span><span class="p">,</span> <span class="n">DiReCuVS</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span><span class="p">,</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">,</span> <span class="n">DiReCuVS</span>
 
-<span class="c1"># Use PyTorch backend</span>
+<span class="c1"># Use standard PyTorch backend</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+
+<span class="c1"># Use memory-efficient PyTorch backend</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <span class="c1"># Use RAPIDS backend (requires RAPIDS installation)</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiReCuVS</span><span class="p">(</span><span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -176,7 +185,7 @@ reduction quality through the <strong>metrics</strong> module, which includes:</
 <dl class="py class">
 <dt class="sig sig-object py" id="dire_rapids.DiRePyTorch">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.</span></span><span class="sig-name descname"><span class="pre">DiRePyTorch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_components</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">init</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'pca'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iter_layout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_dist</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spread</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_sample_dirs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">16</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neg_ratio</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_exact_repulsion</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.DiRePyTorch" title="Link to this definition"></a></dt>
-<dd><p>Bases: <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.TransformerMixin.html#sklearn.base.TransformerMixin" title="(in scikit-learn v1.7)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformerMixin</span></code></a></p>
+<dd><p>Bases: <a class="reference external" href="https://scikit-learn.org/stable/modules/generated/sklearn.base.TransformerMixin.html#sklearn.base.TransformerMixin" title="(in scikit-learn v1.8)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TransformerMixin</span></code></a></p>
 <p>Memory-efficient PyTorch/PyKeOps implementation of DiRe dimensionality reduction.</p>
 <p>This class provides a high-performance implementation of the DiRe algorithm using PyTorch
 as the computational backend. It features adaptive memory management for large datasets
@@ -404,7 +413,7 @@ and automatic GPU optimization.</p>
 <dd class="field-even"><p>Low-dimensional embedding of the input data.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a> of shape (n_samples, n_components)</p>
+<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)">numpy.ndarray</a> of shape (n_samples, n_components)</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -422,7 +431,7 @@ and automatic GPU optimization.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="dire_rapids.DiRePyTorch.fit">
-<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.DiRePyTorch.fit" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><span class="pre">ndarray</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch.fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.DiRePyTorch.fit" title="Link to this definition"></a></dt>
 <dd><p>Fit the DiRe model to data without transforming.</p>
 <p>This method fits the model by computing the k-NN graph, kernel parameters,
 and optimized embedding, but primarily serves for scikit-learn compatibility.
@@ -430,7 +439,7 @@ For practical use, fit_transform() is recommended.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>X</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – High-dimensional data to fit the model to.</p></li>
+<li><p><strong>X</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>numpy.ndarray</em></a><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – High-dimensional data to fit the model to.</p></li>
 <li><p><strong>y</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>,</em><em>)</em><em>, </em><em>optional</em>) – Ignored. Present for scikit-learn API compatibility.</p></li>
 </ul>
 </dd>
@@ -645,7 +654,7 @@ handling, enhanced logging, and aggressive cleanup procedures.</p>
 <dd class="field-even"><p>Low-dimensional embedding of the input data.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a> of shape (n_samples, n_components)</p>
+<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)">numpy.ndarray</a> of shape (n_samples, n_components)</p>
 </dd>
 </dl>
 <p class="rubric">Notes</p>
@@ -760,8 +769,11 @@ or DiReCuVS) configured with the specified parameters.</p>
 <p class="rubric">Notes</p>
 <p>Backend Selection Priority (when backend=’auto’):
 1. RAPIDS cuVS (if available and CUDA GPU present)
-2. PyTorch with CUDA (if CUDA GPU available)
-3. PyTorch with CPU (fallback)</p>
+2. PyTorch Memory-Efficient with CUDA (if CUDA GPU available, cuVS not available, or memory_efficient=True)
+3. PyTorch with CUDA (if CUDA GPU available and memory_efficient=False)
+4. PyTorch with CPU (fallback)</p>
+<p>When cuVS is not available but GPU is present, the memory-efficient PyTorch backend
+is automatically selected for better GPU memory management and to handle larger datasets.</p>
 <p>The function automatically handles import errors and missing dependencies,
 falling back to available alternatives when possible.</p>
 </dd></dl>
@@ -1112,7 +1124,7 @@ selection and logging to inform users about the acceleration being used.</p>
 <dd class="field-even"><p>Low-dimensional embedding of the input data.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)">numpy.ndarray</a> of shape (n_samples, n_components)</p>
+<dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)">numpy.ndarray</a> of shape (n_samples, n_components)</p>
 </dd>
 </dl>
 <p class="rubric">Notes</p>

@@ -329,7 +329,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span> <span class="o">=</span> <span class="n">cuvs_index_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span> <span class="o">=</span> <span class="n">cuvs_build_params</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span> <span class="o">=</span> <span class="n">cuvs_search_params</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Store n_lists for search params (older cuVS versions don&#39;t expose index.n_lists)</span></div>
 
     
     <span class="k">def</span><span class="w"> </span><span class="nf">_select_cuvs_index_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;sqeuclidean&#39;</span><span class="p">):</span>
@@ -453,6 +454,7 @@
                 <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
 
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="n">n_lists</span>  <span class="c1"># Store for search params</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-Flat index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists for </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D data&quot;</span><span class="p">)</span>
 
@@ -473,6 +475,7 @@
                 <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
 
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="n">n_lists</span>  <span class="c1"># Store for search params</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-PQ index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists, PQ dim=</span><span class="si">{</span><span class="n">pq_dim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -585,10 +588,9 @@
             <span class="p">)</span>
             
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_flat&#39;</span><span class="p">:</span>
-            <span class="c1"># IVF search</span>
-            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
-                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="c1"># IVF search - use stored n_lists (compatible with older cuVS versions)</span>
+            <span class="n">n_probes</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="k">else</span> <span class="mi">20</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="n">n_probes</span><span class="o">=</span><span class="n">n_probes</span><span class="p">)</span>
             
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
                 <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>
@@ -598,10 +600,9 @@
             <span class="p">)</span>
             
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
-            <span class="c1"># IVF-PQ search</span>
-            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
-                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="c1"># IVF-PQ search - use stored n_lists (compatible with older cuVS versions)</span>
+            <span class="n">n_probes</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="k">else</span> <span class="mi">20</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="n">n_probes</span><span class="o">=</span><span class="n">n_probes</span><span class="p">)</span>
             
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
                 <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>

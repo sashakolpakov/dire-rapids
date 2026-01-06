@@ -453,42 +453,40 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using FP32 for k-NN&quot;</span><span class="p">)</span>
         
         <span class="n">X_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-        
+
         <span class="c1"># CRITICAL: PyKeOps is slower than PyTorch for high dimensions!</span>
         <span class="c1"># Use PyTorch for high-D, PyKeOps for low-D</span>
         <span class="n">use_pykeops</span> <span class="o">=</span> <span class="n">PYKEOPS_AVAILABLE</span> <span class="ow">and</span> <span class="n">n_dims</span> <span class="o">&lt;</span> <span class="mi">200</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_fp16</span>
-        
+
         <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&gt;=</span> <span class="mi">200</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch for k-NN (high dimension: </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D)&quot;</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">use_pykeops</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyKeOps for k-NN (low dimension, GPU available)&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch for k-NN&quot;</span><span class="p">)</span>
-        
+
         <span class="c1"># Set default chunk size if not provided</span>
         <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">chunk_size</span> <span class="o">=</span> <span class="mi">50000</span>
-            
+
         <span class="c1"># Adaptive chunk sizing based on available GPU memory</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
+            <span class="c1"># Check available memory AFTER allocating X_torch</span>
             <span class="n">gpu_mem_free</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">mem_get_info</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
             <span class="c1"># Estimate memory for k-NN: chunk_size * n_samples * bytes_per_element</span>
             <span class="n">bytes_per_element</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">use_fp16</span> <span class="k">else</span> <span class="mi">4</span>  <span class="c1"># FP16 uses 2 bytes, FP32 uses 4</span>
             <span class="n">memory_per_chunk</span> <span class="o">=</span> <span class="n">chunk_size</span> <span class="o">*</span> <span class="n">n_samples</span> <span class="o">*</span> <span class="n">bytes_per_element</span>
-            
+
             <span class="c1"># Only auto-adjust if using default chunk size</span>
             <span class="k">if</span> <span class="n">chunk_size</span> <span class="o">==</span> <span class="mi">50000</span><span class="p">:</span>
-                <span class="c1"># Use 30% of available memory for k-NN computation (40% for FP16 since it&#39;s more efficient)</span>
-                <span class="n">memory_fraction</span> <span class="o">=</span> <span class="mf">0.4</span> <span class="k">if</span> <span class="n">use_fp16</span> <span class="k">else</span> <span class="mf">0.3</span>
+                <span class="c1"># Use conservative memory fraction: 20-25% of available memory</span>
+                <span class="c1"># This accounts for PyTorch overhead, temp buffers, and fragmentation</span>
+                <span class="n">memory_fraction</span> <span class="o">=</span> <span class="mf">0.25</span> <span class="k">if</span> <span class="n">use_fp16</span> <span class="k">else</span> <span class="mf">0.20</span>
                 <span class="n">max_memory</span> <span class="o">=</span> <span class="n">gpu_mem_free</span> <span class="o">*</span> <span class="n">memory_fraction</span>
                 <span class="k">if</span> <span class="n">memory_per_chunk</span> <span class="o">&gt;</span> <span class="n">max_memory</span><span class="p">:</span>
                     <span class="n">chunk_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_memory</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_samples</span> <span class="o">*</span> <span class="n">bytes_per_element</span><span class="p">))</span>
                     <span class="n">chunk_size</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>  <span class="c1"># Minimum chunk size</span>
-                
-                <span class="c1"># With FP16, we can use larger chunks!</span>
-                <span class="k">if</span> <span class="n">use_fp16</span><span class="p">:</span>
-                    <span class="n">chunk_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">chunk_size</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">100000</span><span class="p">)</span>  <span class="c1"># Double chunk size for FP16</span>
-            
+
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using chunk size: </span><span class="si">{</span><span class="n">chunk_size</span><span class="si">}</span><span class="s2"> (GPU memory: </span><span class="si">{</span><span class="n">gpu_mem_free</span><span class="o">/</span><span class="mi">1024</span><span class="o">**</span><span class="mi">3</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">GB, dtype: </span><span class="si">{</span><span class="n">dtype</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
         
         <span class="c1"># Initialize arrays for results</span>
@@ -551,9 +549,12 @@
             
             <span class="n">all_knn_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk_indices</span><span class="p">)</span>
             <span class="n">all_knn_distances</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk_distances</span><span class="p">)</span>
-            
-            <span class="c1"># Clear GPU memory periodically</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span> <span class="ow">and</span> <span class="n">start_idx</span> <span class="o">%</span> <span class="p">(</span><span class="n">chunk_size</span> <span class="o">*</span> <span class="mi">10</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+
+            <span class="c1"># Clear GPU memory after each chunk to avoid fragmentation</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
+                <span class="k">del</span> <span class="n">knn_dists</span><span class="p">,</span> <span class="n">knn_indices</span>
+                <span class="k">if</span> <span class="s1">&#39;distances&#39;</span> <span class="ow">in</span> <span class="nb">locals</span><span class="p">():</span>
+                    <span class="k">del</span> <span class="n">distances</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
         
         <span class="c1"># Concatenate results</span>
@@ -1167,8 +1168,12 @@
 <span class="sd">    -----</span>
 <span class="sd">    Backend Selection Priority (when backend=&#39;auto&#39;):</span>
 <span class="sd">    1. RAPIDS cuVS (if available and CUDA GPU present)</span>
-<span class="sd">    2. PyTorch with CUDA (if CUDA GPU available)</span>
-<span class="sd">    3. PyTorch with CPU (fallback)</span>
+<span class="sd">    2. PyTorch Memory-Efficient with CUDA (if CUDA GPU available, cuVS not available, or memory_efficient=True)</span>
+<span class="sd">    3. PyTorch with CUDA (if CUDA GPU available and memory_efficient=False)</span>
+<span class="sd">    4. PyTorch with CPU (fallback)</span>
+
+<span class="sd">    When cuVS is not available but GPU is present, the memory-efficient PyTorch backend</span>
+<span class="sd">    is automatically selected for better GPU memory management and to handle larger datasets.</span>
 
 <span class="sd">    The function automatically handles import errors and missing dependencies,</span>
 <span class="sd">    falling back to available alternatives when possible.</span>
@@ -1178,8 +1183,7 @@
 
     <span class="c1"># Import here to avoid circular imports</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_cuvs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiReCuVS</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
-        <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_cuvs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiReCuVS</span><span class="p">,</span> <span class="n">CUVS_AVAILABLE</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
     <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
         <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
 
@@ -1193,7 +1197,8 @@
             <span class="k">return</span> <span class="n">DiReCuVS</span><span class="p">(</span><span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">memory_efficient</span><span class="p">:</span>
+            <span class="c1"># When cuVS is not available, prefer memory-efficient backend for better GPU memory management</span>
+            <span class="k">if</span> <span class="n">memory_efficient</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Auto-selected memory-efficient PyTorch backend (GPU)&quot;</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>

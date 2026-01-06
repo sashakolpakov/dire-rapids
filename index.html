@@ -199,6 +199,8 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
 
 <span class="c1"># Automatic selection based on hardware</span>
+<span class="c1"># Priority: cuVS &gt; PyTorchMemoryEfficient &gt; PyTorch &gt; CPU</span>
+<span class="c1"># When cuVS is not available, automatically uses memory-efficient backend</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span>
     <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
     <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># Use memory-efficient variant if needed</span>
@@ -206,6 +208,13 @@
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 </pre></div>
 </div>
+<p><strong>Backend Selection Priority:</strong></p>
+<ol class="arabic simple">
+<li><p>RAPIDS cuVS (if available and GPU present)</p></li>
+<li><p>PyTorch Memory-Efficient (if GPU present but cuVS unavailable, or <code class="docutils literal notranslate"><span class="pre">memory_efficient=True</span></code>)</p></li>
+<li><p>PyTorch Standard (if GPU present and <code class="docutils literal notranslate"><span class="pre">memory_efficient=False</span></code>)</p></li>
+<li><p>PyTorch CPU (fallback)</p></li>
+</ol>
 </section>
 <section id="metrics-module">
 <h3>Metrics Module<a class="headerlink" href="#metrics-module" title="Link to this heading"></a></h3>
