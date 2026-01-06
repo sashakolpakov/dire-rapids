@@ -189,6 +189,8 @@ Use the `create_dire()` function for automatic backend selection based on availa
 from dire_rapids import create_dire
 
 # Auto-select optimal backend
+# Priority: cuVS > PyTorchMemoryEfficient > PyTorch
+# When cuVS is not available, automatically uses memory-efficient backend
 reducer = create_dire(
     n_neighbors=32,
     metric='(x - y).abs().sum(-1)',  # Custom L1 metric
@@ -204,6 +206,12 @@ reducer = create_dire(
 )
 X_embedded = reducer.fit_transform(X)
 ```
+
+**Backend Selection Priority:**
+1. RAPIDS cuVS (if available and GPU present)
+2. PyTorch Memory-Efficient (if GPU present but cuVS unavailable, or `memory_efficient=True`)
+3. PyTorch Standard (if GPU present and `memory_efficient=False`)
+4. PyTorch CPU (fallback)
 
 ## ReducerRunner Framework
 

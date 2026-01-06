@@ -128,13 +128,22 @@ Automatic Backend Selection
 .. code-block:: python
 
    from dire_rapids import create_dire
-   
+
    # Automatic selection based on hardware
+   # Priority: cuVS > PyTorchMemoryEfficient > PyTorch > CPU
+   # When cuVS is not available, automatically uses memory-efficient backend
    reducer = create_dire(
        n_neighbors=32,
        memory_efficient=True  # Use memory-efficient variant if needed
    )
    embedding = reducer.fit_transform(X)
+
+**Backend Selection Priority:**
+
+1. RAPIDS cuVS (if available and GPU present)
+2. PyTorch Memory-Efficient (if GPU present but cuVS unavailable, or ``memory_efficient=True``)
+3. PyTorch Standard (if GPU present and ``memory_efficient=False``)
+4. PyTorch CPU (fallback)
 
 Metrics Module
 ~~~~~~~~~~~~~~

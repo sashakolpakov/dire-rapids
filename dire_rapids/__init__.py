@@ -11,7 +11,14 @@ with multiple backend implementations:
 - **DiReCuVS**: RAPIDS cuVS/cuML accelerated implementation for massive datasets
 
 The package automatically selects the best available backend based on system capabilities
-and dataset characteristics.
+and dataset characteristics. When cuVS is not available, the memory-efficient PyTorch backend
+is automatically selected for better GPU memory management.
+
+**Backend Selection Priority:**
+1. RAPIDS cuVS (if available and GPU present)
+2. PyTorch Memory-Efficient (if GPU present but cuVS unavailable, or memory_efficient=True)
+3. PyTorch Standard (if GPU present and memory_efficient=False)
+4. PyTorch CPU (fallback)
 
 Additionally, the package provides comprehensive metrics for evaluating dimensionality
 reduction quality through the **metrics** module, which includes:
@@ -26,7 +33,7 @@ Basic usage with automatic backend selection::
 
     from dire_rapids import create_dire
 
-    # Create reducer with optimal backend
+    # Create reducer with optimal backend (auto-selects memory-efficient if cuVS unavailable)
     reducer = create_dire()
 
     # Fit and transform data
@@ -34,10 +41,13 @@ Basic usage with automatic backend selection::
 
 Force a specific backend::
 
-    from dire_rapids import DiRePyTorch, DiReCuVS
+    from dire_rapids import DiRePyTorch, DiRePyTorchMemoryEfficient, DiReCuVS
 
-    # Use PyTorch backend
+    # Use standard PyTorch backend
     reducer = DiRePyTorch(n_neighbors=32)
+
+    # Use memory-efficient PyTorch backend
+    reducer = DiRePyTorchMemoryEfficient(n_neighbors=32, use_fp16=True)
 
     # Use RAPIDS backend (requires RAPIDS installation)
     reducer = DiReCuVS(use_cuvs=True)

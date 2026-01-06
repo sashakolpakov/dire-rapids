@@ -255,6 +255,7 @@ class DiReCuVS(DiRePyTorch):
         self.cuvs_build_params = cuvs_build_params
         self.cuvs_search_params = cuvs_search_params
         self.cuvs_index = None
+        self._n_lists = None  # Store n_lists for search params (older cuVS versions don't expose index.n_lists)
     
     def _select_cuvs_index_type(self, n_samples, n_dims, metric='sqeuclidean'):
         """
@@ -377,6 +378,7 @@ class DiReCuVS(DiRePyTorch):
                 build_params.update(self.cuvs_build_params)
 
             index = ivf_flat.build(build_params, X_gpu)
+            self._n_lists = n_lists  # Store for search params
 
             self.logger.info(f"Built IVF-Flat index with {n_lists} lists for {n_dims}D data")
 
@@ -397,6 +399,7 @@ class DiReCuVS(DiRePyTorch):
                 build_params.update(self.cuvs_build_params)
 
             index = ivf_pq.build(build_params, X_gpu)
+            self._n_lists = n_lists  # Store for search params
 
             self.logger.info(f"Built IVF-PQ index with {n_lists} lists, PQ dim={pq_dim}")
 
@@ -509,10 +512,9 @@ class DiReCuVS(DiRePyTorch):
             )
             
         elif index_type == 'ivf_flat':
-            # IVF search
-            search_params = ivf_flat.SearchParams(
-                n_probes=min(index.n_lists // 10, 100)
-            )
+            # IVF search - use stored n_lists (compatible with older cuVS versions)
+            n_probes = min(self._n_lists // 10, 100) if self._n_lists else 20
+            search_params = ivf_flat.SearchParams(n_probes=n_probes)
             
             if self.cuvs_search_params:
                 search_params.update(self.cuvs_search_params)
@@ -522,10 +524,9 @@ class DiReCuVS(DiRePyTorch):
             )
             
         elif index_type == 'ivf_pq':
-            # IVF-PQ search
-            search_params = ivf_pq.SearchParams(
-                n_probes=min(index.n_lists // 10, 200)
-            )
+            # IVF-PQ search - use stored n_lists (compatible with older cuVS versions)
+            n_probes = min(self._n_lists // 10, 200) if self._n_lists else 20
+            search_params = ivf_pq.SearchParams(n_probes=n_probes)
             
             if self.cuvs_search_params:
                 search_params.update(self.cuvs_search_params)

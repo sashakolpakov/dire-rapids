@@ -377,42 +377,40 @@ class DiRePyTorch(TransformerMixin):
             self.logger.info("Using FP32 for k-NN")
         
         X_torch = torch.tensor(X, dtype=dtype, device=self.device)
-        
+
         # CRITICAL: PyKeOps is slower than PyTorch for high dimensions!
         # Use PyTorch for high-D, PyKeOps for low-D
         use_pykeops = PYKEOPS_AVAILABLE and n_dims < 200 and self.device.type == 'cuda' and not use_fp16
-        
+
         if n_dims >= 200:
             self.logger.info(f"Using PyTorch for k-NN (high dimension: {n_dims}D)")
         elif use_pykeops:
             self.logger.info("Using PyKeOps for k-NN (low dimension, GPU available)")
         else:
             self.logger.info("Using PyTorch for k-NN")
-        
+
         # Set default chunk size if not provided
         if chunk_size is None:
             chunk_size = 50000
-            
+
         # Adaptive chunk sizing based on available GPU memory
         if self.device.type == 'cuda':
+            # Check available memory AFTER allocating X_torch
             gpu_mem_free = torch.cuda.mem_get_info()[0]
             # Estimate memory for k-NN: chunk_size * n_samples * bytes_per_element
             bytes_per_element = 2 if use_fp16 else 4  # FP16 uses 2 bytes, FP32 uses 4
             memory_per_chunk = chunk_size * n_samples * bytes_per_element
-            
+
             # Only auto-adjust if using default chunk size
             if chunk_size == 50000:
-                # Use 30% of available memory for k-NN computation (40% for FP16 since it's more efficient)
-                memory_fraction = 0.4 if use_fp16 else 0.3
+                # Use conservative memory fraction: 20-25% of available memory
+                # This accounts for PyTorch overhead, temp buffers, and fragmentation
+                memory_fraction = 0.25 if use_fp16 else 0.20
                 max_memory = gpu_mem_free * memory_fraction
                 if memory_per_chunk > max_memory:
                     chunk_size = int(max_memory / (n_samples * bytes_per_element))
                     chunk_size = max(1000, chunk_size)  # Minimum chunk size
-                
-                # With FP16, we can use larger chunks!
-                if use_fp16:
-                    chunk_size = min(chunk_size * 2, 100000)  # Double chunk size for FP16
-            
+
             self.logger.info(f"Using chunk size: {chunk_size} (GPU memory: {gpu_mem_free/1024**3:.1f}GB, dtype: {dtype})")
         
         # Initialize arrays for results
@@ -475,9 +473,12 @@ class DiRePyTorch(TransformerMixin):
             
             all_knn_indices.append(chunk_indices)
             all_knn_distances.append(chunk_distances)
-            
-            # Clear GPU memory periodically
-            if self.device.type == 'cuda' and start_idx % (chunk_size * 10) == 0:
+
+            # Clear GPU memory after each chunk to avoid fragmentation
+            if self.device.type == 'cuda':
+                del knn_dists, knn_indices
+                if 'distances' in locals():
+                    del distances
                 torch.cuda.empty_cache()
         
         # Concatenate results
@@ -1079,8 +1080,12 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
     -----
     Backend Selection Priority (when backend='auto'):
     1. RAPIDS cuVS (if available and CUDA GPU present)
-    2. PyTorch with CUDA (if CUDA GPU available)
-    3. PyTorch with CPU (fallback)
+    2. PyTorch Memory-Efficient with CUDA (if CUDA GPU available, cuVS not available, or memory_efficient=True)
+    3. PyTorch with CUDA (if CUDA GPU available and memory_efficient=False)
+    4. PyTorch with CPU (fallback)
+
+    When cuVS is not available but GPU is present, the memory-efficient PyTorch backend
+    is automatically selected for better GPU memory management and to handle larger datasets.
 
     The function automatically handles import errors and missing dependencies,
     falling back to available alternatives when possible.
@@ -1090,8 +1095,7 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
 
     # Import here to avoid circular imports
     try:
-        from .dire_cuvs import DiReCuVS  # pylint: disable=import-outside-toplevel
-        CUVS_AVAILABLE = True
+        from .dire_cuvs import DiReCuVS, CUVS_AVAILABLE  # pylint: disable=import-outside-toplevel
     except ImportError:
         CUVS_AVAILABLE = False
 
@@ -1105,7 +1109,8 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
             return DiReCuVS(use_cuvs=True, **kwargs)
 
         if torch.cuda.is_available():
-            if memory_efficient:
+            # When cuVS is not available, prefer memory-efficient backend for better GPU memory management
+            if memory_efficient or not CUVS_AVAILABLE:
                 if verbose:
                     logger.info("Auto-selected memory-efficient PyTorch backend (GPU)")
                 return DiRePyTorchMemoryEfficient(**kwargs)

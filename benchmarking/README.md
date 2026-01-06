@@ -60,10 +60,12 @@ def select_backend(n_samples, n_dims):
     if n_samples < 100000:
         return 'pytorch'  # Fast exact k-NN for small data
     elif n_samples < 250000 and n_dims < 500:
-        return 'pytorch'  # Still manageable with exact methods
+        return 'pytorch_memory_efficient'  # Memory-efficient with exact k-NN
     else:
         return 'cuvs'  # Switch to approximate for scale
 ```
+
+**Note:** The `create_dire()` function automatically selects the memory-efficient backend when cuVS is not available, providing better GPU memory management for large datasets.
 
 ## Optimization Techniques
 
