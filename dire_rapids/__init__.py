@@ -62,6 +62,8 @@ Evaluate embedding quality::
     print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
 """
 
+__version__ = "0.2.0"
+
 # Import PyTorch backends
 from .dire_pytorch import DiRePyTorch, create_dire
 from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient
@@ -75,14 +77,20 @@ try:
     HAS_CUVS = True
 except ImportError:
     HAS_CUVS = False
-    import warnings
-    warnings.warn(
-        "cuVS backend not available. "
-        "Install RAPIDS for GPU acceleration: Follow the installation instructions at https://docs.rapids.ai/install/",
-        UserWarning
-    )
+
+# Import submodules for convenient access
+from . import metrics
+from . import betti_curve
 
 # Build __all__ based on available modules
-__all__ = ['DiRePyTorch', 'DiRePyTorchMemoryEfficient', 'create_dire', 'ReducerRunner', 'ReducerConfig']
+__all__ = [
+    'DiRePyTorch',
+    'DiRePyTorchMemoryEfficient',
+    'create_dire',
+    'ReducerRunner',
+    'ReducerConfig',
+    'metrics',
+    'betti_curve',
+]
 if HAS_CUVS:
     __all__.append('DiReCuVS')

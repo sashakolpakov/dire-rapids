@@ -20,4 +20,4 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint --output-format=colorized --rcfile=.pylintrc $(git ls-files '*.py' | grep -v 'setup.py' || echo "no-python-files-yet.py")
+        pylint --output-format=colorized --rcfile=.pylintrc $(git ls-files '*.py' || echo "no-python-files-yet.py")

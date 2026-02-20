@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dire-rapids"
-version = "0.2.0"
+dynamic = ["version"]
 description = "PyTorch and RAPIDS (cuVS/cuML) accelerated dimensionality reduction"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -101,3 +101,6 @@ exclude = ["tests", "tests.*", "examples", "examples.*", "benchmarking", "benchm
 [tool.setuptools]
 include-package-data = true
 zip-safe = false
+
+[tool.setuptools.dynamic]
+version = {attr = "dire_rapids.__version__"}

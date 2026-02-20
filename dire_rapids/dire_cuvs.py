@@ -665,8 +665,6 @@ class DiReCuVS(DiRePyTorch):
             del self.cuvs_index
             self.cuvs_index = None
         cp.get_default_memory_pool().free_all_blocks()
-        
-        return self
     
     def _initialize_embedding(self, X):
         """

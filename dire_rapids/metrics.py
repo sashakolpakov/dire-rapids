@@ -116,11 +116,11 @@ def welford_finalize_gpu(count, mean, M2):
 
 def welford_gpu(data):
     """
-    GPU-accelerated computation of mean and std using Welford's algorithm.
+    GPU-accelerated computation of mean and std.
 
     Parameters
     ----------
-    data : cupy.ndarray
+    data : cupy.ndarray or numpy.ndarray
         Input data
 
     Returns
@@ -137,20 +137,9 @@ def welford_gpu(data):
     if isinstance(data, np.ndarray):
         data = cp.asarray(data)
 
-    data_flat = data.ravel()
-    count = cp.zeros(1, dtype=cp.int32)
-    mean = cp.zeros(1, dtype=cp.float32)
-    M2 = cp.zeros(1, dtype=cp.float32)
-
-    # Process in chunks to avoid memory issues
-    chunk_size = 1024 * 1024
-    for i in range(0, len(data_flat), chunk_size):
-        chunk = data_flat[i:i + chunk_size]
-        for val in chunk:
-            count, mean, M2 = welford_update_gpu(count, mean, M2, val)
-
-    mean_final, std_final = welford_finalize_gpu(count, mean, M2)
-    return float(mean_final), float(std_final)
+    mean = float(cp.nanmean(data))
+    std = float(cp.nanstd(data))
+    return mean, std
 
 
 def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_state=42):
@@ -375,14 +364,11 @@ def compute_stress(data, layout, n_neighbors, eps=1e-6, use_gpu=True):
         distances = distances[:, 1:]  # Remove self
         indices = indices[:, 1:]
 
-        # Compute distances in low-dimensional space
+        # Compute distances in low-dimensional space (vectorized)
         n_samples = layout_gpu.shape[0]
-        distances_emb = cp.zeros_like(distances)
-
-        for i in range(n_samples):
-            neighbor_coords = layout_gpu[indices[i]]
-            point_coords = layout_gpu[i:i+1]
-            distances_emb[i] = cp.linalg.norm(neighbor_coords - point_coords, axis=1)
+        neighbor_coords = layout_gpu[indices]  # (n_samples, k, n_components)
+        point_coords = layout_gpu[:, None, :]  # (n_samples, 1, n_components)
+        distances_emb = cp.linalg.norm(neighbor_coords - point_coords, axis=2)
 
         # Compute normalized stress
         ratios = cp.abs(distances / cp.maximum(distances_emb, eps) - 1.0)
@@ -401,14 +387,11 @@ def compute_stress(data, layout, n_neighbors, eps=1e-6, use_gpu=True):
         distances = distances[:, 1:]
         indices = indices[:, 1:]
 
-        # Compute distances in embedding
+        # Compute distances in embedding (vectorized)
         n_samples = layout_np.shape[0]
-        distances_emb = np.zeros_like(distances)
-
-        for i in range(n_samples):
-            neighbor_coords = layout_np[indices[i]]
-            point_coords = layout_np[i:i+1]
-            distances_emb[i] = np.linalg.norm(neighbor_coords - point_coords, axis=1)
+        neighbor_coords = layout_np[indices]  # (n_samples, k, n_components)
+        point_coords = layout_np[:, None, :]  # (n_samples, 1, n_components)
+        distances_emb = np.linalg.norm(neighbor_coords - point_coords, axis=2)
 
         ratios = np.abs(distances / np.maximum(distances_emb, eps) - 1.0)
         stress_mean = float(np.mean(ratios))
@@ -451,15 +434,18 @@ def compute_neighbor_score(data, layout, n_neighbors, use_gpu=True):
         indices_data = indices_data[:, 1:]  # Remove self
         indices_layout = indices_layout[:, 1:]
 
-        # Sort indices
-        indices_data = cp.sort(indices_data, axis=1)
-        indices_layout = cp.sort(indices_layout, axis=1)
+        # Vectorized set intersection via broadcasting:
+        # indices_data[:, :, None] == indices_layout[:, None, :] gives (N, k, k) bool
+        # any(axis=2) collapses to (N, k), sum(axis=1) counts matches per row.
+        indices_data_np = cp.asnumpy(indices_data)
+        indices_layout_np = cp.asnumpy(indices_layout)
 
-        # Compute preservation scores
-        preservation_scores = cp.mean(indices_data == indices_layout, axis=1)
+        k = indices_data_np.shape[1]
+        matches = (indices_data_np[:, :, None] == indices_layout_np[:, None, :]).any(axis=2)
+        preservation_scores = matches.sum(axis=1).astype(np.float32) / k
 
-        neighbor_mean = float(cp.mean(preservation_scores))
-        neighbor_std = float(cp.std(preservation_scores))
+        neighbor_mean = float(np.mean(preservation_scores))
+        neighbor_std = float(np.std(preservation_scores))
 
     else:
         data_np = np.asarray(data, dtype=np.float32)
@@ -471,10 +457,12 @@ def compute_neighbor_score(data, layout, n_neighbors, use_gpu=True):
         indices_data = indices_data[:, 1:]
         indices_layout = indices_layout[:, 1:]
 
-        indices_data = np.sort(indices_data, axis=1)
-        indices_layout = np.sort(indices_layout, axis=1)
-
-        preservation_scores = np.mean(indices_data == indices_layout, axis=1)
+        # Vectorized set intersection via broadcasting:
+        # indices_data[:, :, None] == indices_layout[:, None, :] gives (N, k, k) bool
+        # any(axis=2) collapses to (N, k), sum(axis=1) counts matches per row.
+        k = indices_data.shape[1]
+        matches = (indices_data[:, :, None] == indices_layout[:, None, :]).any(axis=2)
+        preservation_scores = matches.sum(axis=1).astype(np.float32) / k
 
         neighbor_mean = float(np.mean(preservation_scores))
         neighbor_std = float(np.std(preservation_scores))

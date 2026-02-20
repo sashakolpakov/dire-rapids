@@ -18,8 +18,155 @@ from scipy.sparse.linalg import eigsh
 from sklearn.neighbors import NearestNeighbors
 
 
-def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap_factor=1.5,
-                            n_steps=50):
+# ---------------------------------------------------------------------------
+# Shared helpers (used by both CPU and GPU paths)
+# ---------------------------------------------------------------------------
+
+def _build_atlas(data_np, distances_np, indices_np, k_neighbors,
+                 density_threshold, overlap_factor):
+    """
+    Build the atlas complex from kNN graph data (CPU-only set operations).
+
+    Returns
+    -------
+    global_edges : set of (int, int) tuples
+    global_triangles : set of (int, int, int) tuples
+    edge_distances : dict mapping edge -> float
+    triangle_edges : list of (tri, e1, e2, e3) tuples
+    """
+    n = len(data_np)
+    edge_distances = {}
+    global_edges = set()
+    global_triangles = set()
+
+    for i in range(n):
+        local_neighborhood = indices_np[i, 1:]
+        local_dists = distances_np[i, 1:]
+
+        # Edges from i to neighbors
+        for j_idx, j in enumerate(local_neighborhood):
+            edge = tuple(sorted([i, int(j)]))
+            global_edges.add(edge)
+            if edge not in edge_distances:
+                edge_distances[edge] = local_dists[j_idx]
+
+        # Dense local patch
+        dist_threshold = (
+            np.percentile(local_dists, density_threshold * 100) * overlap_factor
+        )
+
+        if len(local_neighborhood) > 1:
+            neighborhood_coords = data_np[local_neighborhood]
+            for idx_j, j_val in enumerate(local_neighborhood):
+                j = int(j_val)
+                dists_jk = np.linalg.norm(
+                    neighborhood_coords[idx_j + 1:] - neighborhood_coords[idx_j],
+                    axis=1,
+                )
+                close_enough = dists_jk < dist_threshold
+                for offset, is_close in enumerate(close_enough):
+                    if is_close:
+                        k = int(local_neighborhood[idx_j + 1 + offset])
+                        edge = tuple(sorted([j, k]))
+                        global_edges.add(edge)
+                        if edge not in edge_distances:
+                            edge_distances[edge] = dists_jk[offset]
+
+        # Build triangles
+        for idx_j, j_val in enumerate(local_neighborhood):
+            for idx_k in range(idx_j + 1, len(local_neighborhood)):
+                j = int(j_val)
+                k = int(local_neighborhood[idx_k])
+                e1 = tuple(sorted([i, j]))
+                e2 = tuple(sorted([i, k]))
+                e3 = tuple(sorted([j, k]))
+                if e1 in global_edges and e2 in global_edges and e3 in global_edges:
+                    global_triangles.add(tuple(sorted([i, j, k])))
+
+    # Pre-compute triangle edges for efficiency
+    triangle_edges = []
+    for tri in global_triangles:
+        i, j, k = tri
+        e1 = tuple(sorted([i, j]))
+        e2 = tuple(sorted([i, k]))
+        e3 = tuple(sorted([j, k]))
+        triangle_edges.append((tri, e1, e2, e3))
+
+    return global_edges, global_triangles, edge_distances, triangle_edges
+
+
+def _build_boundary_data(active_edges, active_triangles, edge_to_idx):
+    """
+    Build the raw COO data for boundary operators B1, B2, and adjacency A.
+
+    Returns
+    -------
+    b1 : (rows, cols, data) lists for B1
+    b2 : (rows, cols, data) lists for B2  (empty lists if no triangles)
+    adj : (rows, cols, data) lists for adjacency matrix
+    """
+    # B1 (edge boundary operator)
+    B1_rows, B1_cols, B1_data = [], [], []
+    for e_idx, (v0, v1) in enumerate(active_edges):
+        B1_rows.extend([v0, v1])
+        B1_cols.extend([e_idx, e_idx])
+        B1_data.extend([-1.0, +1.0])
+
+    # B2 (triangle boundary operator)
+    B2_rows, B2_cols, B2_data = [], [], []
+    for t_idx, (i, j, k) in enumerate(active_triangles):
+        e1 = tuple(sorted([i, j]))
+        e2 = tuple(sorted([i, k]))
+        e3 = tuple(sorted([j, k]))
+
+        if e1 in edge_to_idx:
+            B2_rows.append(edge_to_idx[e1])
+            B2_cols.append(t_idx)
+            B2_data.append(+1.0 if i < j else -1.0)
+        if e2 in edge_to_idx:
+            B2_rows.append(edge_to_idx[e2])
+            B2_cols.append(t_idx)
+            B2_data.append(-1.0 if i < k else +1.0)
+        if e3 in edge_to_idx:
+            B2_rows.append(edge_to_idx[e3])
+            B2_cols.append(t_idx)
+            B2_data.append(+1.0 if j < k else -1.0)
+
+    # Adjacency
+    adj_rows, adj_cols, adj_data = [], [], []
+    for v0, v1 in active_edges:
+        adj_rows.extend([v0, v1])
+        adj_cols.extend([v1, v0])
+        adj_data.extend([1.0, 1.0])
+
+    return (
+        (B1_rows, B1_cols, B1_data),
+        (B2_rows, B2_cols, B2_data),
+        (adj_rows, adj_cols, adj_data),
+    )
+
+
+def _filter_at_threshold(filt_val, global_edges, edge_distances, triangle_edges):
+    """Return active edges, triangles, and edge-to-index map at a filtration value."""
+    active_edges = [e for e in global_edges if edge_distances[e] <= filt_val]
+    active_edge_set = set(active_edges)
+
+    active_triangles = [
+        tri
+        for tri, e1, e2, e3 in triangle_edges
+        if e1 in active_edge_set and e2 in active_edge_set and e3 in active_edge_set
+    ]
+
+    edge_to_idx = {e: idx for idx, e in enumerate(active_edges)}
+    return active_edges, active_triangles, edge_to_idx
+
+
+# ---------------------------------------------------------------------------
+# CPU implementation
+# ---------------------------------------------------------------------------
+
+def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8,
+                            overlap_factor=1.5, n_steps=50):
     """
     CPU implementation of filtered Betti curve computation.
 
@@ -64,63 +211,10 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
     nn.fit(data)
     distances, indices = nn.kneighbors(data)
 
-    # Track edge distances
-    edge_distances = {}
-
-    # Global edge and triangle sets
-    global_edges = set()
-    global_triangles = set()
-
-    # Build atlas patches
-    for i in range(n):
-        local_neighborhood = indices[i, 1:]
-        local_dists = distances[i, 1:]
-
-        # Edges from i to neighbors
-        for j_idx, j in enumerate(local_neighborhood):
-            edge = tuple(sorted([i, int(j)]))
-            global_edges.add(edge)
-            if edge not in edge_distances:
-                edge_distances[edge] = local_dists[j_idx]
-
-        # Dense local patch
-        dist_threshold = np.percentile(local_dists, density_threshold * 100) * overlap_factor
-
-        if len(local_neighborhood) > 1:
-            neighborhood_coords = data[local_neighborhood]
-            for idx_j, j_val in enumerate(local_neighborhood):
-                j = int(j_val)
-                dists_jk = np.linalg.norm(
-                    neighborhood_coords[idx_j+1:] - neighborhood_coords[idx_j], axis=1
-                )
-                close_enough = dists_jk < dist_threshold
-                for offset, is_close in enumerate(close_enough):
-                    if is_close:
-                        k = int(local_neighborhood[idx_j + 1 + offset])
-                        edge = tuple(sorted([j, k]))
-                        global_edges.add(edge)
-                        if edge not in edge_distances:
-                            edge_distances[edge] = dists_jk[offset]
-
-        # Build triangles
-        for idx_j, j_val in enumerate(local_neighborhood):
-            for idx_k in range(idx_j + 1, len(local_neighborhood)):
-                j = int(j_val)
-                k = int(local_neighborhood[idx_k])
-                e1 = tuple(sorted([i, j]))
-                e2 = tuple(sorted([i, k]))
-                e3 = tuple(sorted([j, k]))
-                if e1 in global_edges and e2 in global_edges and e3 in global_edges:
-                    global_triangles.add(tuple(sorted([i, j, k])))
-
-    # Pre-compute triangle edges for efficiency
-    triangle_edges = []
-    for tri in global_triangles:
-        i, j, k = tri
-        e1 = tuple(sorted([i, j]))
-        e2 = tuple(sorted([i, k]))
-        e3 = tuple(sorted([j, k]))
-        triangle_edges.append((tri, e1, e2, e3))
+    # Build atlas complex
+    global_edges, _, edge_distances, triangle_edges = _build_atlas(
+        data, distances, indices, k_neighbors, density_threshold, overlap_factor
+    )
 
     # Create filtration values based on edge distances
     all_distances = np.array(list(edge_distances.values()))
@@ -135,9 +229,9 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
 
     # Compute Betti numbers at each filtration value
     for filt_val in filtration_values:
-        # Filter edges by distance
-        active_edges = [e for e in global_edges if edge_distances[e] <= filt_val]
-        active_edge_set = set(active_edges)
+        active_edges, active_triangles, edge_to_idx = _filter_at_threshold(
+            filt_val, global_edges, edge_distances, triangle_edges
+        )
 
         if len(active_edges) == 0:
             beta_0_curve.append(n)
@@ -146,61 +240,30 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
             n_triangles_curve.append(0)
             continue
 
-        # Filter triangles
-        active_triangles = [
-            tri for tri, e1, e2, e3 in triangle_edges
-            if e1 in active_edge_set and e2 in active_edge_set and e3 in active_edge_set
-        ]
-
         n_edges_active = len(active_edges)
         n_triangles_active = len(active_triangles)
-        edge_to_idx = {e: idx for idx, e in enumerate(active_edges)}
 
-        # Build B1 (edge boundary operator)
-        B1_rows, B1_cols, B1_data = [], [], []
-        for e_idx, (v0, v1) in enumerate(active_edges):
-            B1_rows.extend([v0, v1])
-            B1_cols.extend([e_idx, e_idx])
-            B1_data.extend([-1, +1])
+        # Build boundary operator data
+        b1, b2, adj = _build_boundary_data(active_edges, active_triangles, edge_to_idx)
 
-        B1 = sparse.coo_matrix((B1_data, (B1_rows, B1_cols)),
-                               shape=(n, n_edges_active), dtype=np.float64).tocsr()
+        # Construct sparse matrices (CPU / scipy)
+        B1 = sparse.coo_matrix(
+            (b1[2], (b1[0], b1[1])),
+            shape=(n, n_edges_active), dtype=np.float64,
+        ).tocsr()
 
-        # Build B2 (triangle boundary operator)
         if n_triangles_active > 0:
-            B2_rows, B2_cols, B2_data = [], [], []
-            for t_idx, (i, j, k) in enumerate(active_triangles):
-                e1 = tuple(sorted([i, j]))
-                e2 = tuple(sorted([i, k]))
-                e3 = tuple(sorted([j, k]))
-
-                if e1 in edge_to_idx:
-                    B2_rows.append(edge_to_idx[e1])
-                    B2_cols.append(t_idx)
-                    B2_data.append(+1 if i < j else -1)
-                if e2 in edge_to_idx:
-                    B2_rows.append(edge_to_idx[e2])
-                    B2_cols.append(t_idx)
-                    B2_data.append(-1 if i < k else +1)
-                if e3 in edge_to_idx:
-                    B2_rows.append(edge_to_idx[e3])
-                    B2_cols.append(t_idx)
-                    B2_data.append(+1 if j < k else -1)
-
-            B2 = sparse.coo_matrix((B2_data, (B2_rows, B2_cols)),
-                                  shape=(n_edges_active, n_triangles_active), dtype=np.float64).tocsr()
+            B2 = sparse.coo_matrix(
+                (b2[2], (b2[0], b2[1])),
+                shape=(n_edges_active, n_triangles_active), dtype=np.float64,
+            ).tocsr()
             L1 = (B1.T @ B1 + B2 @ B2.T).astype(np.float64)
         else:
             L1 = (B1.T @ B1).astype(np.float64)
 
-        # Build L0 for H0
-        adj_rows, adj_cols, adj_data = [], [], []
-        for v0, v1 in active_edges:
-            adj_rows.extend([v0, v1])
-            adj_cols.extend([v1, v0])
-            adj_data.extend([1.0, 1.0])
-
-        A = sparse.coo_matrix((adj_data, (adj_rows, adj_cols)), shape=(n, n)).tocsr()
+        A = sparse.coo_matrix(
+            (adj[2], (adj[0], adj[1])), shape=(n, n), dtype=np.float64,
+        ).tocsr()
         deg = np.array(A.sum(axis=1)).flatten()
         D = sparse.diags(deg)
         L0 = D - A
@@ -242,12 +305,17 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8, overlap
     }
 
 
-def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap_factor=1.5,
-                            n_steps=50):
+# ---------------------------------------------------------------------------
+# GPU implementation
+# ---------------------------------------------------------------------------
+
+def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
+                            overlap_factor=1.5, n_steps=50):
     """
     GPU implementation of filtered Betti curve computation.
 
-    Uses CuPy for array operations and sparse matrices.
+    Uses CuPy for sparse matrix operations and eigenvalue computation.
+    Atlas building runs on CPU (set operations are faster there).
 
     Parameters
     ----------
@@ -267,8 +335,6 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
     dict : Same structure as compute_betti_curve_cpu
     """
     import cupy as cp  # pylint: disable=import-outside-toplevel
-    from cupyx.scipy import sparse as cp_sparse  # pylint: disable=import-outside-toplevel
-    from cupyx.scipy.sparse.linalg import eigsh as cp_eigsh  # pylint: disable=import-outside-toplevel
 
     # kNN backend: prefer cuVS, fallback to cuML
     try:
@@ -291,7 +357,7 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
             'n_triangles_active': np.array([0])
         }
 
-    # Build kNN graph
+    # Build kNN graph on GPU
     k_neighbors = min(k_neighbors, n - 1)
 
     if USE_CUVS:
@@ -309,58 +375,11 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
     distances_cpu = cp.asnumpy(distances_gpu)
     data_cpu = cp.asnumpy(data_gpu)
 
-    # Track edge distances
-    edge_distances = {}
-    global_edges = set()
-    global_triangles = set()
-
-    # Build atlas patches on CPU
-    for i in range(n):
-        local_neighborhood = indices_cpu[i, 1:]
-        local_dists = distances_cpu[i, 1:]
-
-        for j_idx, j in enumerate(local_neighborhood):
-            edge = tuple(sorted([i, int(j)]))
-            global_edges.add(edge)
-            if edge not in edge_distances:
-                edge_distances[edge] = local_dists[j_idx]
-
-        dist_threshold = np.percentile(local_dists, density_threshold * 100) * overlap_factor
-
-        if len(local_neighborhood) > 1:
-            neighborhood_coords = data_cpu[local_neighborhood]
-            for idx_j, j_val in enumerate(local_neighborhood):
-                j = int(j_val)
-                dists_jk = np.linalg.norm(
-                    neighborhood_coords[idx_j+1:] - neighborhood_coords[idx_j], axis=1
-                )
-                close_enough = dists_jk < dist_threshold
-                for offset, is_close in enumerate(close_enough):
-                    if is_close:
-                        k = int(local_neighborhood[idx_j + 1 + offset])
-                        edge = tuple(sorted([j, k]))
-                        global_edges.add(edge)
-                        if edge not in edge_distances:
-                            edge_distances[edge] = dists_jk[offset]
-
-        for idx_j, j_val in enumerate(local_neighborhood):
-            for idx_k in range(idx_j + 1, len(local_neighborhood)):
-                j = int(j_val)
-                k = int(local_neighborhood[idx_k])
-                e1 = tuple(sorted([i, j]))
-                e2 = tuple(sorted([i, k]))
-                e3 = tuple(sorted([j, k]))
-                if e1 in global_edges and e2 in global_edges and e3 in global_edges:
-                    global_triangles.add(tuple(sorted([i, j, k])))
-
-    # Pre-compute triangle edges
-    triangle_edges = []
-    for tri in global_triangles:
-        i, j, k = tri
-        e1 = tuple(sorted([i, j]))
-        e2 = tuple(sorted([i, k]))
-        e3 = tuple(sorted([j, k]))
-        triangle_edges.append((tri, e1, e2, e3))
+    # Build atlas complex (shared helper)
+    global_edges, _, edge_distances, triangle_edges = _build_atlas(
+        data_cpu, distances_cpu, indices_cpu, k_neighbors,
+        density_threshold, overlap_factor
+    )
 
     # Create filtration values
     all_distances = np.array(list(edge_distances.values()))
@@ -374,8 +393,9 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
 
     # Compute Betti numbers at each filtration value
     for filt_val in filtration_values:
-        active_edges = [e for e in global_edges if edge_distances[e] <= filt_val]
-        active_edge_set = set(active_edges)
+        active_edges, active_triangles, edge_to_idx = _filter_at_threshold(
+            filt_val, global_edges, edge_distances, triangle_edges
+        )
 
         if len(active_edges) == 0:
             beta_0_curve.append(n)
@@ -384,99 +404,50 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
             n_triangles_curve.append(0)
             continue
 
-        active_triangles = [
-            tri for tri, e1, e2, e3 in triangle_edges
-            if e1 in active_edge_set and e2 in active_edge_set and e3 in active_edge_set
-        ]
-
         n_edges_active = len(active_edges)
         n_triangles_active = len(active_triangles)
-        edge_to_idx = {e: idx for idx, e in enumerate(active_edges)}
 
-        # Build B1 on GPU
-        B1_rows, B1_cols, B1_data = [], [], []
-        for e_idx, (v0, v1) in enumerate(active_edges):
-            B1_rows.extend([v0, v1])
-            B1_cols.extend([e_idx, e_idx])
-            B1_data.extend([-1.0, +1.0])
+        # Build boundary operator data (shared helper)
+        b1, b2, adj = _build_boundary_data(active_edges, active_triangles, edge_to_idx)
 
-        B1_rows_gpu = cp.array(B1_rows, dtype=cp.int32)
-        B1_cols_gpu = cp.array(B1_cols, dtype=cp.int32)
-        B1_data_gpu = cp.array(B1_data, dtype=cp.float64)
-
-        B1 = cp_sparse.coo_matrix(
-            (B1_data_gpu, (B1_rows_gpu, B1_cols_gpu)),
-            shape=(n, n_edges_active), dtype=cp.float64
+        # Construct sparse matrices on CPU (scipy) -- boundary data is already
+        # on CPU, and scipy eigsh is more reliable than CuPy's sparse eigsh
+        # (which doesn't support which='SM' and may have CUDA compilation issues).
+        B1 = sparse.coo_matrix(
+            (b1[2], (b1[0], b1[1])),
+            shape=(n, n_edges_active), dtype=np.float64,
         ).tocsr()
 
-        # Build B2 on GPU
         if n_triangles_active > 0:
-            B2_rows, B2_cols, B2_data = [], [], []
-            for t_idx, (i, j, k) in enumerate(active_triangles):
-                e1 = tuple(sorted([i, j]))
-                e2 = tuple(sorted([i, k]))
-                e3 = tuple(sorted([j, k]))
-
-                if e1 in edge_to_idx:
-                    B2_rows.append(edge_to_idx[e1])
-                    B2_cols.append(t_idx)
-                    B2_data.append(+1.0 if i < j else -1.0)
-                if e2 in edge_to_idx:
-                    B2_rows.append(edge_to_idx[e2])
-                    B2_cols.append(t_idx)
-                    B2_data.append(-1.0 if i < k else +1.0)
-                if e3 in edge_to_idx:
-                    B2_rows.append(edge_to_idx[e3])
-                    B2_cols.append(t_idx)
-                    B2_data.append(+1.0 if j < k else -1.0)
-
-            B2_rows_gpu = cp.array(B2_rows, dtype=cp.int32)
-            B2_cols_gpu = cp.array(B2_cols, dtype=cp.int32)
-            B2_data_gpu = cp.array(B2_data, dtype=cp.float64)
-
-            B2 = cp_sparse.coo_matrix(
-                (B2_data_gpu, (B2_rows_gpu, B2_cols_gpu)),
-                shape=(n_edges_active, n_triangles_active), dtype=cp.float64
+            B2 = sparse.coo_matrix(
+                (b2[2], (b2[0], b2[1])),
+                shape=(n_edges_active, n_triangles_active), dtype=np.float64,
             ).tocsr()
-
-            L1 = (B1.T @ B1 + B2 @ B2.T).astype(cp.float64)
+            L1 = (B1.T @ B1 + B2 @ B2.T).astype(np.float64)
         else:
-            L1 = (B1.T @ B1).astype(cp.float64)
+            L1 = (B1.T @ B1).astype(np.float64)
 
-        # Build L0 on GPU
-        adj_rows, adj_cols, adj_data = [], [], []
-        for v0, v1 in active_edges:
-            adj_rows.extend([v0, v1])
-            adj_cols.extend([v1, v0])
-            adj_data.extend([1.0, 1.0])
-
-        adj_rows_gpu = cp.array(adj_rows, dtype=cp.int32)
-        adj_cols_gpu = cp.array(adj_cols, dtype=cp.int32)
-        adj_data_gpu = cp.array(adj_data, dtype=cp.float64)
-
-        A = cp_sparse.coo_matrix(
-            (adj_data_gpu, (adj_rows_gpu, adj_cols_gpu)),
-            shape=(n, n), dtype=cp.float64
+        A = sparse.coo_matrix(
+            (adj[2], (adj[0], adj[1])), shape=(n, n), dtype=np.float64,
         ).tocsr()
-
-        deg = cp.array(A.sum(axis=1)).flatten()
-        D = cp_sparse.diags(deg)
+        deg = np.array(A.sum(axis=1)).flatten()
+        D = sparse.diags(deg)
         L0 = D - A
 
-        # Eigenvalue computation on GPU
+        # Eigenvalue computation (scipy on CPU)
         n_eigs_h0 = min(50, n - 2)
         n_eigs_h1 = min(50, n_edges_active - 2) if n_edges_active > 2 else 0
 
         try:
-            eigs_h0_gpu, _ = cp_eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
-            eigs_h0 = cp.asnumpy(cp.abs(eigs_h0_gpu))
+            eigs_h0, _ = eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
+            eigs_h0 = np.abs(eigs_h0)
         except Exception:  # pylint: disable=broad-exception-caught
             eigs_h0 = np.array([])
 
         if n_eigs_h1 > 0:
             try:
-                eigs_h1_gpu, _ = cp_eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
-                eigs_h1 = cp.asnumpy(cp.abs(eigs_h1_gpu))
+                eigs_h1, _ = eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
+                eigs_h1 = np.abs(eigs_h1)
             except Exception:  # pylint: disable=broad-exception-caught
                 eigs_h1 = np.array([])
         else:
@@ -498,6 +469,10 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8, overlap
         'n_triangles_active': np.array(n_triangles_curve)
     }
 
+
+# ---------------------------------------------------------------------------
+# Backend selector
+# ---------------------------------------------------------------------------
 
 def compute_betti_curve(data, k_neighbors=20, density_threshold=0.8, overlap_factor=1.5,
                         n_steps=50, use_gpu=True):

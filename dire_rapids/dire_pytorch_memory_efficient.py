@@ -16,7 +16,7 @@ import numpy as np
 import torch
 from loguru import logger
 
-# Import base class
+# Import base class and compiled kernels
 from .dire_pytorch import DiRePyTorch  # pylint: disable=cyclic-import
 
 # PyKeOps for efficient force computations
@@ -381,20 +381,14 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         b_exp = float(2 * b_val)
         
         # ============ ATTRACTION FORCES (vectorized for speed) ============
-        # Vectorize k-NN attraction forces for efficiency
-        # Get all neighbor positions at once
-        neighbor_positions = positions[self._knn_indices]  # shape: (n_samples, k, n_components)
-        center_positions = positions.unsqueeze(1)          # shape: (n_samples, 1, n_components)
-        
-        # Compute differences and distances
-        diff = neighbor_positions - center_positions       # shape: (n_samples, k, n_components)
-        dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10  # shape: (n_samples, k, 1)
-        
-        # Attraction coefficients
-        att_coeff = 1.0 / (1.0 + a_val * (1.0 / dist) ** b_exp)  # shape: (n_samples, k, 1)
-        
-        # Sum attraction forces for each point
-        attraction_forces = (att_coeff * diff / dist).sum(dim=1)  # shape: (n_samples, n_components)
+        # Use cached tensor to avoid repeated CPU->GPU transfer each iteration
+        if not hasattr(self, '_knn_indices_torch') or self._knn_indices_torch.device != positions.device:
+            self._knn_indices_torch = torch.as_tensor(self._knn_indices, dtype=torch.long, device=positions.device)
+        knn_indices_torch = self._knn_indices_torch
+        # Use compiled kernel for fused attraction forces
+        attraction_forces = _attraction_forces_compiled(
+            positions, positions, knn_indices_torch, a_val, b_exp
+        )
         forces += attraction_forces
         
         # ============ REPULSION FORCES ============
@@ -621,12 +615,9 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             
             embedding = reducer.fit_transform(X)
         """
-        # Store data with potential dtype conversion
-        if self.use_fp16 and self.device.type == 'cuda':
-            # Keep data in float32 for CPU operations, convert to fp16 on GPU when needed
-            self._data = np.asarray(X, dtype=np.float32)
-        else:
-            self._data = np.asarray(X, dtype=np.float32)
+        # Store data (always float32 for CPU operations; fp16 conversion
+        # happens on-the-fly in GPU kernels when use_fp16 is set).
+        self._data = np.asarray(X, dtype=np.float32)
         
         self._n_samples = self._data.shape[0]
         

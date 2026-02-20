@@ -252,18 +252,22 @@ def _load_file(path, **kwargs):
 
 # --------- DiRe geometric datasets ---------
 
-def rand_point_disk(n_features, n_samples=1):
+def rand_point_disk(n_features, n_samples=1, rng=None):
     """Generate uniformly distributed points in n-dimensional unit disk."""
-    prepts = np.random.randn(n_samples, n_features)
+    if rng is None:
+        rng = np.random.default_rng()
+    prepts = rng.standard_normal((n_samples, n_features))
     prenorms = np.linalg.norm(prepts, axis=1).reshape(-1, 1)
-    rads = np.sqrt(np.random.rand(n_samples)).reshape(-1, 1)
+    rads = np.sqrt(rng.random(n_samples)).reshape(-1, 1)
     pts = prepts * rads / prenorms
     return pts
 
 
-def rand_point_sphere(n_features, n_samples=1):
+def rand_point_sphere(n_features, n_samples=1, rng=None):
     """Generate uniformly distributed points on n-dimensional unit sphere."""
-    prepts = np.random.randn(n_samples, n_features)
+    if rng is None:
+        rng = np.random.default_rng()
+    prepts = rng.standard_normal((n_samples, n_features))
     prenorms = np.linalg.norm(prepts, axis=1).reshape(-1, 1)
     pts = prepts / prenorms
     return pts
@@ -281,9 +285,9 @@ class elgen:
         return (self.L @ ar.T).T
 
 
-def rand_point_ell(semi_axes, n_features, n_samples=1):
+def rand_point_ell(semi_axes, n_features, n_samples=1, rng=None):
     """Generate uniformly distributed points on n-dimensional ellipsoid with semi-axes."""
-    spts = rand_point_sphere(n_features, n_samples)
+    spts = rand_point_sphere(n_features, n_samples, rng=rng)
     eg = elgen(semi_axes)
     return eg(spts)
 
@@ -309,20 +313,19 @@ def _load_dire_dataset(name, **kwargs):
     n_features = kwargs.pop('n_features', 10)
     random_state = kwargs.pop('random_state', None)
 
-    if random_state is not None:
-        np.random.seed(random_state)
+    rng = np.random.default_rng(random_state)
 
     if key == 'disk_uniform':
-        X = rand_point_disk(n_features, n_samples)
+        X = rand_point_disk(n_features, n_samples, rng=rng)
     elif key == 'sphere_uniform':
-        X = rand_point_sphere(n_features, n_samples)
+        X = rand_point_sphere(n_features, n_samples, rng=rng)
     elif key == 'ellipsoid_uniform':
         semi_axes = kwargs.pop('semi_axes', None)
         if semi_axes is not None:
             n_features = len(semi_axes)  # Infer n_features from semi_axes
         else:
             semi_axes = list(range(1, n_features + 1))  # Default semi_axes
-        X = rand_point_ell(semi_axes, n_features, n_samples)
+        X = rand_point_ell(semi_axes, n_features, n_samples, rng=rng)
     else:
         raise ValueError(
             f"Unknown DiRe dataset '{name}'. Options: 'disk_uniform', 'sphere_uniform', 'ellipsoid_uniform'"

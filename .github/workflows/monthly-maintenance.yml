@@ -1,0 +1,207 @@
+# Monthly Maintenance - Self-Healing CI
+#
+# This workflow runs monthly to test with the latest dependencies.
+# If tests fail, it uses Claude AI to diagnose and fix issues,
+# then creates a PR with the fixes.
+#
+# Required secret: ANTHROPIC_API_KEY
+# Get one at: https://console.anthropic.com/
+
+name: Monthly Maintenance
+
+on:
+  schedule:
+    # Run on the 1st of every month at 00:00 UTC
+    - cron: '0 0 1 * *'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test-latest-deps:
+    runs-on: ubuntu-latest
+    outputs:
+      tests_failed: ${{ steps.run-tests.outputs.failed }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install latest dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-timeout
+
+          # Install CPU-only PyTorch (latest)
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+          # Install with --upgrade to get latest versions
+          pip install --upgrade -e .
+
+          # Force upgrade all dependencies to latest
+          pip list --outdated --format=json | python -c "
+          import json, sys
+          for pkg in json.load(sys.stdin):
+              print(pkg['name'])
+          " | xargs -r pip install --upgrade
+
+      - name: Run tests and capture output
+        id: run-tests
+        run: |
+          set +e
+          pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v --tb=long --timeout=120 2>&1 | tee test_output.txt
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+
+          exit $TEST_EXIT_CODE
+        continue-on-error: true
+
+      - name: Upload test output
+        if: steps.run-tests.outputs.failed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test_output.txt
+          retention-days: 7
+
+  claude-fix:
+    needs: test-latest-deps
+    if: needs.test-latest-deps.outputs.tests_failed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download test output
+        uses: actions/download-artifact@v4
+        with:
+          name: test-output
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-timeout
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install --upgrade -e .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code
+        run: |
+          npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude Code to fix issues
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Create a detailed prompt for Claude
+          cat > fix_prompt.txt << 'PROMPT_EOF'
+          The monthly dependency update test has failed. Your task:
+
+          1. Read test_output.txt to understand what's failing
+          2. Investigate the relevant source files in dire_rapids/
+          3. Fix the compatibility issues
+          4. Ensure fixes maintain backward compatibility where possible
+          5. Run pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v --timeout=120 to verify your fixes work
+
+          Common issues to look for:
+          - Deprecated APIs that are now removed
+          - Changed function signatures
+          - New required parameters
+          - Type annotation incompatibilities
+          - Import path changes
+
+          After fixing, verify with: pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v --timeout=120
+
+          IMPORTANT: Only modify files necessary to fix the tests.
+          Do not refactor unrelated code or add new features.
+          PROMPT_EOF
+
+          # Run Claude Code
+          claude-code --print "$(cat fix_prompt.txt)" --allowedTools "Edit,Write,Bash,Read,Glob,Grep" --yes --max-turns 30 || true
+
+      - name: Run tests after fix
+        id: verify-fix
+        run: |
+          pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v --tb=short --timeout=120
+        continue-on-error: true
+
+      - name: Create Pull Request
+        if: steps.verify-fix.outcome == 'success'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "fix: Update for compatibility with latest dependencies"
+          title: "[Auto-Maintenance] Fix compatibility with latest dependencies"
+          body: |
+            ## Automated Maintenance PR
+
+            This PR was automatically generated by the monthly maintenance workflow.
+
+            ### What happened
+            The scheduled test with latest dependency versions failed. Claude AI was
+            invoked to diagnose and fix the compatibility issues.
+
+            ### Changes made
+            Claude analyzed the test failures and made the minimum changes necessary
+            to restore compatibility with the latest dependency versions.
+
+            ### Review checklist
+            - [ ] Changes look reasonable and minimal
+            - [ ] No unintended modifications to unrelated code
+            - [ ] Tests pass in CI
+            - [ ] Consider if any changes need documentation updates
+
+            ---
+            Generated with [Claude Code](https://claude.ai/code)
+          branch: auto-maintenance/${{ github.run_number }}
+          delete-branch: true
+          labels: |
+            automated
+            maintenance
+            dependencies
+
+      - name: Create Issue if fix failed
+        if: steps.verify-fix.outcome != 'success'
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "[Auto-Maintenance] Monthly update failed - manual intervention needed"
+          content-filepath: test_output.txt
+          labels: |
+            bug
+            maintenance
+            help wanted
+
+  notify-success:
+    needs: test-latest-deps
+    if: needs.test-latest-deps.outputs.tests_failed == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log success
+        run: |
+          echo "Monthly maintenance check passed!"
+          echo "All tests pass with latest dependencies."
+          echo ""
+          echo "No action needed."

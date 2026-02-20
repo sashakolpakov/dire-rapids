@@ -11,40 +11,45 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11"]
-    
+        python-version: ["3.10", "3.11", "3.12"]
+      fail-fast: false
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     - name: Cache pip packages
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
         restore-keys: |
-          ${{ runner.os }}-pip-
-    
+          ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         # Install CPU-only PyTorch
         pip install torch --index-url https://download.pytorch.org/whl/cpu
-        # Install other dependencies
-        pip install -r requirements-test.txt
-        # Install the package in editable mode
-        pip install -e .
-    
+        # Install the package with test dependencies
+        pip install -e ".[test]"
+
     - name: Run CPU tests
       run: |
         pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v -m "not gpu" --cov=dire_rapids --cov-report=term-missing
-    
+
+    - name: Verify imports
+      run: |
+        python -c "import dire_rapids; print(f'Version: {dire_rapids.__version__}')"
+        python -c "from dire_rapids import metrics; print('metrics OK')"
+        python -c "from dire_rapids import betti_curve; print('betti_curve OK')"
+
     - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
