@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dire_rapids.dire_pytorch_memory_efficient &mdash; dire-rapids 0.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
@@ -87,7 +87,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
-<span class="c1"># Import base class</span>
+<span class="c1"># Import base class and compiled kernels</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>  <span class="c1"># pylint: disable=cyclic-import</span>
 
 <span class="c1"># PyKeOps for efficient force computations</span>
@@ -457,20 +457,14 @@
         <span class="n">b_exp</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">b_val</span><span class="p">)</span>
         
         <span class="c1"># ============ ATTRACTION FORCES (vectorized for speed) ============</span>
-        <span class="c1"># Vectorize k-NN attraction forces for efficiency</span>
-        <span class="c1"># Get all neighbor positions at once</span>
-        <span class="n">neighbor_positions</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">]</span>  <span class="c1"># shape: (n_samples, k, n_components)</span>
-        <span class="n">center_positions</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>          <span class="c1"># shape: (n_samples, 1, n_components)</span>
-        
-        <span class="c1"># Compute differences and distances</span>
-        <span class="n">diff</span> <span class="o">=</span> <span class="n">neighbor_positions</span> <span class="o">-</span> <span class="n">center_positions</span>       <span class="c1"># shape: (n_samples, k, n_components)</span>
-        <span class="n">dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">diff</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>  <span class="c1"># shape: (n_samples, k, 1)</span>
-        
-        <span class="c1"># Attraction coefficients</span>
-        <span class="n">att_coeff</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">)</span>  <span class="c1"># shape: (n_samples, k, 1)</span>
-        
-        <span class="c1"># Sum attraction forces for each point</span>
-        <span class="n">attraction_forces</span> <span class="o">=</span> <span class="p">(</span><span class="n">att_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># shape: (n_samples, n_components)</span>
+        <span class="c1"># Use cached tensor to avoid repeated CPU-&gt;GPU transfer each iteration</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_knn_indices_torch&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">knn_indices_torch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span>
+        <span class="c1"># Use compiled kernel for fused attraction forces</span>
+        <span class="n">attraction_forces</span> <span class="o">=</span> <span class="n">_attraction_forces_compiled</span><span class="p">(</span>
+            <span class="n">positions</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices_torch</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span>
+        <span class="p">)</span>
         <span class="n">forces</span> <span class="o">+=</span> <span class="n">attraction_forces</span>
         
         <span class="c1"># ============ REPULSION FORCES ============</span>
@@ -699,12 +693,9 @@
 <span class="sd">            </span>
 <span class="sd">            embedding = reducer.fit_transform(X)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Store data with potential dtype conversion</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_fp16</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
-            <span class="c1"># Keep data in float32 for CPU operations, convert to fp16 on GPU when needed</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="c1"># Store data (always float32 for CPU operations; fp16 conversion</span>
+        <span class="c1"># happens on-the-fly in GPU kernels when use_fp16 is set).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
         
         <span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         

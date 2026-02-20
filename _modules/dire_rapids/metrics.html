@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dire_rapids.metrics &mdash; dire-rapids 0.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
@@ -195,11 +195,11 @@
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.welford_gpu">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">welford_gpu</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    GPU-accelerated computation of mean and std using Welford&#39;s algorithm.</span>
+<span class="sd">    GPU-accelerated computation of mean and std.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    data : cupy.ndarray</span>
+<span class="sd">    data : cupy.ndarray or numpy.ndarray</span>
 <span class="sd">        Input data</span>
 
 <span class="sd">    Returns</span>
@@ -216,20 +216,9 @@
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 
-    <span class="n">data_flat</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
-    <span class="n">count</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
-    <span class="n">mean</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-    <span class="n">M2</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
-
-    <span class="c1"># Process in chunks to avoid memory issues</span>
-    <span class="n">chunk_size</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
-    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">data_flat</span><span class="p">),</span> <span class="n">chunk_size</span><span class="p">):</span>
-        <span class="n">chunk</span> <span class="o">=</span> <span class="n">data_flat</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span> <span class="o">+</span> <span class="n">chunk_size</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">chunk</span><span class="p">:</span>
-            <span class="n">count</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">M2</span> <span class="o">=</span> <span class="n">welford_update_gpu</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">M2</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
-
-    <span class="n">mean_final</span><span class="p">,</span> <span class="n">std_final</span> <span class="o">=</span> <span class="n">welford_finalize_gpu</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">M2</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">mean_final</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">std_final</span><span class="p">)</span></div>
+    <span class="n">mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+    <span class="n">std</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">nanstd</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">mean</span><span class="p">,</span> <span class="n">std</span></div>
 
 
 
@@ -466,14 +455,11 @@
         <span class="n">distances</span> <span class="o">=</span> <span class="n">distances</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>  <span class="c1"># Remove self</span>
         <span class="n">indices</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
 
-        <span class="c1"># Compute distances in low-dimensional space</span>
+        <span class="c1"># Compute distances in low-dimensional space (vectorized)</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">layout_gpu</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">distances_emb</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
-            <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">layout_gpu</span><span class="p">[</span><span class="n">indices</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>
-            <span class="n">point_coords</span> <span class="o">=</span> <span class="n">layout_gpu</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span>
-            <span class="n">distances_emb</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">neighbor_coords</span> <span class="o">-</span> <span class="n">point_coords</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">layout_gpu</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>  <span class="c1"># (n_samples, k, n_components)</span>
+        <span class="n">point_coords</span> <span class="o">=</span> <span class="n">layout_gpu</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># (n_samples, 1, n_components)</span>
+        <span class="n">distances_emb</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">neighbor_coords</span> <span class="o">-</span> <span class="n">point_coords</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
         <span class="c1"># Compute normalized stress</span>
         <span class="n">ratios</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">distances</span> <span class="o">/</span> <span class="n">cp</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">distances_emb</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span>
@@ -492,14 +478,11 @@
         <span class="n">distances</span> <span class="o">=</span> <span class="n">distances</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
         <span class="n">indices</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
 
-        <span class="c1"># Compute distances in embedding</span>
+        <span class="c1"># Compute distances in embedding (vectorized)</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">layout_np</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">distances_emb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
-            <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">layout_np</span><span class="p">[</span><span class="n">indices</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>
-            <span class="n">point_coords</span> <span class="o">=</span> <span class="n">layout_np</span><span class="p">[</span><span class="n">i</span><span class="p">:</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span>
-            <span class="n">distances_emb</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">neighbor_coords</span> <span class="o">-</span> <span class="n">point_coords</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">neighbor_coords</span> <span class="o">=</span> <span class="n">layout_np</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>  <span class="c1"># (n_samples, k, n_components)</span>
+        <span class="n">point_coords</span> <span class="o">=</span> <span class="n">layout_np</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>  <span class="c1"># (n_samples, 1, n_components)</span>
+        <span class="n">distances_emb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">neighbor_coords</span> <span class="o">-</span> <span class="n">point_coords</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
 
         <span class="n">ratios</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">distances</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">distances_emb</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span>
         <span class="n">stress_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">ratios</span><span class="p">))</span>
@@ -545,15 +528,18 @@
         <span class="n">indices_data</span> <span class="o">=</span> <span class="n">indices_data</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>  <span class="c1"># Remove self</span>
         <span class="n">indices_layout</span> <span class="o">=</span> <span class="n">indices_layout</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
 
-        <span class="c1"># Sort indices</span>
-        <span class="n">indices_data</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">indices_data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">indices_layout</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">indices_layout</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Vectorized set intersection via broadcasting:</span>
+        <span class="c1"># indices_data[:, :, None] == indices_layout[:, None, :] gives (N, k, k) bool</span>
+        <span class="c1"># any(axis=2) collapses to (N, k), sum(axis=1) counts matches per row.</span>
+        <span class="n">indices_data_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">indices_data</span><span class="p">)</span>
+        <span class="n">indices_layout_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">indices_layout</span><span class="p">)</span>
 
-        <span class="c1"># Compute preservation scores</span>
-        <span class="n">preservation_scores</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">indices_data</span> <span class="o">==</span> <span class="n">indices_layout</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="n">indices_data_np</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="p">(</span><span class="n">indices_data_np</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">==</span> <span class="n">indices_layout_np</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:])</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">preservation_scores</span> <span class="o">=</span> <span class="n">matches</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="o">/</span> <span class="n">k</span>
 
-        <span class="n">neighbor_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">preservation_scores</span><span class="p">))</span>
-        <span class="n">neighbor_std</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">preservation_scores</span><span class="p">))</span>
+        <span class="n">neighbor_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">preservation_scores</span><span class="p">))</span>
+        <span class="n">neighbor_std</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">preservation_scores</span><span class="p">))</span>
 
     <span class="k">else</span><span class="p">:</span>
         <span class="n">data_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
@@ -565,10 +551,12 @@
         <span class="n">indices_data</span> <span class="o">=</span> <span class="n">indices_data</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
         <span class="n">indices_layout</span> <span class="o">=</span> <span class="n">indices_layout</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
 
-        <span class="n">indices_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">indices_data</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">indices_layout</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">indices_layout</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-
-        <span class="n">preservation_scores</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">indices_data</span> <span class="o">==</span> <span class="n">indices_layout</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Vectorized set intersection via broadcasting:</span>
+        <span class="c1"># indices_data[:, :, None] == indices_layout[:, None, :] gives (N, k, k) bool</span>
+        <span class="c1"># any(axis=2) collapses to (N, k), sum(axis=1) counts matches per row.</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="n">indices_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">matches</span> <span class="o">=</span> <span class="p">(</span><span class="n">indices_data</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">==</span> <span class="n">indices_layout</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:])</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">preservation_scores</span> <span class="o">=</span> <span class="n">matches</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="o">/</span> <span class="n">k</span>
 
         <span class="n">neighbor_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">preservation_scores</span><span class="p">))</span>
         <span class="n">neighbor_std</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">preservation_scores</span><span class="p">))</span>

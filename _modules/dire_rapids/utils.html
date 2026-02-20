@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dire_rapids.utils &mdash; dire-rapids 0.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
@@ -325,11 +325,13 @@
 
 <div class="viewcode-block" id="rand_point_disk">
 <a class="viewcode-back" href="../../api/dire_rapids.utils.html#dire_rapids.utils.rand_point_disk">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">rand_point_disk</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">rand_point_disk</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate uniformly distributed points in n-dimensional unit disk.&quot;&quot;&quot;</span>
-    <span class="n">prepts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_features</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
+    <span class="n">prepts</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_features</span><span class="p">))</span>
     <span class="n">prenorms</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">prepts</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-    <span class="n">rads</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">n_samples</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">rads</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">(</span><span class="n">n_samples</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">pts</span> <span class="o">=</span> <span class="n">prepts</span> <span class="o">*</span> <span class="n">rads</span> <span class="o">/</span> <span class="n">prenorms</span>
     <span class="k">return</span> <span class="n">pts</span></div>
 
@@ -337,9 +339,11 @@
 
 <div class="viewcode-block" id="rand_point_sphere">
 <a class="viewcode-back" href="../../api/dire_rapids.utils.html#dire_rapids.utils.rand_point_sphere">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">rand_point_sphere</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">rand_point_sphere</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate uniformly distributed points on n-dimensional unit sphere.&quot;&quot;&quot;</span>
-    <span class="n">prepts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_features</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">()</span>
+    <span class="n">prepts</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_features</span><span class="p">))</span>
     <span class="n">prenorms</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">prepts</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">pts</span> <span class="o">=</span> <span class="n">prepts</span> <span class="o">/</span> <span class="n">prenorms</span>
     <span class="k">return</span> <span class="n">pts</span></div>
@@ -366,9 +370,9 @@
 
 <div class="viewcode-block" id="rand_point_ell">
 <a class="viewcode-back" href="../../api/dire_rapids.utils.html#dire_rapids.utils.rand_point_ell">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">rand_point_ell</span><span class="p">(</span><span class="n">semi_axes</span><span class="p">,</span> <span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">rand_point_ell</span><span class="p">(</span><span class="n">semi_axes</span><span class="p">,</span> <span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate uniformly distributed points on n-dimensional ellipsoid with semi-axes.&quot;&quot;&quot;</span>
-    <span class="n">spts</span> <span class="o">=</span> <span class="n">rand_point_sphere</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+    <span class="n">spts</span> <span class="o">=</span> <span class="n">rand_point_sphere</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">)</span>
     <span class="n">eg</span> <span class="o">=</span> <span class="n">elgen</span><span class="p">(</span><span class="n">semi_axes</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">eg</span><span class="p">(</span><span class="n">spts</span><span class="p">)</span></div>
 
@@ -395,20 +399,19 @@
     <span class="n">n_features</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;n_features&#39;</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
     <span class="n">random_state</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;random_state&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">random_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">random_state</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s1">&#39;disk_uniform&#39;</span><span class="p">:</span>
-        <span class="n">X</span> <span class="o">=</span> <span class="n">rand_point_disk</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">rand_point_disk</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s1">&#39;sphere_uniform&#39;</span><span class="p">:</span>
-        <span class="n">X</span> <span class="o">=</span> <span class="n">rand_point_sphere</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">rand_point_sphere</span><span class="p">(</span><span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">)</span>
     <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s1">&#39;ellipsoid_uniform&#39;</span><span class="p">:</span>
         <span class="n">semi_axes</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;semi_axes&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">semi_axes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">n_features</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">semi_axes</span><span class="p">)</span>  <span class="c1"># Infer n_features from semi_axes</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">semi_axes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_features</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>  <span class="c1"># Default semi_axes</span>
-        <span class="n">X</span> <span class="o">=</span> <span class="n">rand_point_ell</span><span class="p">(</span><span class="n">semi_axes</span><span class="p">,</span> <span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">rand_point_ell</span><span class="p">(</span><span class="n">semi_axes</span><span class="p">,</span> <span class="n">n_features</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Unknown DiRe dataset &#39;</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39;. Options: &#39;disk_uniform&#39;, &#39;sphere_uniform&#39;, &#39;ellipsoid_uniform&#39;&quot;</span>

@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dire_rapids.utils module &mdash; dire-rapids 0.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -105,13 +105,13 @@
 - Dataset loading utilities for sklearn, cytof, DiRe geometric datasets, and more</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.utils.rand_point_disk">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.utils.</span></span><span class="sig-name descname"><span class="pre">rand_point_disk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#rand_point_disk"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.utils.rand_point_disk" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.utils.</span></span><span class="sig-name descname"><span class="pre">rand_point_disk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#rand_point_disk"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.utils.rand_point_disk" title="Link to this definition"></a></dt>
 <dd><p>Generate uniformly distributed points in n-dimensional unit disk.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.utils.rand_point_sphere">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.utils.</span></span><span class="sig-name descname"><span class="pre">rand_point_sphere</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#rand_point_sphere"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.utils.rand_point_sphere" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.utils.</span></span><span class="sig-name descname"><span class="pre">rand_point_sphere</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#rand_point_sphere"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.utils.rand_point_sphere" title="Link to this definition"></a></dt>
 <dd><p>Generate uniformly distributed points on n-dimensional unit sphere.</p>
 </dd></dl>
 
@@ -129,7 +129,7 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.utils.rand_point_ell">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.utils.</span></span><span class="sig-name descname"><span class="pre">rand_point_ell</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">semi_axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#rand_point_ell"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.utils.rand_point_ell" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.utils.</span></span><span class="sig-name descname"><span class="pre">rand_point_ell</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">semi_axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/utils.html#rand_point_ell"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.utils.rand_point_ell" title="Link to this definition"></a></dt>
 <dd><p>Generate uniformly distributed points on n-dimensional ellipsoid with semi-axes.</p>
 </dd></dl>
 

@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dire_rapids.betti_curve module &mdash; dire-rapids 0.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -135,7 +135,8 @@
 <dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve_gpu">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve_gpu" title="Link to this definition"></a></dt>
 <dd><p>GPU implementation of filtered Betti curve computation.</p>
-<p>Uses CuPy for array operations and sparse matrices.</p>
+<p>Uses CuPy for sparse matrix operations and eigenvalue computation.
+Atlas building runs on CPU (set operations are faster there).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

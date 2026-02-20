@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>dire_rapids.metrics module &mdash; dire-rapids 0.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
@@ -169,10 +169,10 @@ the quality of dimensionality reduction embeddings, including:</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.welford_gpu">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">welford_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#welford_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.welford_gpu" title="Link to this definition"></a></dt>
-<dd><p>GPU-accelerated computation of mean and std using Welford’s algorithm.</p>
+<dd><p>GPU-accelerated computation of mean and std.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>data</strong> (<em>cupy.ndarray</em>) – Input data</p>
+<dd class="field-odd"><p><strong>data</strong> (<em>cupy.ndarray</em><em> or </em><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.4)"><em>numpy.ndarray</em></a>) – Input data</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><strong>tuple</strong></p>
