@@ -130,7 +130,7 @@ Total time: 123.45s
 ## Requirements
 
 ### Minimum (for CPU tests):
-- Python 3.8+
+- Python 3.9+
 - PyTorch
 - scikit-learn
 - numpy

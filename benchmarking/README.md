@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains comprehensive benchmarking results and performance analysis for the DIRE-JAX implementation, focusing on scalability with high-dimensional data. The benchmarks compare different backend implementations (PyTorch, PyKeOps, cuVS) and document optimization strategies that enable processing of datasets with millions of points in up to 1000 dimensions.
+This directory contains comprehensive benchmarking results and performance analysis for the DiRe-Rapids implementation, focusing on scalability with high-dimensional data. The benchmarks compare different backend implementations (PyTorch, cuVS) and document optimization strategies that enable processing of datasets with millions of points in up to 1000 dimensions.
 
 ## Key Achievements
 
@@ -16,7 +16,7 @@ This directory contains comprehensive benchmarking results and performance analy
 
 **Strengths:**
 - Excellent for small to medium datasets (<100K points)
-- Exact k-NN computation with PyKeOps
+- Exact k-NN computation (with optional PyKeOps acceleration)
 - Efficient tensor operations using GPU tensor cores
 
 **Limitations:**
@@ -264,7 +264,7 @@ Framework for comparing reducers:
 
 ### benchmark_mnist.py
 Tests DIRE performance on MNIST dataset with various configurations:
-- Compares backends (PyTorch, PyKeOps, cuVS)
+- Compares backends (PyTorch, cuVS)
 - Tests different precision levels (FP32, FP16)
 - Measures memory usage and throughput
 
@@ -277,7 +277,7 @@ Profiles the complete DIRE pipeline:
 
 ## Summary
 
-The benchmarking results demonstrate that DIRE-JAX can efficiently handle high-dimensional data at scale through:
+The benchmarking results demonstrate that DiRe-Rapids can efficiently handle high-dimensional data at scale through:
 - Intelligent backend selection (PyTorch + cuVS + memory efficient)
 - Memory-aware processing with automatic fallbacks
 - FP16 optimization for modern GPUs

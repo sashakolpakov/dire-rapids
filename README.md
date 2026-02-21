@@ -7,7 +7,7 @@
     <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg">
   </a>
   <a href="https://www.python.org/downloads/">
-    <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-blue.svg">
+    <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9+-blue.svg">
   </a>
   <a href="https://pypi.org/project/dire-rapids/">
     <img alt="PyPI" src="https://img.shields.io/pypi/v/dire-rapids.svg">
@@ -85,6 +85,7 @@ cd dire-rapids
 
 pip install -e .          # CPU + PyTorch
 pip install -e .[cuda]    # With CUDA support
+pip install -e .[keops]   # With PyKeOps support
 pip install -e .[dev]     # Development (testing + dev tools)
 ```
 
@@ -137,7 +138,7 @@ X_embedded = reducer.fit_transform(X)
 ### Available Backends
 
 - **DiRePyTorch** -- Standard PyTorch implementation with adaptive chunking
-- **DiRePyTorchMemoryEfficient** -- FP16 support, point-by-point force computation, PyKeOps lazy tensors for repulsion
+- **DiRePyTorchMemoryEfficient** -- FP16 support, point-by-point force computation, optional PyKeOps lazy tensors for repulsion
 - **DiReCuVS** -- RAPIDS cuVS backend for massive-scale datasets
 
 ### Auto Backend Selection
@@ -239,10 +240,10 @@ If you use this work, please cite:
 
 ## Requirements
 
-- Python 3.10--3.13
+- Python 3.9+
 - PyTorch 2.0+
-- PyKeOps 2.1+
 - NumPy, SciPy, scikit-learn
+- (Optional) PyKeOps 2.1+ (`pip install dire-rapids[keops]`)
 - (Optional) CUDA 12.x+ for GPU acceleration
 - (Optional) RAPIDS 23.08+ for cuVS backend
 - (Optional) CuPy for GPU-accelerated Betti curves

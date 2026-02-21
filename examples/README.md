@@ -61,7 +61,7 @@ print(f"DTW β₁: {results['topology']['metrics']['dtw_beta1']:.6f}")
 
 ### 3. Financial Market Microstructure Analysis
 
-A comprehensive demonstration of using DiRe's PyTorch/PyKeOps backend for analyzing financial tick data and revealing market microstructure patterns through dimensionality reduction.
+A comprehensive demonstration of using DiRe's PyTorch backend for analyzing financial tick data and revealing market microstructure patterns through dimensionality reduction.
 
 **Files:**
 - `finance_tick_embedding.py` - Simple minute-bar data analysis
@@ -88,8 +88,8 @@ All examples require the base DiRe installation. Some examples have additional d
 
 ### Financial Examples
 ```bash
-# Install DiRe with PyTorch backend (recommended for these examples)
-pip install dire-rapids[pytorch]
+# Install DiRe
+pip install dire-rapids
 
 # Additional dependencies for financial examples
 pip install polygon-api-client plotly
@@ -205,7 +205,7 @@ def process_live_data(ticker):
 ## Performance Considerations
 
 - **Memory**: For large datasets (>100K points), use the hierarchical approach
-- **Speed**: PyTorch backend with PyKeOps is recommended for GPU acceleration
+- **Speed**: PyTorch backend is recommended for GPU acceleration; PyKeOps can help for moderate-size datasets (`pip install dire-rapids[keops]`)
 - **Batching**: Process data in chunks for memory efficiency
 
 ## Common Use Cases
@@ -246,8 +246,8 @@ All examples are provided under the same Apache 2.0 license as the main DiRe pac
 ## Support
 
 For questions about these examples:
-- Open an issue on [GitHub](https://github.com/sashakolpakov/dire-jax)
-- Check the main [DiRe documentation](https://sashakolpakov.github.io/dire-jax/)
+- Open an issue on [GitHub](https://github.com/sashakolpakov/dire-rapids)
+- Check the main [DiRe documentation](https://sashakolpakov.github.io/dire-rapids/)
 
 ## API Keys
 
