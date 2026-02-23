@@ -372,9 +372,6 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
                 dtype=torch.float16 if self.use_fp16 else torch.float32
             )
         
-        # Linear cooling
-        alpha = 1.0 - iteration / max_iterations
-        
         # Parameters
         a_val = float(self._a)
         b_val = float(self._b)
@@ -385,11 +382,12 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         if not hasattr(self, '_knn_indices_torch') or self._knn_indices_torch.device != positions.device:
             self._knn_indices_torch = torch.as_tensor(self._knn_indices, dtype=torch.long, device=positions.device)
         knn_indices_torch = self._knn_indices_torch
-        # Use compiled kernel for fused attraction forces
-        attraction_forces = _attraction_forces_compiled(
-            positions, positions, knn_indices_torch, a_val, b_exp
-        )
-        forces += attraction_forces
+        # Vectorized attraction: gather k-NN neighbors and compute forces
+        neighbor_pos = positions[knn_indices_torch]                    # (N, k, D)
+        diff = neighbor_pos - positions.unsqueeze(1)                   # (N, k, D)
+        dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10          # (N, k, 1)
+        att_coeff = 1.0 / (1.0 + a_val * (1.0 / dist) ** b_exp)
+        forces += (att_coeff * diff / dist).sum(dim=1)                 # (N, D)
         
         # ============ REPULSION FORCES ============
         # Decide whether to use PyKeOps based on dataset size and availability
@@ -488,8 +486,6 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
                 if self.device.type == 'cuda':
                     torch.cuda.empty_cache()
         
-        # Apply cooling and clipping
-        forces = alpha * forces
         forces = torch.clamp(forces, -self.cutoff, self.cutoff)
         
         return forces
@@ -523,32 +519,30 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         - Low memory warnings when free GPU memory < 2GB
         """
         positions = initial_positions.clone()
-        
+
         self.logger.info(f"Memory-efficient optimization for {self._n_samples} points...")
-        
+
         # Log initial memory usage
         if self.device.type == 'cuda':
             mem_reserved = torch.cuda.memory_reserved() / 1e9
             mem_total = torch.cuda.get_device_properties(0).total_memory / 1e9
             self.logger.info(f"Initial GPU memory: {mem_reserved:.2f}GB used / {mem_total:.1f}GB total")
-        
+
         for iteration in range(self.max_iter_layout):
             # Monitor memory before computation
             if self.device.type == 'cuda' and iteration % 20 == 0:
                 mem_available = torch.cuda.mem_get_info()[0] / 1e9
                 mem_reserved = torch.cuda.memory_reserved() / 1e9
 
-                # Warn if memory usage is getting high
-                if mem_available < 2.0:  # Less than 2GB free
+                if mem_available < 2.0:
                     self.logger.warning(f"Low GPU memory: {mem_available:.1f}GB free, {mem_reserved:.1f}GB used")
-            
-            # Compute forces with our memory-efficient method
+
             forces = self._compute_forces(positions, iteration, self.max_iter_layout)
-            
-            # Update positions
-            positions += forces
-            
-            # More frequent logging and memory management
+
+            alpha = 1.0 - iteration / self.max_iter_layout
+            positions.add_(forces, alpha=alpha)
+
+            # Logging and memory management
             if iteration % 10 == 0:
                 if self.verbose and iteration % 20 == 0:
                     force_mag = torch.norm(forces, dim=1).mean().item()
@@ -559,15 +553,14 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
                                        f"GPU memory: {mem_reserved:.1f}GB used, {mem_available:.1f}GB free")
                     else:
                         self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}, avg force: {force_mag:.6f}")
-                
-                # Aggressive memory cleanup
+
                 if self.device.type == 'cuda':
                     torch.cuda.empty_cache()
-        
+
         # Final normalization
         positions -= positions.mean(dim=0)
         positions /= positions.std(dim=0)
-        
+
         return positions
     
     def fit_transform(self, X, y=None):

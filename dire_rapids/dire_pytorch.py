@@ -46,16 +46,20 @@ def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cu
     when the dataset fits comfortably in GPU memory (true for any modern GPU
     up to ~1M+ points).
 
+    All arithmetic runs in bf16 for ~2x memory bandwidth savings on the
+    gather/scatter-dominated workload.  The caller accumulates positions
+    in fp32, so numerical drift stays bounded.
+
     Parameters
     ----------
-    positions : (N, D)
+    positions : (N, D)  — bf16 on CUDA, fp32 on CPU
     knn_indices : (N, k) long
     neg_indices : (N, n_neg) long
     a_val, b_exp, cutoff : float
 
     Returns
     -------
-    (N, D) forces
+    (N, D) forces in same dtype as positions
     """
     # Attraction: toward k-NN neighbors
     neighbor_pos = positions[knn_indices]                    # (N, k, D)
@@ -88,7 +92,9 @@ def _compute_forces_compiled(positions, knn_indices, neg_indices, a_val, b_exp, 
     if positions.is_cuda and not _torch_compile_failed:
         if _forces_compiled_cuda is None:
             try:
-                _forces_compiled_cuda = torch.compile(_compute_forces_kernel)
+                _forces_compiled_cuda = torch.compile(
+                    _compute_forces_kernel, mode="reduce-overhead"
+                )
             except Exception:
                 _torch_compile_failed = True
                 return _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cutoff)
@@ -634,7 +640,6 @@ class DiRePyTorch(TransformerMixin):
             Forces of shape (n_samples, n_components).
         """
         n_samples = positions.shape[0]
-        alpha = 1.0 - iteration / max_iterations
         a_val = float(self._a)
         b_exp = float(2 * self._b)
         n_neg = min(int(self.neg_ratio * self.n_neighbors), n_samples - 1)
@@ -650,9 +655,17 @@ class DiRePyTorch(TransformerMixin):
             0, n_samples, (n_samples, n_neg), device=self.device
         )
 
+        # Run force kernel in bf16 for ~2x bandwidth savings on gather-heavy ops;
+        # positions stay fp32 in the caller, so accumulated drift is bounded.
+        use_bf16 = positions.is_cuda and torch.cuda.is_bf16_supported()
+        if use_bf16:
+            pos_lo = positions.bfloat16()
+        else:
+            pos_lo = positions
+
         try:
             forces = _compute_forces_compiled(
-                positions, knn_indices_torch, neg_indices,
+                pos_lo, knn_indices_torch, neg_indices,
                 a_val, b_exp, self.cutoff,
             )
         except (RuntimeError, torch.cuda.OutOfMemoryError):
@@ -662,11 +675,13 @@ class DiRePyTorch(TransformerMixin):
                 "Vectorized force computation OOM — falling back to chunked path"
             )
             forces = self._compute_forces_chunked(
-                positions, knn_indices_torch, neg_indices,
+                pos_lo, knn_indices_torch, neg_indices,
                 a_val, b_exp, n_neg,
             )
 
-        forces = alpha * forces
+        if use_bf16:
+            forces = forces.float()
+
         return torch.clamp(forces, -self.cutoff, self.cutoff)
 
     def _compute_forces_chunked(self, positions, knn_indices_torch, neg_indices,
@@ -701,27 +716,27 @@ class DiRePyTorch(TransformerMixin):
     def _optimize_layout(self, initial_positions):
         """
         Optimize the embedding layout using iterative force computation.
-        
+
         This private method performs the main optimization loop, iteratively
         computing and applying forces to refine the embedding layout.
-        
+
         Parameters
         ----------
         initial_positions : torch.Tensor
             Initial embedding positions of shape (n_samples, n_components).
-            
+
         Returns
         -------
         torch.Tensor
             Optimized final positions of shape (n_samples, n_components),
             normalized to zero mean and unit standard deviation.
-            
+
         Notes
         -----
         Private method, should not be called directly. Used by fit_transform().
-        
-        The optimization uses a simple force-directed layout algorithm with
-        linear cooling schedule.
+
+        Forces are computed in bf16 for bandwidth efficiency, accumulated
+        into fp32 positions via linear cooling: alpha = 1 - iter/max_iter.
         """
         positions = initial_positions.clone()
 
@@ -732,15 +747,13 @@ class DiRePyTorch(TransformerMixin):
             self._knn_indices, dtype=torch.long, device=self.device
         )
 
-        # Optimization loop
+        # Optimization loop with linear cooling
         for iteration in range(self.max_iter_layout):
-            # Compute forces correctly
             forces = self._compute_forces(positions, iteration, self.max_iter_layout)
 
-            # Update positions
-            positions += forces
+            alpha = 1.0 - iteration / self.max_iter_layout
+            positions.add_(forces, alpha=alpha)
 
-            # Log progress every 20th iteration
             if iteration % 20 == 0:
                 self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}")
 

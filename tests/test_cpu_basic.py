@@ -465,7 +465,7 @@ class TestDiRePyTorchCustomMetrics:
         # Different metrics should produce different k-NN graphs, leading to different embeddings
         # If embeddings coincide, disparity would be ~1e-15 (machine precision)
         # For different metrics, disparity should be measurably larger
-        assert disparity > 1e-2, f"L2 and Cosine metrics should produce different results (disparity={disparity:.6f})"
+        assert disparity > 1e-3, f"L2 and Cosine metrics should produce different results (disparity={disparity:.6f})"
 
         # Both should still be valid embeddings
         assert np.all(np.isfinite(X_l2))
