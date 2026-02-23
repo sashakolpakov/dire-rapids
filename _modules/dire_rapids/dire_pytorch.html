@@ -108,6 +108,14 @@
     <span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;PyKeOps not available. Install with: pip install pykeops&quot;</span><span class="p">)</span>
 
+<span class="c1"># cuVS for fast approximate k-NN at scale (optional RAPIDS dependency)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">cupy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cp</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cuvs.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">ivf_flat</span> <span class="k">as</span> <span class="n">cuvs_ivf_flat</span>
+    <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute attraction + repulsion forces for all points in one shot.</span>
@@ -510,6 +518,23 @@
         <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">-NN graph for </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> points in </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D...&quot;</span><span class="p">)</span>
 
+        <span class="c1"># ── cuVS fast path: use GPU-accelerated kNN for large datasets ──</span>
+        <span class="c1"># cuVS IVF-Flat is much faster than brute-force when N is large</span>
+        <span class="c1"># relative to D.  For high-D data (D&gt;200) the index build cost is</span>
+        <span class="c1"># higher, so we raise the threshold.  Empirically:</span>
+        <span class="c1">#   D&lt;200:  cuVS wins at N &gt;= 100K  (covertype 54D: 7s→2.5s at 200K)</span>
+        <span class="c1">#   D&gt;=200: cuVS wins at N &gt;= 200K  (mnist 784D: slower at 50K)</span>
+        <span class="n">cuvs_threshold</span> <span class="o">=</span> <span class="mi">200000</span> <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&gt;=</span> <span class="mi">200</span> <span class="k">else</span> <span class="mi">100000</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">CUVS_AVAILABLE</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
+                <span class="ow">and</span> <span class="n">n_samples</span> <span class="o">&gt;=</span> <span class="n">cuvs_threshold</span>
+                <span class="ow">and</span> <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">2048</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>  <span class="c1"># cuVS only supports built-in metrics</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_knn_cuvs</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuVS kNN failed (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to PyTorch&quot;</span><span class="p">)</span>
+
         <span class="c1"># Auto-detect FP16 usage based on data size and GPU</span>
         <span class="k">if</span> <span class="n">use_fp16</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
             <span class="c1"># Use FP16 for high-dimensional data or large datasets</span>
@@ -636,6 +661,45 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span><span class="n">all_knn_distances</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;k-NN graph computed: shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_knn_cuvs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Use cuVS IVF-Flat for fast GPU-accelerated kNN.</span>
+
+<span class="sd">        IVF-Flat partitions the dataset into Voronoi cells (n_lists clusters)</span>
+<span class="sd">        and searches only the closest nprobe cells.  With nprobe high enough</span>
+<span class="sd">        relative to n_lists the results are effectively exact.</span>
+
+<span class="sd">        Sets self._knn_indices, self._knn_distances (same contract as _compute_knn).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># +1 because cuVS returns self as first neighbor</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using cuVS IVF-Flat for </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> points in </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D&quot;</span><span class="p">)</span>
+
+        <span class="n">X_gpu</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;C&#39;</span><span class="p">)</span>
+
+        <span class="c1"># Scale n_lists with dataset size; search enough cells for high recall</span>
+        <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">1024</span><span class="p">)</span>
+        <span class="n">nprobe</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">n_lists</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>
+
+        <span class="n">build_params</span> <span class="o">=</span> <span class="n">cuvs_ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span><span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s2">&quot;sqeuclidean&quot;</span><span class="p">)</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">cuvs_ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
+
+        <span class="n">search_params</span> <span class="o">=</span> <span class="n">cuvs_ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="n">n_probes</span><span class="o">=</span><span class="n">nprobe</span><span class="p">)</span>
+        <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">cuvs_ivf_flat</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+
+        <span class="n">indices_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span>
+        <span class="n">distances_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">distances</span><span class="p">))</span>
+
+        <span class="c1"># Remove self (first neighbor) and convert squared distances to distances</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span> <span class="o">=</span> <span class="n">indices_np</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">distances_np</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:],</span> <span class="mf">0.0</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;k-NN graph computed via cuVS: shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Clean up</span>
+        <span class="k">del</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">index</span>
+        <span class="n">cp</span><span class="o">.</span><span class="n">get_default_memory_pool</span><span class="p">()</span><span class="o">.</span><span class="n">free_all_blocks</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_initialize_embedding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
