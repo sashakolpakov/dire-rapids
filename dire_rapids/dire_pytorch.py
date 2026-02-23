@@ -37,6 +37,14 @@ except ImportError:
     PYKEOPS_AVAILABLE = False
     logger.warning("PyKeOps not available. Install with: pip install pykeops")
 
+# cuVS for fast approximate k-NN at scale (optional RAPIDS dependency)
+try:
+    import cupy as cp
+    from cuvs.neighbors import ivf_flat as cuvs_ivf_flat
+    CUVS_AVAILABLE = True
+except ImportError:
+    CUVS_AVAILABLE = False
+
 
 def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cutoff):
     """Compute attraction + repulsion forces for all points in one shot.
@@ -434,6 +442,23 @@ class DiRePyTorch(TransformerMixin):
         n_dims = X.shape[1]
         self.logger.info(f"Computing {self.n_neighbors}-NN graph for {n_samples} points in {n_dims}D...")
 
+        # ── cuVS fast path: use GPU-accelerated kNN for large datasets ──
+        # cuVS IVF-Flat is much faster than brute-force when N is large
+        # relative to D.  For high-D data (D>200) the index build cost is
+        # higher, so we raise the threshold.  Empirically:
+        #   D<200:  cuVS wins at N >= 100K  (covertype 54D: 7s→2.5s at 200K)
+        #   D>=200: cuVS wins at N >= 200K  (mnist 784D: slower at 50K)
+        cuvs_threshold = 200000 if n_dims >= 200 else 100000
+        if (CUVS_AVAILABLE
+                and self.device.type == 'cuda'
+                and n_samples >= cuvs_threshold
+                and n_dims <= 2048
+                and self._metric_fn is None):  # cuVS only supports built-in metrics
+            try:
+                return self._compute_knn_cuvs(X)
+            except Exception as e:
+                self.logger.warning(f"cuVS kNN failed ({e}), falling back to PyTorch")
+
         # Auto-detect FP16 usage based on data size and GPU
         if use_fp16 is None and self.device.type == 'cuda':
             # Use FP16 for high-dimensional data or large datasets
@@ -560,6 +585,45 @@ class DiRePyTorch(TransformerMixin):
         self._knn_distances = np.vstack(all_knn_distances)
 
         self.logger.info(f"k-NN graph computed: shape {self._knn_indices.shape}")
+
+    def _compute_knn_cuvs(self, X):
+        """Use cuVS IVF-Flat for fast GPU-accelerated kNN.
+
+        IVF-Flat partitions the dataset into Voronoi cells (n_lists clusters)
+        and searches only the closest nprobe cells.  With nprobe high enough
+        relative to n_lists the results are effectively exact.
+
+        Sets self._knn_indices, self._knn_distances (same contract as _compute_knn).
+        """
+        n_samples, n_dims = X.shape
+        k = self.n_neighbors + 1  # +1 because cuVS returns self as first neighbor
+
+        self.logger.info(f"Using cuVS IVF-Flat for {n_samples} points in {n_dims}D")
+
+        X_gpu = cp.asarray(X, dtype=cp.float32, order='C')
+
+        # Scale n_lists with dataset size; search enough cells for high recall
+        n_lists = min(int(np.sqrt(n_samples)), 1024)
+        nprobe = min(n_lists, 64)
+
+        build_params = cuvs_ivf_flat.IndexParams(n_lists=n_lists, metric="sqeuclidean")
+        index = cuvs_ivf_flat.build(build_params, X_gpu)
+
+        search_params = cuvs_ivf_flat.SearchParams(n_probes=nprobe)
+        distances, indices = cuvs_ivf_flat.search(search_params, index, X_gpu, k)
+
+        indices_np = cp.asnumpy(cp.asarray(indices))
+        distances_np = cp.asnumpy(cp.asarray(distances))
+
+        # Remove self (first neighbor) and convert squared distances to distances
+        self._knn_indices = indices_np[:, 1:]
+        self._knn_distances = np.sqrt(np.maximum(distances_np[:, 1:], 0.0))
+
+        self.logger.info(f"k-NN graph computed via cuVS: shape {self._knn_indices.shape}")
+
+        # Clean up
+        del X_gpu, index
+        cp.get_default_memory_pool().free_all_blocks()
 
     def _initialize_embedding(self, X):
         """
