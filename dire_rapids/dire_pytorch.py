@@ -46,7 +46,7 @@ except ImportError:
     CUVS_AVAILABLE = False
 
 
-def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cutoff):
+def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_val, cutoff):
     """Compute attraction + repulsion forces for all points in one shot.
 
     This is the hot loop kernel — torch.compile fuses it into a small number
@@ -63,7 +63,7 @@ def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cu
     positions : (N, D)  — bf16 on CUDA, fp32 on CPU
     knn_indices : (N, k) long
     neg_indices : (N, n_neg) long
-    a_val, b_exp, cutoff : float
+    a_val, b_val, cutoff : float
 
     Returns
     -------
@@ -72,17 +72,22 @@ def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cu
     # Attraction: toward k-NN neighbors
     neighbor_pos = positions[knn_indices]                    # (N, k, D)
     diff = neighbor_pos - positions.unsqueeze(1)             # (N, k, D)
-    dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10    # (N, k, 1)
-    att_coeff = 1.0 / (1.0 + a_val * (1.0 / dist) ** b_exp)
-    forces = (att_coeff * diff / dist).sum(dim=1)            # (N, D)
+    dist_sq = (diff * diff).sum(dim=2, keepdim=True) + 1e-10  # (N, k, 1)
+    inv_dist = torch.rsqrt(dist_sq)                          # 1/dist, no sqrt
+    dist_sq_b = dist_sq ** b_val                              # dist^(2b)
+    att_coeff = dist_sq_b / (dist_sq_b + a_val)
+    forces = (att_coeff * diff * inv_dist).sum(dim=1)         # (N, D)
 
     # Repulsion: against random negative samples
     neg_pos = positions[neg_indices]                          # (N, n_neg, D)
     diff_n = neg_pos - positions.unsqueeze(1)                 # (N, n_neg, D)
-    dist_n = torch.norm(diff_n, dim=2, keepdim=True) + 1e-10
-    rep_coeff = -1.0 / (1.0 + a_val * (dist_n ** b_exp))
+    dist_sq_n = (diff_n * diff_n).sum(dim=2, keepdim=True) + 1e-10
+    inv_dist_n = torch.rsqrt(dist_sq_n)
+    dist_n = dist_sq_n * inv_dist_n                           # sqrt via sq * rsqrt
+    dist_sq_b_n = dist_sq_n ** b_val
+    rep_coeff = -1.0 / (1.0 + a_val * (dist_sq_b_n))
     rep_coeff = rep_coeff * torch.exp(-dist_n / cutoff)
-    forces = forces + (rep_coeff * diff_n / dist_n).sum(dim=1)
+    forces = forces + (rep_coeff * diff_n * inv_dist_n).sum(dim=1)
 
     return torch.clamp(forces, -cutoff, cutoff)
 
@@ -94,7 +99,7 @@ _forces_compiled_cuda = None
 _torch_compile_failed = False
 
 
-def _compute_forces_compiled(positions, knn_indices, neg_indices, a_val, b_exp, cutoff):
+def _compute_forces_compiled(positions, knn_indices, neg_indices, a_val, b_val, cutoff):
     """Dispatch to compiled or eager kernel."""
     global _forces_compiled_cuda, _torch_compile_failed
     if positions.is_cuda and not _torch_compile_failed:
@@ -105,12 +110,57 @@ def _compute_forces_compiled(positions, knn_indices, neg_indices, a_val, b_exp, 
                 )
             except Exception:
                 _torch_compile_failed = True
-                return _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cutoff)
+                return _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_val, cutoff)
         try:
-            return _forces_compiled_cuda(positions, knn_indices, neg_indices, a_val, b_exp, cutoff)
+            return _forces_compiled_cuda(positions, knn_indices, neg_indices, a_val, b_val, cutoff)
         except Exception:
             _torch_compile_failed = True
-    return _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_exp, cutoff)
+    return _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_val, cutoff)
+
+
+def _attraction_forces_kernel(positions, knn_indices, a_val, b_val):
+    """Compute attraction forces only (for memory-efficient backend).
+
+    Parameters
+    ----------
+    positions : (N, D)
+    knn_indices : (N, k) long
+    a_val, b_val : float
+
+    Returns
+    -------
+    (N, D) attraction forces
+    """
+    neighbor_pos = positions[knn_indices]                    # (N, k, D)
+    diff = neighbor_pos - positions.unsqueeze(1)             # (N, k, D)
+    dist_sq = (diff * diff).sum(dim=2, keepdim=True) + 1e-10  # (N, k, 1)
+    inv_dist = torch.rsqrt(dist_sq)
+    dist_sq_b = dist_sq ** b_val
+    att_coeff = dist_sq_b / (dist_sq_b + a_val)
+    return (att_coeff * diff * inv_dist).sum(dim=1)           # (N, D)
+
+
+_attraction_compiled_cuda = None
+_attraction_compile_failed = False
+
+
+def _attraction_forces_compiled(positions, knn_indices, a_val, b_val):
+    """Dispatch to compiled or eager attraction kernel."""
+    global _attraction_compiled_cuda, _attraction_compile_failed
+    if positions.is_cuda and not _attraction_compile_failed:
+        if _attraction_compiled_cuda is None:
+            try:
+                _attraction_compiled_cuda = torch.compile(
+                    _attraction_forces_kernel, mode="reduce-overhead"
+                )
+            except Exception:
+                _attraction_compile_failed = True
+                return _attraction_forces_kernel(positions, knn_indices, a_val, b_val)
+        try:
+            return _attraction_compiled_cuda(positions, knn_indices, a_val, b_val)
+        except Exception:
+            _attraction_compile_failed = True
+    return _attraction_forces_kernel(positions, knn_indices, a_val, b_val)
 
 
 def _compile_metric(spec):
@@ -653,11 +703,13 @@ class DiRePyTorch(TransformerMixin):
         if self.init == 'pca':
             self.logger.info("Initializing with PCA")
             if self.device.type == 'cuda' and X.shape[1] > 32:
-                # GPU-accelerated PCA via truncated SVD — much faster for high-D data
+                # GPU-accelerated PCA via truncated SVD
                 X_t = torch.tensor(X, dtype=torch.float32, device=self.device)
                 X_t = X_t - X_t.mean(dim=0)
-                U, S, _ = torch.linalg.svd(X_t, full_matrices=False)
-                embedding = (U[:, :self.n_components] * S[:self.n_components]).cpu().numpy()
+                # Use randomized SVD (pca_lowrank) — O(N*D*q) instead of full SVD,
+                # and avoids cusolver limits on very wide matrices (D >> N).
+                U, S, _ = torch.pca_lowrank(X_t, q=self.n_components)
+                embedding = (U * S).cpu().numpy()
                 del X_t, U, S
                 if self.device.type == 'cuda':
                     torch.cuda.empty_cache()
@@ -705,7 +757,7 @@ class DiRePyTorch(TransformerMixin):
         """
         n_samples = positions.shape[0]
         a_val = float(self._a)
-        b_exp = float(2 * self._b)
+        b_val = float(self._b)
         n_neg = min(int(self.neg_ratio * self.n_neighbors), n_samples - 1)
 
         knn_indices_torch = getattr(self, '_knn_indices_torch', None)
@@ -730,7 +782,7 @@ class DiRePyTorch(TransformerMixin):
         try:
             forces = _compute_forces_compiled(
                 pos_lo, knn_indices_torch, neg_indices,
-                a_val, b_exp, self.cutoff,
+                a_val, b_val, self.cutoff,
             )
         except (RuntimeError, torch.cuda.OutOfMemoryError):
             if self.device.type == 'cuda':
@@ -740,7 +792,7 @@ class DiRePyTorch(TransformerMixin):
             )
             forces = self._compute_forces_chunked(
                 pos_lo, knn_indices_torch, neg_indices,
-                a_val, b_exp, n_neg,
+                a_val, b_val, n_neg,
             )
 
         if use_bf16:
@@ -749,7 +801,7 @@ class DiRePyTorch(TransformerMixin):
         return forces
 
     def _compute_forces_chunked(self, positions, knn_indices_torch, neg_indices,
-                                a_val, b_exp, n_neg):
+                                a_val, b_val, n_neg):
         """Chunked fallback for GPUs that cannot fit the full computation."""
         n_samples = positions.shape[0]
         forces = torch.zeros_like(positions)
@@ -763,17 +815,22 @@ class DiRePyTorch(TransformerMixin):
             # Attraction
             neighbor_pos = positions[knn_indices_torch[s]]
             diff = neighbor_pos - chunk_pos.unsqueeze(1)
-            dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10
-            att = 1.0 / (1.0 + a_val * (1.0 / dist) ** b_exp)
-            forces[s] += (att * diff / dist).sum(dim=1)
+            dist_sq = (diff * diff).sum(dim=2, keepdim=True) + 1e-10
+            inv_dist = torch.rsqrt(dist_sq)
+            dist_sq_b = dist_sq ** b_val
+            att = dist_sq_b / (dist_sq_b + a_val)
+            forces[s] += (att * diff * inv_dist).sum(dim=1)
 
             # Repulsion
             neg_pos = positions[neg_indices[s]]
             diff_n = neg_pos - chunk_pos.unsqueeze(1)
-            dist_n = torch.norm(diff_n, dim=2, keepdim=True) + 1e-10
-            rep = -1.0 / (1.0 + a_val * (dist_n ** b_exp))
+            dist_sq_n = (diff_n * diff_n).sum(dim=2, keepdim=True) + 1e-10
+            inv_dist_n = torch.rsqrt(dist_sq_n)
+            dist_n = dist_sq_n * inv_dist_n
+            dist_sq_b_n = dist_sq_n ** b_val
+            rep = -1.0 / (1.0 + a_val * dist_sq_b_n)
             rep = rep * torch.exp(-dist_n / self.cutoff)
-            forces[s] += (rep * diff_n / dist_n).sum(dim=1)
+            forces[s] += (rep * diff_n * inv_dist_n).sum(dim=1)
 
         return torch.clamp(forces, -self.cutoff, self.cutoff)
 

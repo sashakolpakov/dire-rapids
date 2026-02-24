@@ -1,0 +1,12 @@
+DiRe vs cuML UMAP — High-Dimensional OpenML Benchmark
+Date: 2026-02-24T03:03:16.577713+00:00
+GPU: NVIDIA GH200 480GB
+PyTorch: 2.10.0+cu128
+Parameters: n_neighbors=16, n_components=2, max_iter=128
+
+  Dataset               N        D |     DiRe   cuUMAP  Speedup |  DiRe Q  cuML Q
+  -------------------------------------------------------------------------------
+  ovarianTumour       283    54621 |    1.22s    0.14s     0.1x |   0.048   0.318
+  Dorothea           1150   100000 |    0.83s    0.32s     0.4x |   0.015   0.018
+  Flora             15000   200000 |    4.61s   15.66s     3.4x |   0.001   0.030
+

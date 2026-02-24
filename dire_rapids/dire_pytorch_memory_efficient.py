@@ -17,7 +17,7 @@ import torch
 from loguru import logger
 
 # Import base class and compiled kernels
-from .dire_pytorch import DiRePyTorch  # pylint: disable=cyclic-import
+from .dire_pytorch import DiRePyTorch, _attraction_forces_compiled  # pylint: disable=cyclic-import
 
 # PyKeOps for efficient force computations
 try:
@@ -320,14 +320,13 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             torch.cuda.empty_cache()
         gc.collect()
     
-    def _compute_forces(self, positions, iteration, max_iterations, chunk_size=None):
+    def _compute_forces(self, positions, iteration, max_iterations):
         """
         Compute forces with memory-efficient strategies and PyKeOps integration.
-        
+
         This method overrides the parent force computation with enhanced memory
-        management, point-by-point fallback capabilities, and optional PyKeOps
-        LazyTensors for exact repulsion computation.
-        
+        management and optional PyKeOps LazyTensors for exact repulsion.
+
         Parameters
         ----------
         positions : torch.Tensor
@@ -336,156 +335,116 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             Current iteration number (0-indexed).
         max_iterations : int
             Total number of iterations planned.
-        chunk_size : int, optional
-            Maximum chunk size for processing. If None, automatically computed
-            based on available memory.
-            
+
         Returns
         -------
         torch.Tensor
             Computed forces of shape (n_samples, n_components).
-            
-        Notes
-        -----
-        Private method, should not be called directly. Used by _optimize_layout().
-        
-        Force Computation Strategy:
-        - **Attraction forces**: Vectorized computation with fallback to point-by-point
-        - **Repulsion forces**: Chooses between PyKeOps LazyTensors, exact computation,
-          or chunked random sampling based on dataset size and available memory
-        - **Memory management**: Aggressive cleanup of intermediate tensors
-        
-        Backend Selection for Repulsion:
-        - PyKeOps LazyTensors: For datasets < pykeops_threshold on GPU
-        - Exact computation: When use_exact_repulsion=True (testing only)
-        - Random sampling: For large datasets or memory-constrained environments
         """
         n_samples = positions.shape[0]
         forces = torch.zeros_like(positions)
-        
+
         # Auto-adjust chunk size based on available memory
-        if chunk_size is None:
-            chunk_size = self._compute_optimal_chunk_size(
-                n_samples, 
-                self.n_components, 
-                operation_type="repulsion",
-                dtype=torch.float16 if self.use_fp16 else torch.float32
-            )
-        
+        chunk_size = self._compute_optimal_chunk_size(
+            n_samples,
+            self.n_components,
+            operation_type="repulsion",
+            dtype=torch.float16 if self.use_fp16 else torch.float32
+        )
+
         # Parameters
         a_val = float(self._a)
         b_val = float(self._b)
-        b_exp = float(2 * b_val)
-        
-        # ============ ATTRACTION FORCES (vectorized for speed) ============
-        # Use cached tensor to avoid repeated CPU->GPU transfer each iteration
+
+        # ============ ATTRACTION FORCES (compiled kernel) ============
         if not hasattr(self, '_knn_indices_torch') or self._knn_indices_torch.device != positions.device:
             self._knn_indices_torch = torch.as_tensor(self._knn_indices, dtype=torch.long, device=positions.device)
         knn_indices_torch = self._knn_indices_torch
-        # Vectorized attraction: gather k-NN neighbors and compute forces
-        neighbor_pos = positions[knn_indices_torch]                    # (N, k, D)
-        diff = neighbor_pos - positions.unsqueeze(1)                   # (N, k, D)
-        dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10          # (N, k, 1)
-        att_coeff = 1.0 / (1.0 + a_val * (1.0 / dist) ** b_exp)
-        forces += (att_coeff * diff / dist).sum(dim=1)                 # (N, D)
-        
+        forces += _attraction_forces_compiled(positions, knn_indices_torch, a_val, b_val)
+
         # ============ REPULSION FORCES ============
-        # Decide whether to use PyKeOps based on dataset size and availability
         use_pykeops = (
-            PYKEOPS_AVAILABLE and 
-            self.use_pykeops_repulsion and 
+            PYKEOPS_AVAILABLE and
+            self.use_pykeops_repulsion and
             n_samples < self.pykeops_threshold and
             self.device.type == 'cuda' and
-            not self.use_exact_repulsion  # Don't use if exact repulsion is requested
+            not self.use_exact_repulsion
         )
-        
+
         if use_pykeops:
-            # Use PyKeOps LazyTensors for efficient all-pairs repulsion
             self.logger.debug("Using PyKeOps LazyTensors for repulsion")
 
-            # Ensure contiguity for PyKeOps
             X_i = LazyTensor(positions[:, None, :].contiguous())  # (N, 1, D)
             X_j = LazyTensor(positions[None, :, :].contiguous())  # (1, N, D)
-            
-            # Compute differences and distances
+
             diff = X_j - X_i  # (N, N, D) lazy
-            D_ij = ((diff ** 2).sum(-1)).sqrt() + 1e-10  # (N, N) lazy
-            
-            # Repulsion kernel
-            rep_kernel = -1.0 / (1.0 + a_val * (D_ij ** b_exp))
-            
-            # Apply cutoff
+            D_sq = (diff ** 2).sum(-1)  # (N, N) lazy
+            D_sq = D_sq + 1e-10
+            D_sq_b = D_sq ** b_val
+
+            rep_kernel = -1.0 / (1.0 + a_val * D_sq_b)
+
+            D_ij = D_sq.sqrt()
             cutoff_scale = (-D_ij / self.cutoff).exp()
             rep_kernel = rep_kernel * cutoff_scale
-            
-            # Compute forces (reduction happens efficiently in PyKeOps)
-            # For LazyTensors, division broadcasts automatically
+
             force_dir = diff / D_ij
             rep_forces = (rep_kernel * force_dir).sum(1)
             forces += rep_forces
-            
+
         elif self.use_exact_repulsion:
-            # Use exact all-pairs repulsion (memory intensive, for testing)
             self.logger.debug("Using exact all-pairs repulsion (memory intensive)")
-            # Fall back to parent implementation
-            return super()._compute_forces(positions, iteration, max_iterations, chunk_size)
+            # Delegate to parent which computes both attraction + repulsion;
+            # discard the attraction forces we already accumulated above.
+            return super()._compute_forces(positions, iteration, max_iterations)
         else:
-            # Use chunked random sampling to avoid memory issues with large datasets
             self.logger.debug("Using chunked random sampling for repulsion")
             n_neg = min(int(self.neg_ratio * self.n_neighbors), n_samples - 1)
-            
-            # Process repulsion in chunks to avoid large tensor allocation
+
             repulsion_chunk_size = min(chunk_size, n_samples)
-            
+
             for start_idx in range(0, n_samples, repulsion_chunk_size):
                 end_idx = min(start_idx + repulsion_chunk_size, n_samples)
                 chunk_size_actual = end_idx - start_idx
-                
-                # Generate negative samples for this chunk only
+
                 neg_indices = torch.randint(0, n_samples, (chunk_size_actual, n_neg), device=self.device)
-                
-                # Avoid self-selection more memory efficiently
-                # Create arange only for chunk size
+
                 chunk_indices = torch.arange(start_idx, end_idx, device=self.device).unsqueeze(1)
                 mask = neg_indices == chunk_indices
-                
-                # Replace self-indices with random alternatives (avoid large tensor creation)
+
                 if mask.any():
-                    # Generate replacement indices on-the-fly
                     replacement_base = torch.randint(0, n_samples, (chunk_size_actual, n_neg), device=self.device)
-                    # Ensure replacements are different from self
                     replacement_mask = replacement_base == chunk_indices
                     while replacement_mask.any():
-                        replacement_base[replacement_mask] = torch.randint(0, n_samples, 
-                                                                         (replacement_mask.sum(),), 
+                        replacement_base[replacement_mask] = torch.randint(0, n_samples,
+                                                                         (replacement_mask.sum(),),
                                                                          device=self.device)
                         replacement_mask = replacement_base == chunk_indices
-                    
+
                     neg_indices = torch.where(mask, replacement_base, neg_indices)
-                
-                # Compute repulsion for this chunk
+
                 chunk_positions = positions[start_idx:end_idx]
-                neg_positions = positions[neg_indices]  # shape: (chunk_size, n_neg, n_components)
-                center_positions = chunk_positions.unsqueeze(1)  # shape: (chunk_size, 1, n_components)
-                
-                # Compute differences and distances
+                neg_positions = positions[neg_indices]
+                center_positions = chunk_positions.unsqueeze(1)
+
                 diff = neg_positions - center_positions
-                dist = torch.norm(diff, dim=2, keepdim=True) + 1e-10
-                
-                # Repulsion coefficients
-                rep_coeff = -1.0 / (1.0 + a_val * (dist ** b_exp))
+                dist_sq = (diff * diff).sum(dim=2, keepdim=True) + 1e-10
+                inv_dist = torch.rsqrt(dist_sq)
+                dist = dist_sq * inv_dist
+                dist_sq_b = dist_sq ** b_val
+
+                rep_coeff = -1.0 / (1.0 + a_val * dist_sq_b)
                 cutoff_scale = torch.exp(-dist / self.cutoff)
                 rep_coeff = rep_coeff * cutoff_scale
-                
-                # Sum repulsion forces for this chunk
-                chunk_repulsion_forces = (rep_coeff * diff / dist).sum(dim=1)
+
+                chunk_repulsion_forces = (rep_coeff * diff * inv_dist).sum(dim=1)
                 forces[start_idx:end_idx] += chunk_repulsion_forces
-                
+              
                 # Clear intermediate tensors to free memory
-                del neg_indices, neg_positions, diff, dist, rep_coeff, cutoff_scale, chunk_repulsion_forces
+                del neg_indices, neg_positions, diff, dist, dist_sq, rep_coeff, cutoff_scale, chunk_repulsion_forces
 
         forces = torch.clamp(forces, -self.cutoff, self.cutoff)
-        
+
         return forces
     
     def _optimize_layout(self, initial_positions):
