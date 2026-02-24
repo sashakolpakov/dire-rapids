@@ -88,7 +88,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
 <span class="c1"># Import base class and compiled kernels</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>  <span class="c1"># pylint: disable=cyclic-import</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span><span class="p">,</span> <span class="n">_attraction_forces_compiled</span>  <span class="c1"># pylint: disable=cyclic-import</span>
 
 <span class="c1"># PyKeOps for efficient force computations</span>
 <span class="k">try</span><span class="p">:</span>
@@ -396,14 +396,13 @@
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
         <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
     
-    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">iteration</span><span class="p">,</span> <span class="n">max_iterations</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">iteration</span><span class="p">,</span> <span class="n">max_iterations</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Compute forces with memory-efficient strategies and PyKeOps integration.</span>
-<span class="sd">        </span>
+
 <span class="sd">        This method overrides the parent force computation with enhanced memory</span>
-<span class="sd">        management, point-by-point fallback capabilities, and optional PyKeOps</span>
-<span class="sd">        LazyTensors for exact repulsion computation.</span>
-<span class="sd">        </span>
+<span class="sd">        management and optional PyKeOps LazyTensors for exact repulsion.</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        positions : torch.Tensor</span>
@@ -412,158 +411,115 @@
 <span class="sd">            Current iteration number (0-indexed).</span>
 <span class="sd">        max_iterations : int</span>
 <span class="sd">            Total number of iterations planned.</span>
-<span class="sd">        chunk_size : int, optional</span>
-<span class="sd">            Maximum chunk size for processing. If None, automatically computed</span>
-<span class="sd">            based on available memory.</span>
-<span class="sd">            </span>
+
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        torch.Tensor</span>
 <span class="sd">            Computed forces of shape (n_samples, n_components).</span>
-<span class="sd">            </span>
-<span class="sd">        Notes</span>
-<span class="sd">        -----</span>
-<span class="sd">        Private method, should not be called directly. Used by _optimize_layout().</span>
-<span class="sd">        </span>
-<span class="sd">        Force Computation Strategy:</span>
-<span class="sd">        - **Attraction forces**: Vectorized computation with fallback to point-by-point</span>
-<span class="sd">        - **Repulsion forces**: Chooses between PyKeOps LazyTensors, exact computation,</span>
-<span class="sd">          or chunked random sampling based on dataset size and available memory</span>
-<span class="sd">        - **Memory management**: Aggressive cleanup of intermediate tensors</span>
-<span class="sd">        </span>
-<span class="sd">        Backend Selection for Repulsion:</span>
-<span class="sd">        - PyKeOps LazyTensors: For datasets &lt; pykeops_threshold on GPU</span>
-<span class="sd">        - Exact computation: When use_exact_repulsion=True (testing only)</span>
-<span class="sd">        - Random sampling: For large datasets or memory-constrained environments</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
-        
+
         <span class="c1"># Auto-adjust chunk size based on available memory</span>
-        <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_optimal_chunk_size</span><span class="p">(</span>
-                <span class="n">n_samples</span><span class="p">,</span> 
-                <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">,</span> 
-                <span class="n">operation_type</span><span class="o">=</span><span class="s2">&quot;repulsion&quot;</span><span class="p">,</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_fp16</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span>
-            <span class="p">)</span>
-        
+        <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_optimal_chunk_size</span><span class="p">(</span>
+            <span class="n">n_samples</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">,</span>
+            <span class="n">operation_type</span><span class="o">=</span><span class="s2">&quot;repulsion&quot;</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_fp16</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span>
+        <span class="p">)</span>
+
         <span class="c1"># Parameters</span>
         <span class="n">a_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_a</span><span class="p">)</span>
         <span class="n">b_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_b</span><span class="p">)</span>
-        <span class="n">b_exp</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">b_val</span><span class="p">)</span>
-        
-        <span class="c1"># ============ ATTRACTION FORCES (vectorized for speed) ============</span>
-        <span class="c1"># Use cached tensor to avoid repeated CPU-&gt;GPU transfer each iteration</span>
+
+        <span class="c1"># ============ ATTRACTION FORCES (compiled kernel) ============</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_knn_indices_torch&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="n">knn_indices_torch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span>
-        <span class="c1"># Vectorized attraction: gather k-NN neighbors and compute forces</span>
-        <span class="n">neighbor_pos</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">knn_indices_torch</span><span class="p">]</span>                    <span class="c1"># (N, k, D)</span>
-        <span class="n">diff</span> <span class="o">=</span> <span class="n">neighbor_pos</span> <span class="o">-</span> <span class="n">positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>                   <span class="c1"># (N, k, D)</span>
-        <span class="n">dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">diff</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>          <span class="c1"># (N, k, 1)</span>
-        <span class="n">att_coeff</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">)</span>
-        <span class="n">forces</span> <span class="o">+=</span> <span class="p">(</span><span class="n">att_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>                 <span class="c1"># (N, D)</span>
-        
+        <span class="n">forces</span> <span class="o">+=</span> <span class="n">_attraction_forces_compiled</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices_torch</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">)</span>
+
         <span class="c1"># ============ REPULSION FORCES ============</span>
-        <span class="c1"># Decide whether to use PyKeOps based on dataset size and availability</span>
         <span class="n">use_pykeops</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">PYKEOPS_AVAILABLE</span> <span class="ow">and</span> 
-            <span class="bp">self</span><span class="o">.</span><span class="n">use_pykeops_repulsion</span> <span class="ow">and</span> 
+            <span class="n">PYKEOPS_AVAILABLE</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_pykeops_repulsion</span> <span class="ow">and</span>
             <span class="n">n_samples</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">pykeops_threshold</span> <span class="ow">and</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span> <span class="ow">and</span>
-            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_exact_repulsion</span>  <span class="c1"># Don&#39;t use if exact repulsion is requested</span>
+            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_exact_repulsion</span>
         <span class="p">)</span>
-        
+
         <span class="k">if</span> <span class="n">use_pykeops</span><span class="p">:</span>
-            <span class="c1"># Use PyKeOps LazyTensors for efficient all-pairs repulsion</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Using PyKeOps LazyTensors for repulsion&quot;</span><span class="p">)</span>
 
-            <span class="c1"># Ensure contiguity for PyKeOps</span>
             <span class="n">X_i</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">positions</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>  <span class="c1"># (N, 1, D)</span>
             <span class="n">X_j</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">positions</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>  <span class="c1"># (1, N, D)</span>
-            
-            <span class="c1"># Compute differences and distances</span>
+
             <span class="n">diff</span> <span class="o">=</span> <span class="n">X_j</span> <span class="o">-</span> <span class="n">X_i</span>  <span class="c1"># (N, N, D) lazy</span>
-            <span class="n">D_ij</span> <span class="o">=</span> <span class="p">((</span><span class="n">diff</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span> <span class="o">+</span> <span class="mf">1e-10</span>  <span class="c1"># (N, N) lazy</span>
-            
-            <span class="c1"># Repulsion kernel</span>
-            <span class="n">rep_kernel</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="n">D_ij</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">))</span>
-            
-            <span class="c1"># Apply cutoff</span>
+            <span class="n">D_sq</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (N, N) lazy</span>
+            <span class="n">D_sq</span> <span class="o">=</span> <span class="n">D_sq</span> <span class="o">+</span> <span class="mf">1e-10</span>
+            <span class="n">D_sq_b</span> <span class="o">=</span> <span class="n">D_sq</span> <span class="o">**</span> <span class="n">b_val</span>
+
+            <span class="n">rep_kernel</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="n">D_sq_b</span><span class="p">)</span>
+
+            <span class="n">D_ij</span> <span class="o">=</span> <span class="n">D_sq</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
             <span class="n">cutoff_scale</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">D_ij</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
             <span class="n">rep_kernel</span> <span class="o">=</span> <span class="n">rep_kernel</span> <span class="o">*</span> <span class="n">cutoff_scale</span>
-            
-            <span class="c1"># Compute forces (reduction happens efficiently in PyKeOps)</span>
-            <span class="c1"># For LazyTensors, division broadcasts automatically</span>
+
             <span class="n">force_dir</span> <span class="o">=</span> <span class="n">diff</span> <span class="o">/</span> <span class="n">D_ij</span>
             <span class="n">rep_forces</span> <span class="o">=</span> <span class="p">(</span><span class="n">rep_kernel</span> <span class="o">*</span> <span class="n">force_dir</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
             <span class="n">forces</span> <span class="o">+=</span> <span class="n">rep_forces</span>
-            
+
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_exact_repulsion</span><span class="p">:</span>
-            <span class="c1"># Use exact all-pairs repulsion (memory intensive, for testing)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Using exact all-pairs repulsion (memory intensive)&quot;</span><span class="p">)</span>
-            <span class="c1"># Fall back to parent implementation</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_forces</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">iteration</span><span class="p">,</span> <span class="n">max_iterations</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+            <span class="c1"># Delegate to parent which computes both attraction + repulsion;</span>
+            <span class="c1"># discard the attraction forces we already accumulated above.</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_forces</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">iteration</span><span class="p">,</span> <span class="n">max_iterations</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Use chunked random sampling to avoid memory issues with large datasets</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Using chunked random sampling for repulsion&quot;</span><span class="p">)</span>
             <span class="n">n_neg</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">neg_ratio</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">),</span> <span class="n">n_samples</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-            
-            <span class="c1"># Process repulsion in chunks to avoid large tensor allocation</span>
+
             <span class="n">repulsion_chunk_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">chunk_size</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
-            
+
             <span class="k">for</span> <span class="n">start_idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">repulsion_chunk_size</span><span class="p">):</span>
                 <span class="n">end_idx</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start_idx</span> <span class="o">+</span> <span class="n">repulsion_chunk_size</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
                 <span class="n">chunk_size_actual</span> <span class="o">=</span> <span class="n">end_idx</span> <span class="o">-</span> <span class="n">start_idx</span>
-                
-                <span class="c1"># Generate negative samples for this chunk only</span>
+
                 <span class="n">neg_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="p">(</span><span class="n">chunk_size_actual</span><span class="p">,</span> <span class="n">n_neg</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-                
-                <span class="c1"># Avoid self-selection more memory efficiently</span>
-                <span class="c1"># Create arange only for chunk size</span>
+
                 <span class="n">chunk_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">start_idx</span><span class="p">,</span> <span class="n">end_idx</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
                 <span class="n">mask</span> <span class="o">=</span> <span class="n">neg_indices</span> <span class="o">==</span> <span class="n">chunk_indices</span>
-                
-                <span class="c1"># Replace self-indices with random alternatives (avoid large tensor creation)</span>
+
                 <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
-                    <span class="c1"># Generate replacement indices on-the-fly</span>
                     <span class="n">replacement_base</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="p">(</span><span class="n">chunk_size_actual</span><span class="p">,</span> <span class="n">n_neg</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
-                    <span class="c1"># Ensure replacements are different from self</span>
                     <span class="n">replacement_mask</span> <span class="o">=</span> <span class="n">replacement_base</span> <span class="o">==</span> <span class="n">chunk_indices</span>
                     <span class="k">while</span> <span class="n">replacement_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
-                        <span class="n">replacement_base</span><span class="p">[</span><span class="n">replacement_mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> 
-                                                                         <span class="p">(</span><span class="n">replacement_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">(),),</span> 
+                        <span class="n">replacement_base</span><span class="p">[</span><span class="n">replacement_mask</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span>
+                                                                         <span class="p">(</span><span class="n">replacement_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">(),),</span>
                                                                          <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
                         <span class="n">replacement_mask</span> <span class="o">=</span> <span class="n">replacement_base</span> <span class="o">==</span> <span class="n">chunk_indices</span>
-                    
+
                     <span class="n">neg_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">replacement_base</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">)</span>
-                
-                <span class="c1"># Compute repulsion for this chunk</span>
+
                 <span class="n">chunk_positions</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span>
-                <span class="n">neg_positions</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">neg_indices</span><span class="p">]</span>  <span class="c1"># shape: (chunk_size, n_neg, n_components)</span>
-                <span class="n">center_positions</span> <span class="o">=</span> <span class="n">chunk_positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># shape: (chunk_size, 1, n_components)</span>
-                
-                <span class="c1"># Compute differences and distances</span>
+                <span class="n">neg_positions</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">neg_indices</span><span class="p">]</span>
+                <span class="n">center_positions</span> <span class="o">=</span> <span class="n">chunk_positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
                 <span class="n">diff</span> <span class="o">=</span> <span class="n">neg_positions</span> <span class="o">-</span> <span class="n">center_positions</span>
-                <span class="n">dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">diff</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
-                
-                <span class="c1"># Repulsion coefficients</span>
-                <span class="n">rep_coeff</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="n">dist</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">))</span>
+                <span class="n">dist_sq</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff</span> <span class="o">*</span> <span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
+                <span class="n">inv_dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rsqrt</span><span class="p">(</span><span class="n">dist_sq</span><span class="p">)</span>
+                <span class="n">dist</span> <span class="o">=</span> <span class="n">dist_sq</span> <span class="o">*</span> <span class="n">inv_dist</span>
+                <span class="n">dist_sq_b</span> <span class="o">=</span> <span class="n">dist_sq</span> <span class="o">**</span> <span class="n">b_val</span>
+
+                <span class="n">rep_coeff</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="n">dist_sq_b</span><span class="p">)</span>
                 <span class="n">cutoff_scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dist</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
                 <span class="n">rep_coeff</span> <span class="o">=</span> <span class="n">rep_coeff</span> <span class="o">*</span> <span class="n">cutoff_scale</span>
-                
-                <span class="c1"># Sum repulsion forces for this chunk</span>
-                <span class="n">chunk_repulsion_forces</span> <span class="o">=</span> <span class="p">(</span><span class="n">rep_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+                <span class="n">chunk_repulsion_forces</span> <span class="o">=</span> <span class="p">(</span><span class="n">rep_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">*</span> <span class="n">inv_dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
                 <span class="n">forces</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span> <span class="o">+=</span> <span class="n">chunk_repulsion_forces</span>
-                
-                <span class="c1"># Clear intermediate tensors to free memory</span>
-                <span class="k">del</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">neg_positions</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">rep_coeff</span><span class="p">,</span> <span class="n">cutoff_scale</span><span class="p">,</span> <span class="n">chunk_repulsion_forces</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
-                    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
-        
+
+                <span class="k">del</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">neg_positions</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">dist_sq</span><span class="p">,</span> <span class="n">rep_coeff</span><span class="p">,</span> <span class="n">cutoff_scale</span><span class="p">,</span> <span class="n">chunk_repulsion_forces</span>
+
         <span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">forces</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
-        
+
         <span class="k">return</span> <span class="n">forces</span>
     
     <span class="k">def</span><span class="w"> </span><span class="nf">_optimize_layout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial_positions</span><span class="p">):</span>

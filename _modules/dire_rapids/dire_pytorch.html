@@ -117,7 +117,7 @@
     <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute attraction + repulsion forces for all points in one shot.</span>
 
 <span class="sd">    This is the hot loop kernel — torch.compile fuses it into a small number</span>
@@ -134,7 +134,7 @@
 <span class="sd">    positions : (N, D)  — bf16 on CUDA, fp32 on CPU</span>
 <span class="sd">    knn_indices : (N, k) long</span>
 <span class="sd">    neg_indices : (N, n_neg) long</span>
-<span class="sd">    a_val, b_exp, cutoff : float</span>
+<span class="sd">    a_val, b_val, cutoff : float</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -143,17 +143,22 @@
     <span class="c1"># Attraction: toward k-NN neighbors</span>
     <span class="n">neighbor_pos</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">knn_indices</span><span class="p">]</span>                    <span class="c1"># (N, k, D)</span>
     <span class="n">diff</span> <span class="o">=</span> <span class="n">neighbor_pos</span> <span class="o">-</span> <span class="n">positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>             <span class="c1"># (N, k, D)</span>
-    <span class="n">dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">diff</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>    <span class="c1"># (N, k, 1)</span>
-    <span class="n">att_coeff</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">)</span>
-    <span class="n">forces</span> <span class="o">=</span> <span class="p">(</span><span class="n">att_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>            <span class="c1"># (N, D)</span>
+    <span class="n">dist_sq</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff</span> <span class="o">*</span> <span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>  <span class="c1"># (N, k, 1)</span>
+    <span class="n">inv_dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rsqrt</span><span class="p">(</span><span class="n">dist_sq</span><span class="p">)</span>                          <span class="c1"># 1/dist, no sqrt</span>
+    <span class="n">dist_sq_b</span> <span class="o">=</span> <span class="n">dist_sq</span> <span class="o">**</span> <span class="n">b_val</span>                              <span class="c1"># dist^(2b)</span>
+    <span class="n">att_coeff</span> <span class="o">=</span> <span class="n">dist_sq_b</span> <span class="o">/</span> <span class="p">(</span><span class="n">dist_sq_b</span> <span class="o">+</span> <span class="n">a_val</span><span class="p">)</span>
+    <span class="n">forces</span> <span class="o">=</span> <span class="p">(</span><span class="n">att_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">*</span> <span class="n">inv_dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>         <span class="c1"># (N, D)</span>
 
     <span class="c1"># Repulsion: against random negative samples</span>
     <span class="n">neg_pos</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">neg_indices</span><span class="p">]</span>                          <span class="c1"># (N, n_neg, D)</span>
     <span class="n">diff_n</span> <span class="o">=</span> <span class="n">neg_pos</span> <span class="o">-</span> <span class="n">positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>                 <span class="c1"># (N, n_neg, D)</span>
-    <span class="n">dist_n</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">diff_n</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
-    <span class="n">rep_coeff</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="n">dist_n</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">))</span>
+    <span class="n">dist_sq_n</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff_n</span> <span class="o">*</span> <span class="n">diff_n</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
+    <span class="n">inv_dist_n</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rsqrt</span><span class="p">(</span><span class="n">dist_sq_n</span><span class="p">)</span>
+    <span class="n">dist_n</span> <span class="o">=</span> <span class="n">dist_sq_n</span> <span class="o">*</span> <span class="n">inv_dist_n</span>                           <span class="c1"># sqrt via sq * rsqrt</span>
+    <span class="n">dist_sq_b_n</span> <span class="o">=</span> <span class="n">dist_sq_n</span> <span class="o">**</span> <span class="n">b_val</span>
+    <span class="n">rep_coeff</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="n">dist_sq_b_n</span><span class="p">))</span>
     <span class="n">rep_coeff</span> <span class="o">=</span> <span class="n">rep_coeff</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dist_n</span> <span class="o">/</span> <span class="n">cutoff</span><span class="p">)</span>
-    <span class="n">forces</span> <span class="o">=</span> <span class="n">forces</span> <span class="o">+</span> <span class="p">(</span><span class="n">rep_coeff</span> <span class="o">*</span> <span class="n">diff_n</span> <span class="o">/</span> <span class="n">dist_n</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">forces</span> <span class="o">=</span> <span class="n">forces</span> <span class="o">+</span> <span class="p">(</span><span class="n">rep_coeff</span> <span class="o">*</span> <span class="n">diff_n</span> <span class="o">*</span> <span class="n">inv_dist_n</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">forces</span>
 
@@ -165,7 +170,7 @@
 <span class="n">_torch_compile_failed</span> <span class="o">=</span> <span class="kc">False</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces_compiled</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces_compiled</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Dispatch to compiled or eager kernel.&quot;&quot;&quot;</span>
     <span class="k">global</span> <span class="n">_forces_compiled_cuda</span><span class="p">,</span> <span class="n">_torch_compile_failed</span>
     <span class="k">if</span> <span class="n">positions</span><span class="o">.</span><span class="n">is_cuda</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_torch_compile_failed</span><span class="p">:</span>
@@ -176,12 +181,57 @@
                 <span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
                 <span class="n">_torch_compile_failed</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="k">return</span> <span class="n">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">_forces_compiled_cuda</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_forces_compiled_cuda</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="n">_torch_compile_failed</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="k">return</span> <span class="n">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_attraction_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute attraction forces only (for memory-efficient backend).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    positions : (N, D)</span>
+<span class="sd">    knn_indices : (N, k) long</span>
+<span class="sd">    a_val, b_val : float</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    (N, D) attraction forces</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">neighbor_pos</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">knn_indices</span><span class="p">]</span>                    <span class="c1"># (N, k, D)</span>
+    <span class="n">diff</span> <span class="o">=</span> <span class="n">neighbor_pos</span> <span class="o">-</span> <span class="n">positions</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>             <span class="c1"># (N, k, D)</span>
+    <span class="n">dist_sq</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff</span> <span class="o">*</span> <span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>  <span class="c1"># (N, k, 1)</span>
+    <span class="n">inv_dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rsqrt</span><span class="p">(</span><span class="n">dist_sq</span><span class="p">)</span>
+    <span class="n">dist_sq_b</span> <span class="o">=</span> <span class="n">dist_sq</span> <span class="o">**</span> <span class="n">b_val</span>
+    <span class="n">att_coeff</span> <span class="o">=</span> <span class="n">dist_sq_b</span> <span class="o">/</span> <span class="p">(</span><span class="n">dist_sq_b</span> <span class="o">+</span> <span class="n">a_val</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">att_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">*</span> <span class="n">inv_dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>           <span class="c1"># (N, D)</span>
+
+
+<span class="n">_attraction_compiled_cuda</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">_attraction_compile_failed</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_attraction_forces_compiled</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Dispatch to compiled or eager attraction kernel.&quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_attraction_compiled_cuda</span><span class="p">,</span> <span class="n">_attraction_compile_failed</span>
+    <span class="k">if</span> <span class="n">positions</span><span class="o">.</span><span class="n">is_cuda</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_attraction_compile_failed</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_attraction_compiled_cuda</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">_attraction_compiled_cuda</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+                    <span class="n">_attraction_forces_kernel</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;reduce-overhead&quot;</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">_attraction_compile_failed</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">return</span> <span class="n">_attraction_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_attraction_compiled_cuda</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">_attraction_compile_failed</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="n">_attraction_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_compile_metric</span><span class="p">(</span><span class="n">spec</span><span class="p">):</span>
@@ -783,7 +833,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">a_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_a</span><span class="p">)</span>
-        <span class="n">b_exp</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_b</span><span class="p">)</span>
+        <span class="n">b_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_b</span><span class="p">)</span>
         <span class="n">n_neg</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">neg_ratio</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">),</span> <span class="n">n_samples</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
 
         <span class="n">knn_indices_torch</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_knn_indices_torch&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
@@ -808,7 +858,7 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="n">forces</span> <span class="o">=</span> <span class="n">_compute_forces_compiled</span><span class="p">(</span>
                 <span class="n">pos_lo</span><span class="p">,</span> <span class="n">knn_indices_torch</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span>
-                <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
+                <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">OutOfMemoryError</span><span class="p">):</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
@@ -818,7 +868,7 @@
             <span class="p">)</span>
             <span class="n">forces</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_forces_chunked</span><span class="p">(</span>
                 <span class="n">pos_lo</span><span class="p">,</span> <span class="n">knn_indices_torch</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span>
-                <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">n_neg</span><span class="p">,</span>
+                <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">n_neg</span><span class="p">,</span>
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">use_bf16</span><span class="p">:</span>
@@ -827,7 +877,7 @@
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">forces</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces_chunked</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices_torch</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span>
-                                <span class="n">a_val</span><span class="p">,</span> <span class="n">b_exp</span><span class="p">,</span> <span class="n">n_neg</span><span class="p">):</span>
+                                <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">n_neg</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Chunked fallback for GPUs that cannot fit the full computation.&quot;&quot;&quot;</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
@@ -841,17 +891,22 @@
             <span class="c1"># Attraction</span>
             <span class="n">neighbor_pos</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">knn_indices_torch</span><span class="p">[</span><span class="n">s</span><span class="p">]]</span>
             <span class="n">diff</span> <span class="o">=</span> <span class="n">neighbor_pos</span> <span class="o">-</span> <span class="n">chunk_pos</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="n">dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">diff</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
-            <span class="n">att</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">)</span>
-            <span class="n">forces</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span><span class="n">att</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">/</span> <span class="n">dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">dist_sq</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff</span> <span class="o">*</span> <span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
+            <span class="n">inv_dist</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rsqrt</span><span class="p">(</span><span class="n">dist_sq</span><span class="p">)</span>
+            <span class="n">dist_sq_b</span> <span class="o">=</span> <span class="n">dist_sq</span> <span class="o">**</span> <span class="n">b_val</span>
+            <span class="n">att</span> <span class="o">=</span> <span class="n">dist_sq_b</span> <span class="o">/</span> <span class="p">(</span><span class="n">dist_sq_b</span> <span class="o">+</span> <span class="n">a_val</span><span class="p">)</span>
+            <span class="n">forces</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span><span class="n">att</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">*</span> <span class="n">inv_dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
             <span class="c1"># Repulsion</span>
             <span class="n">neg_pos</span> <span class="o">=</span> <span class="n">positions</span><span class="p">[</span><span class="n">neg_indices</span><span class="p">[</span><span class="n">s</span><span class="p">]]</span>
             <span class="n">diff_n</span> <span class="o">=</span> <span class="n">neg_pos</span> <span class="o">-</span> <span class="n">chunk_pos</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
-            <span class="n">dist_n</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">diff_n</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
-            <span class="n">rep</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="p">(</span><span class="n">dist_n</span> <span class="o">**</span> <span class="n">b_exp</span><span class="p">))</span>
+            <span class="n">dist_sq_n</span> <span class="o">=</span> <span class="p">(</span><span class="n">diff_n</span> <span class="o">*</span> <span class="n">diff_n</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-10</span>
+            <span class="n">inv_dist_n</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rsqrt</span><span class="p">(</span><span class="n">dist_sq_n</span><span class="p">)</span>
+            <span class="n">dist_n</span> <span class="o">=</span> <span class="n">dist_sq_n</span> <span class="o">*</span> <span class="n">inv_dist_n</span>
+            <span class="n">dist_sq_b_n</span> <span class="o">=</span> <span class="n">dist_sq_n</span> <span class="o">**</span> <span class="n">b_val</span>
+            <span class="n">rep</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="n">a_val</span> <span class="o">*</span> <span class="n">dist_sq_b_n</span><span class="p">)</span>
             <span class="n">rep</span> <span class="o">=</span> <span class="n">rep</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">dist_n</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
-            <span class="n">forces</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span><span class="n">rep</span> <span class="o">*</span> <span class="n">diff_n</span> <span class="o">/</span> <span class="n">dist_n</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">forces</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="p">(</span><span class="n">rep</span> <span class="o">*</span> <span class="n">diff_n</span> <span class="o">*</span> <span class="n">inv_dist_n</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">forces</span>
 
