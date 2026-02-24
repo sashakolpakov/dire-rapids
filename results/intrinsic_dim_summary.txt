@@ -1,0 +1,21 @@
+Intrinsic Dimensionality Detection via n_components Sweep
+Date: 2026-02-24T05:03:02.374854+00:00
+GPU: NVIDIA GH200 480GB
+PyTorch: 2.10.0+cu128
+Parameters: n_neighbors=16, max_iter=128
+
+Dataset          true_d   stress   neighbor    PCA
+--------------------------------------------------
+circle_S1             1        2          2      2
+swiss_roll            2        2          3      3
+flat_torus            2        2          3      4
+sphere_S2             2        2          3      3
+triple_S1             3        2          5      6
+gaussian_d5           5        2          5      5
+gaussian_d10         10        3         10     10
+ball_flight           1        2          2      7
+ball_flight_size      2        2          2      8
+two_balls             2        2          3      9
+digits                8        2          4     19
+MNIST_10K            12        2          2     21
+
