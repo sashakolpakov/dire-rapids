@@ -162,7 +162,158 @@ def _filter_at_threshold(filt_val, global_edges, edge_distances, triangle_edges)
 
 
 # ---------------------------------------------------------------------------
-# CPU implementation
+# Fast Betti computation via union-find (β₀) and matrix rank (β₁)
+# ---------------------------------------------------------------------------
+
+class UnionFind:
+    """Disjoint-set with path compression and union by rank."""
+
+    def __init__(self, n):
+        self.parent = list(range(n))
+        self.rank = [0] * n
+        self.n_components = n
+
+    def find(self, x):
+        while self.parent[x] != x:
+            self.parent[x] = self.parent[self.parent[x]]  # path halving
+            x = self.parent[x]
+        return x
+
+    def union(self, x, y):
+        rx, ry = self.find(x), self.find(y)
+        if rx == ry:
+            return
+        if self.rank[rx] < self.rank[ry]:
+            rx, ry = ry, rx
+        self.parent[ry] = rx
+        if self.rank[rx] == self.rank[ry]:
+            self.rank[rx] += 1
+        self.n_components -= 1
+
+
+def _compute_rank_B2(active_triangles, edge_to_idx, n_edges):
+    """
+    Compute rank of boundary operator B2 via GPU-accelerated SVD.
+
+    B2 is the (n_edges × n_triangles) boundary operator with entries in {-1, 0, +1}
+    and exactly 3 nonzero entries per column. Uses the default data-dependent
+    threshold from torch.linalg.matrix_rank (≈ max(E,T) * σ_max * eps), which
+    correctly separates genuine nonzero singular values from numerical noise.
+
+    Note: a fixed threshold like atol=0.5 is NOT safe here. Dense kNN complexes
+    can produce B2 with genuine nonzero singular values well below 0.5.
+    """
+    n_triangles = len(active_triangles)
+    if n_triangles == 0:
+        return 0
+
+    # Build B2 as scipy sparse COO.
+    # Triangles are sorted tuples (i < j < k), so boundary signs are (+1, -1, +1).
+    rows, cols, data = [], [], []
+    for t_idx, (i, j, k) in enumerate(active_triangles):
+        e_ij = (i, j)
+        e_ik = (i, k)
+        e_jk = (j, k)
+        if e_ij in edge_to_idx:
+            rows.append(edge_to_idx[e_ij])
+            cols.append(t_idx)
+            data.append(1.0)
+        if e_ik in edge_to_idx:
+            rows.append(edge_to_idx[e_ik])
+            cols.append(t_idx)
+            data.append(-1.0)
+        if e_jk in edge_to_idx:
+            rows.append(edge_to_idx[e_jk])
+            cols.append(t_idx)
+            data.append(1.0)
+
+    B2_sparse = sparse.coo_matrix(
+        (data, (rows, cols)), shape=(n_edges, n_triangles), dtype=np.float32
+    ).tocsr()
+
+    # Float64 is essential: float32 perturbs genuine zero singular values
+    # above the data-dependent threshold, overcounting rank by O(1).
+    #
+    # For large matrices, use Gram matrix G = B2·B2ᵀ (E×E) instead of
+    # materializing dense B2 (E×T). In float64, the default threshold
+    # (≈ E * λ_max * eps ≈ 1e-10) is far below the smallest genuine
+    # nonzero eigenvalue of G (which is σ_min²(B2) ≈ 0.05), so this is safe.
+    use_gram = n_edges * n_triangles > 5_000_000  # ~40MB in float64
+
+    try:
+        import torch  # pylint: disable=import-outside-toplevel
+        if torch.cuda.is_available():
+            if use_gram:
+                G = (B2_sparse @ B2_sparse.T).toarray().astype(np.float64)
+                G_gpu = torch.from_numpy(G).cuda()
+                return int(torch.linalg.matrix_rank(G_gpu).item())
+            else:
+                B2_dense = B2_sparse.toarray().astype(np.float64)
+                B2_gpu = torch.from_numpy(B2_dense).cuda()
+                return int(torch.linalg.matrix_rank(B2_gpu).item())
+    except (ImportError, RuntimeError):
+        pass
+
+    # CPU fallback
+    if use_gram:
+        G = (B2_sparse @ B2_sparse.T).toarray().astype(np.float64)
+        return int(np.linalg.matrix_rank(G))
+    else:
+        B2_dense = B2_sparse.toarray().astype(np.float64)
+        return int(np.linalg.matrix_rank(B2_dense))
+
+
+def _compute_betti_rank(n, active_edges, active_triangles, edge_to_idx):
+    """
+    Compute Betti numbers using union-find (β₀) and matrix rank (β₁).
+
+    Mathematical foundation (Hodge decomposition + rank-nullity):
+      β₀ = number of connected components (union-find, O(E·α(E)))
+      β₁ = E - rank(B1) - rank(B2)
+      rank(B1) = V - β₀  (standard graph theory: rank of incidence matrix)
+      rank(B2) via GPU-accelerated SVD
+
+    Parameters
+    ----------
+    n : int
+        Total number of vertices (including isolated ones)
+    active_edges : list of (int, int) tuples
+    active_triangles : list of (int, int, int) tuples
+    edge_to_idx : dict mapping edge tuple -> index
+
+    Returns
+    -------
+    tuple : (beta_0, beta_1)
+    """
+    n_edges = len(active_edges)
+
+    # β₀ via union-find
+    active_vertices = set()
+    for v0, v1 in active_edges:
+        active_vertices.add(v0)
+        active_vertices.add(v1)
+    n_active = len(active_vertices)
+
+    vertex_list = sorted(active_vertices)
+    v_to_uf = {v: i for i, v in enumerate(vertex_list)}
+
+    uf = UnionFind(n_active)
+    for v0, v1 in active_edges:
+        uf.union(v_to_uf[v0], v_to_uf[v1])
+
+    # Total β₀ includes isolated vertices as singleton components
+    beta_0 = (n - n_active) + uf.n_components
+
+    # β₁ via Hodge decomposition: β₁ = E - rank(B1) - rank(B2)
+    rank_B1 = n - beta_0  # equivalently: n_active - uf.n_components
+    rank_B2 = _compute_rank_B2(active_triangles, edge_to_idx, n_edges)
+    beta_1 = n_edges - rank_B1 - rank_B2
+
+    return beta_0, max(0, beta_1)
+
+
+# ---------------------------------------------------------------------------
+# CPU implementation (reference, eigsh-based — kept for validation)
 # ---------------------------------------------------------------------------
 
 def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8,
@@ -306,7 +457,101 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8,
 
 
 # ---------------------------------------------------------------------------
-# GPU implementation
+# Fast implementation (union-find + rank, replaces eigsh)
+# ---------------------------------------------------------------------------
+
+def compute_betti_curve_fast(data, k_neighbors=20, density_threshold=0.8,
+                              overlap_factor=1.5, n_steps=50):
+    """
+    Fast Betti curve computation using union-find (β₀) and matrix rank (β₁).
+
+    Instead of computing eigenvalues of Hodge Laplacians via eigsh (the bottleneck
+    in compute_betti_curve_cpu), this uses algebraic topology identities:
+      β₀ = connected components via union-find, O(E·α(E))
+      β₁ = E - rank(B1) - rank(B2) via Hodge decomposition
+      rank(B1) = V - β₀ (graph theory, free)
+      rank(B2) via GPU-accelerated SVD (torch.linalg.matrix_rank)
+
+    Parameters
+    ----------
+    data : array-like
+        Point cloud data (n_samples, n_features)
+    k_neighbors : int
+        Size of local neighborhood
+    density_threshold : float
+        Percentile threshold for edge inclusion (0-1)
+    overlap_factor : float
+        Factor for expanding local neighborhoods
+    n_steps : int
+        Number of filtration steps
+
+    Returns
+    -------
+    dict : Same structure as compute_betti_curve_cpu
+    """
+    data = np.asarray(data, dtype=np.float32)
+    n = len(data)
+
+    if n <= 2:
+        return {
+            'filtration_values': np.array([0.0]),
+            'beta_0': np.array([1]),
+            'beta_1': np.array([0]),
+            'n_edges_active': np.array([0]),
+            'n_triangles_active': np.array([0])
+        }
+
+    # Build kNN graph
+    k_neighbors = min(k_neighbors, n - 1)
+    nn = NearestNeighbors(n_neighbors=k_neighbors + 1, metric='euclidean')
+    nn.fit(data)
+    distances, indices = nn.kneighbors(data)
+
+    # Build atlas complex
+    global_edges, _, edge_distances, triangle_edges = _build_atlas(
+        data, distances, indices, k_neighbors, density_threshold, overlap_factor
+    )
+
+    # Create filtration values based on edge distances
+    all_distances = np.array(list(edge_distances.values()))
+    filtration_values = np.percentile(all_distances, np.linspace(100, 0, n_steps))
+
+    beta_0_curve = []
+    beta_1_curve = []
+    n_edges_curve = []
+    n_triangles_curve = []
+
+    for filt_val in filtration_values:
+        active_edges, active_triangles, edge_to_idx = _filter_at_threshold(
+            filt_val, global_edges, edge_distances, triangle_edges
+        )
+
+        n_edges_active = len(active_edges)
+        n_triangles_active = len(active_triangles)
+
+        if n_edges_active == 0:
+            beta_0, beta_1 = n, 0
+        else:
+            beta_0, beta_1 = _compute_betti_rank(
+                n, active_edges, active_triangles, edge_to_idx
+            )
+
+        beta_0_curve.append(beta_0)
+        beta_1_curve.append(beta_1)
+        n_edges_curve.append(n_edges_active)
+        n_triangles_curve.append(n_triangles_active)
+
+    return {
+        'filtration_values': filtration_values,
+        'beta_0': np.array(beta_0_curve),
+        'beta_1': np.array(beta_1_curve),
+        'n_edges_active': np.array(n_edges_curve),
+        'n_triangles_active': np.array(n_triangles_curve)
+    }
+
+
+# ---------------------------------------------------------------------------
+# GPU implementation (GPU kNN + rank-based Betti)
 # ---------------------------------------------------------------------------
 
 def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
@@ -314,8 +559,9 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
     """
     GPU implementation of filtered Betti curve computation.
 
-    Uses CuPy for sparse matrix operations and eigenvalue computation.
-    Atlas building runs on CPU (set operations are faster there).
+    Uses GPU kNN (cuVS/cuML) for graph construction and rank-based Betti
+    computation (union-find for β₀, GPU SVD for β₁). Atlas building runs
+    on CPU (set operations are faster there).
 
     Parameters
     ----------
@@ -383,7 +629,6 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
 
     # Create filtration values
     all_distances = np.array(list(edge_distances.values()))
-    # Reverse order: from max (100) to min (0) so n_steps=1 gives full complex
     filtration_values = np.percentile(all_distances, np.linspace(100, 0, n_steps))
 
     beta_0_curve = []
@@ -391,70 +636,20 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
     n_edges_curve = []
     n_triangles_curve = []
 
-    # Compute Betti numbers at each filtration value
     for filt_val in filtration_values:
         active_edges, active_triangles, edge_to_idx = _filter_at_threshold(
             filt_val, global_edges, edge_distances, triangle_edges
         )
 
-        if len(active_edges) == 0:
-            beta_0_curve.append(n)
-            beta_1_curve.append(0)
-            n_edges_curve.append(0)
-            n_triangles_curve.append(0)
-            continue
-
         n_edges_active = len(active_edges)
         n_triangles_active = len(active_triangles)
 
-        # Build boundary operator data (shared helper)
-        b1, b2, adj = _build_boundary_data(active_edges, active_triangles, edge_to_idx)
-
-        # Construct sparse matrices on CPU (scipy) -- boundary data is already
-        # on CPU, and scipy eigsh is more reliable than CuPy's sparse eigsh
-        # (which doesn't support which='SM' and may have CUDA compilation issues).
-        B1 = sparse.coo_matrix(
-            (b1[2], (b1[0], b1[1])),
-            shape=(n, n_edges_active), dtype=np.float64,
-        ).tocsr()
-
-        if n_triangles_active > 0:
-            B2 = sparse.coo_matrix(
-                (b2[2], (b2[0], b2[1])),
-                shape=(n_edges_active, n_triangles_active), dtype=np.float64,
-            ).tocsr()
-            L1 = (B1.T @ B1 + B2 @ B2.T).astype(np.float64)
+        if n_edges_active == 0:
+            beta_0, beta_1 = n, 0
         else:
-            L1 = (B1.T @ B1).astype(np.float64)
-
-        A = sparse.coo_matrix(
-            (adj[2], (adj[0], adj[1])), shape=(n, n), dtype=np.float64,
-        ).tocsr()
-        deg = np.array(A.sum(axis=1)).flatten()
-        D = sparse.diags(deg)
-        L0 = D - A
-
-        # Eigenvalue computation (scipy on CPU)
-        n_eigs_h0 = min(50, n - 2)
-        n_eigs_h1 = min(50, n_edges_active - 2) if n_edges_active > 2 else 0
-
-        try:
-            eigs_h0, _ = eigsh(L0, k=n_eigs_h0, which='SM', tol=1e-4)
-            eigs_h0 = np.abs(eigs_h0)
-        except Exception:  # pylint: disable=broad-exception-caught
-            eigs_h0 = np.array([])
-
-        if n_eigs_h1 > 0:
-            try:
-                eigs_h1, _ = eigsh(L1, k=n_eigs_h1, which='SM', tol=1e-4)
-                eigs_h1 = np.abs(eigs_h1)
-            except Exception:  # pylint: disable=broad-exception-caught
-                eigs_h1 = np.array([])
-        else:
-            eigs_h1 = np.array([])
-
-        beta_0 = np.sum(eigs_h0 < 1e-6) if len(eigs_h0) > 0 else 1
-        beta_1 = np.sum(eigs_h1 < 1e-6) if len(eigs_h1) > 0 else 0
+            beta_0, beta_1 = _compute_betti_rank(
+                n, active_edges, active_triangles, edge_to_idx
+            )
 
         beta_0_curve.append(beta_0)
         beta_1_curve.append(beta_1)
@@ -516,9 +711,9 @@ def compute_betti_curve(data, k_neighbors=20, density_threshold=0.8, overlap_fac
                 n_steps=n_steps
             )
         except ImportError as e:
-            warnings.warn(f"GPU not available ({e}), falling back to CPU", UserWarning)
+            warnings.warn(f"GPU not available ({e}), falling back to fast CPU", UserWarning)
 
-    return compute_betti_curve_cpu(
+    return compute_betti_curve_fast(
         data, k_neighbors=k_neighbors,
         density_threshold=density_threshold,
         overlap_factor=overlap_factor,
