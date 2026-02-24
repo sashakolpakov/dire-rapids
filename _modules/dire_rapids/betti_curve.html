@@ -233,7 +233,170 @@
 
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
-<span class="c1"># CPU implementation</span>
+<span class="c1"># Fast Betti computation via union-find (β₀) and matrix rank (β₁)</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="UnionFind">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.UnionFind">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UnionFind</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Disjoint-set with path compression and union by rank.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="UnionFind.__init__">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.UnionFind.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">n</span></div>
+
+
+<div class="viewcode-block" id="UnionFind.find">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.UnionFind.find">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">find</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="p">[</span><span class="n">x</span><span class="p">]</span> <span class="o">!=</span> <span class="n">x</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="p">[</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="p">[</span><span class="n">x</span><span class="p">]]</span>  <span class="c1"># path halving</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="p">[</span><span class="n">x</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">x</span></div>
+
+
+<div class="viewcode-block" id="UnionFind.union">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.UnionFind.union">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">union</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="n">rx</span><span class="p">,</span> <span class="n">ry</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rx</span> <span class="o">==</span> <span class="n">ry</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">[</span><span class="n">rx</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">[</span><span class="n">ry</span><span class="p">]:</span>
+            <span class="n">rx</span><span class="p">,</span> <span class="n">ry</span> <span class="o">=</span> <span class="n">ry</span><span class="p">,</span> <span class="n">rx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">parent</span><span class="p">[</span><span class="n">ry</span><span class="p">]</span> <span class="o">=</span> <span class="n">rx</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">[</span><span class="n">rx</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">[</span><span class="n">ry</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rank</span><span class="p">[</span><span class="n">rx</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">-=</span> <span class="mi">1</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_rank_B2</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span><span class="p">,</span> <span class="n">n_edges</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute rank of boundary operator B2 via GPU-accelerated SVD.</span>
+
+<span class="sd">    B2 is the (n_edges × n_triangles) boundary operator with entries in {-1, 0, +1}</span>
+<span class="sd">    and exactly 3 nonzero entries per column. Uses the default data-dependent</span>
+<span class="sd">    threshold from torch.linalg.matrix_rank (≈ max(E,T) * σ_max * eps), which</span>
+<span class="sd">    correctly separates genuine nonzero singular values from numerical noise.</span>
+
+<span class="sd">    Note: a fixed threshold like atol=0.5 is NOT safe here. Dense kNN complexes</span>
+<span class="sd">    can produce B2 with genuine nonzero singular values well below 0.5.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_triangles</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n_triangles</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+    <span class="c1"># Build B2 as scipy sparse COO.</span>
+    <span class="c1"># Triangles are sorted tuples (i &lt; j &lt; k), so boundary signs are (+1, -1, +1).</span>
+    <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">data</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">t_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">):</span>
+        <span class="n">e_ij</span> <span class="o">=</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span>
+        <span class="n">e_ik</span> <span class="o">=</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+        <span class="n">e_jk</span> <span class="o">=</span> <span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">e_ij</span> <span class="ow">in</span> <span class="n">edge_to_idx</span><span class="p">:</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">edge_to_idx</span><span class="p">[</span><span class="n">e_ij</span><span class="p">])</span>
+            <span class="n">cols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t_idx</span><span class="p">)</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">e_ik</span> <span class="ow">in</span> <span class="n">edge_to_idx</span><span class="p">:</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">edge_to_idx</span><span class="p">[</span><span class="n">e_ik</span><span class="p">])</span>
+            <span class="n">cols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t_idx</span><span class="p">)</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">e_jk</span> <span class="ow">in</span> <span class="n">edge_to_idx</span><span class="p">:</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">edge_to_idx</span><span class="p">[</span><span class="n">e_jk</span><span class="p">])</span>
+            <span class="n">cols</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">t_idx</span><span class="p">)</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="n">B2_sparse</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">)),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">n_edges</span><span class="p">,</span> <span class="n">n_triangles</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+
+    <span class="c1"># Float64 is essential: float32 perturbs genuine zero singular values</span>
+    <span class="c1"># above the data-dependent threshold, overcounting rank by O(1).</span>
+    <span class="c1">#</span>
+    <span class="c1"># For large matrices, use Gram matrix G = B2·B2ᵀ (E×E) instead of</span>
+    <span class="c1"># materializing dense B2 (E×T). In float64, the default threshold</span>
+    <span class="c1"># (≈ E * λ_max * eps ≈ 1e-10) is far below the smallest genuine</span>
+    <span class="c1"># nonzero eigenvalue of G (which is σ_min²(B2) ≈ 0.05), so this is safe.</span>
+    <span class="n">use_gram</span> <span class="o">=</span> <span class="n">n_edges</span> <span class="o">*</span> <span class="n">n_triangles</span> <span class="o">&gt;</span> <span class="mi">5_000_000</span>  <span class="c1"># ~40MB in float64</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
+        <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">use_gram</span><span class="p">:</span>
+                <span class="n">G</span> <span class="o">=</span> <span class="p">(</span><span class="n">B2_sparse</span> <span class="o">@</span> <span class="n">B2_sparse</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                <span class="n">G_gpu</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">G</span><span class="p">)</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+                <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">matrix_rank</span><span class="p">(</span><span class="n">G_gpu</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">B2_dense</span> <span class="o">=</span> <span class="n">B2_sparse</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                <span class="n">B2_gpu</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">B2_dense</span><span class="p">)</span><span class="o">.</span><span class="n">cuda</span><span class="p">()</span>
+                <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">matrix_rank</span><span class="p">(</span><span class="n">B2_gpu</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ImportError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># CPU fallback</span>
+    <span class="k">if</span> <span class="n">use_gram</span><span class="p">:</span>
+        <span class="n">G</span> <span class="o">=</span> <span class="p">(</span><span class="n">B2_sparse</span> <span class="o">@</span> <span class="n">B2_sparse</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">matrix_rank</span><span class="p">(</span><span class="n">G</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">B2_dense</span> <span class="o">=</span> <span class="n">B2_sparse</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">matrix_rank</span><span class="p">(</span><span class="n">B2_dense</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_betti_rank</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute Betti numbers using union-find (β₀) and matrix rank (β₁).</span>
+
+<span class="sd">    Mathematical foundation (Hodge decomposition + rank-nullity):</span>
+<span class="sd">      β₀ = number of connected components (union-find, O(E·α(E)))</span>
+<span class="sd">      β₁ = E - rank(B1) - rank(B2)</span>
+<span class="sd">      rank(B1) = V - β₀  (standard graph theory: rank of incidence matrix)</span>
+<span class="sd">      rank(B2) via GPU-accelerated SVD</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n : int</span>
+<span class="sd">        Total number of vertices (including isolated ones)</span>
+<span class="sd">    active_edges : list of (int, int) tuples</span>
+<span class="sd">    active_triangles : list of (int, int, int) tuples</span>
+<span class="sd">    edge_to_idx : dict mapping edge tuple -&gt; index</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple : (beta_0, beta_1)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_edges</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_edges</span><span class="p">)</span>
+
+    <span class="c1"># β₀ via union-find</span>
+    <span class="n">active_vertices</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">v0</span><span class="p">,</span> <span class="n">v1</span> <span class="ow">in</span> <span class="n">active_edges</span><span class="p">:</span>
+        <span class="n">active_vertices</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">v0</span><span class="p">)</span>
+        <span class="n">active_vertices</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">v1</span><span class="p">)</span>
+    <span class="n">n_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_vertices</span><span class="p">)</span>
+
+    <span class="n">vertex_list</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">active_vertices</span><span class="p">)</span>
+    <span class="n">v_to_uf</span> <span class="o">=</span> <span class="p">{</span><span class="n">v</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">vertex_list</span><span class="p">)}</span>
+
+    <span class="n">uf</span> <span class="o">=</span> <span class="n">UnionFind</span><span class="p">(</span><span class="n">n_active</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">v0</span><span class="p">,</span> <span class="n">v1</span> <span class="ow">in</span> <span class="n">active_edges</span><span class="p">:</span>
+        <span class="n">uf</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">v_to_uf</span><span class="p">[</span><span class="n">v0</span><span class="p">],</span> <span class="n">v_to_uf</span><span class="p">[</span><span class="n">v1</span><span class="p">])</span>
+
+    <span class="c1"># Total β₀ includes isolated vertices as singleton components</span>
+    <span class="n">beta_0</span> <span class="o">=</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="n">n_active</span><span class="p">)</span> <span class="o">+</span> <span class="n">uf</span><span class="o">.</span><span class="n">n_components</span>
+
+    <span class="c1"># β₁ via Hodge decomposition: β₁ = E - rank(B1) - rank(B2)</span>
+    <span class="n">rank_B1</span> <span class="o">=</span> <span class="n">n</span> <span class="o">-</span> <span class="n">beta_0</span>  <span class="c1"># equivalently: n_active - uf.n_components</span>
+    <span class="n">rank_B2</span> <span class="o">=</span> <span class="n">_compute_rank_B2</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span><span class="p">,</span> <span class="n">n_edges</span><span class="p">)</span>
+    <span class="n">beta_1</span> <span class="o">=</span> <span class="n">n_edges</span> <span class="o">-</span> <span class="n">rank_B1</span> <span class="o">-</span> <span class="n">rank_B2</span>
+
+    <span class="k">return</span> <span class="n">beta_0</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">beta_1</span><span class="p">)</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># CPU implementation (reference, eigsh-based — kept for validation)</span>
 <span class="c1"># ---------------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="compute_betti_curve_cpu">
@@ -380,7 +543,104 @@
 
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
-<span class="c1"># GPU implementation</span>
+<span class="c1"># Fast implementation (union-find + rank, replaces eigsh)</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="compute_betti_curve_fast">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.compute_betti_curve_fast">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_betti_curve_fast</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                              <span class="n">overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Fast Betti curve computation using union-find (β₀) and matrix rank (β₁).</span>
+
+<span class="sd">    Instead of computing eigenvalues of Hodge Laplacians via eigsh (the bottleneck</span>
+<span class="sd">    in compute_betti_curve_cpu), this uses algebraic topology identities:</span>
+<span class="sd">      β₀ = connected components via union-find, O(E·α(E))</span>
+<span class="sd">      β₁ = E - rank(B1) - rank(B2) via Hodge decomposition</span>
+<span class="sd">      rank(B1) = V - β₀ (graph theory, free)</span>
+<span class="sd">      rank(B2) via GPU-accelerated SVD (torch.linalg.matrix_rank)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : array-like</span>
+<span class="sd">        Point cloud data (n_samples, n_features)</span>
+<span class="sd">    k_neighbors : int</span>
+<span class="sd">        Size of local neighborhood</span>
+<span class="sd">    density_threshold : float</span>
+<span class="sd">        Percentile threshold for edge inclusion (0-1)</span>
+<span class="sd">    overlap_factor : float</span>
+<span class="sd">        Factor for expanding local neighborhoods</span>
+<span class="sd">    n_steps : int</span>
+<span class="sd">        Number of filtration steps</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict : Same structure as compute_betti_curve_cpu</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s1">&#39;filtration_values&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">]),</span>
+            <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="s1">&#39;n_edges_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="s1">&#39;n_triangles_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+        <span class="p">}</span>
+
+    <span class="c1"># Build kNN graph</span>
+    <span class="n">k_neighbors</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">k_neighbors</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">nn</span> <span class="o">=</span> <span class="n">NearestNeighbors</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">)</span>
+    <span class="n">nn</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">kneighbors</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+    <span class="c1"># Build atlas complex</span>
+    <span class="n">global_edges</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span> <span class="o">=</span> <span class="n">_build_atlas</span><span class="p">(</span>
+        <span class="n">data</span><span class="p">,</span> <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="p">,</span> <span class="n">density_threshold</span><span class="p">,</span> <span class="n">overlap_factor</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Create filtration values based on edge distances</span>
+    <span class="n">all_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">edge_distances</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+    <span class="n">filtration_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">all_distances</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">))</span>
+
+    <span class="n">beta_0_curve</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">beta_1_curve</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">n_edges_curve</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">n_triangles_curve</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">filt_val</span> <span class="ow">in</span> <span class="n">filtration_values</span><span class="p">:</span>
+        <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span> <span class="o">=</span> <span class="n">_filter_at_threshold</span><span class="p">(</span>
+            <span class="n">filt_val</span><span class="p">,</span> <span class="n">global_edges</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span>
+        <span class="p">)</span>
+
+        <span class="n">n_edges_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_edges</span><span class="p">)</span>
+        <span class="n">n_triangles_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">n_edges_active</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">n</span><span class="p">,</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">_compute_betti_rank</span><span class="p">(</span>
+                <span class="n">n</span><span class="p">,</span> <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span>
+            <span class="p">)</span>
+
+        <span class="n">beta_0_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_0</span><span class="p">)</span>
+        <span class="n">beta_1_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_1</span><span class="p">)</span>
+        <span class="n">n_edges_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_edges_active</span><span class="p">)</span>
+        <span class="n">n_triangles_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_triangles_active</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;filtration_values&#39;</span><span class="p">:</span> <span class="n">filtration_values</span><span class="p">,</span>
+        <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beta_0_curve</span><span class="p">),</span>
+        <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beta_1_curve</span><span class="p">),</span>
+        <span class="s1">&#39;n_edges_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">n_edges_curve</span><span class="p">),</span>
+        <span class="s1">&#39;n_triangles_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">n_triangles_curve</span><span class="p">)</span>
+    <span class="p">}</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># GPU implementation (GPU kNN + rank-based Betti)</span>
 <span class="c1"># ---------------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="compute_betti_curve_gpu">
@@ -390,8 +650,9 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    GPU implementation of filtered Betti curve computation.</span>
 
-<span class="sd">    Uses CuPy for sparse matrix operations and eigenvalue computation.</span>
-<span class="sd">    Atlas building runs on CPU (set operations are faster there).</span>
+<span class="sd">    Uses GPU kNN (cuVS/cuML) for graph construction and rank-based Betti</span>
+<span class="sd">    computation (union-find for β₀, GPU SVD for β₁). Atlas building runs</span>
+<span class="sd">    on CPU (set operations are faster there).</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -459,7 +720,6 @@
 
     <span class="c1"># Create filtration values</span>
     <span class="n">all_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">edge_distances</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
-    <span class="c1"># Reverse order: from max (100) to min (0) so n_steps=1 gives full complex</span>
     <span class="n">filtration_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">all_distances</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">))</span>
 
     <span class="n">beta_0_curve</span> <span class="o">=</span> <span class="p">[]</span>
@@ -467,70 +727,20 @@
     <span class="n">n_edges_curve</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">n_triangles_curve</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="c1"># Compute Betti numbers at each filtration value</span>
     <span class="k">for</span> <span class="n">filt_val</span> <span class="ow">in</span> <span class="n">filtration_values</span><span class="p">:</span>
         <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span> <span class="o">=</span> <span class="n">_filter_at_threshold</span><span class="p">(</span>
             <span class="n">filt_val</span><span class="p">,</span> <span class="n">global_edges</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span>
         <span class="p">)</span>
 
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_edges</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">beta_0_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
-            <span class="n">beta_1_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="n">n_edges_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="n">n_triangles_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="k">continue</span>
-
         <span class="n">n_edges_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_edges</span><span class="p">)</span>
         <span class="n">n_triangles_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">)</span>
 
-        <span class="c1"># Build boundary operator data (shared helper)</span>
-        <span class="n">b1</span><span class="p">,</span> <span class="n">b2</span><span class="p">,</span> <span class="n">adj</span> <span class="o">=</span> <span class="n">_build_boundary_data</span><span class="p">(</span><span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span><span class="p">)</span>
-
-        <span class="c1"># Construct sparse matrices on CPU (scipy) -- boundary data is already</span>
-        <span class="c1"># on CPU, and scipy eigsh is more reliable than CuPy&#39;s sparse eigsh</span>
-        <span class="c1"># (which doesn&#39;t support which=&#39;SM&#39; and may have CUDA compilation issues).</span>
-        <span class="n">B1</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">b1</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="n">b1</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">b1</span><span class="p">[</span><span class="mi">1</span><span class="p">])),</span>
-            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n_edges_active</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="n">n_triangles_active</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">B2</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">(</span>
-                <span class="p">(</span><span class="n">b2</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="n">b2</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">b2</span><span class="p">[</span><span class="mi">1</span><span class="p">])),</span>
-                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">n_edges_active</span><span class="p">,</span> <span class="n">n_triangles_active</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
-            <span class="n">L1</span> <span class="o">=</span> <span class="p">(</span><span class="n">B1</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">B1</span> <span class="o">+</span> <span class="n">B2</span> <span class="o">@</span> <span class="n">B2</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_edges_active</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">n</span><span class="p">,</span> <span class="mi">0</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">L1</span> <span class="o">=</span> <span class="p">(</span><span class="n">B1</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">B1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-        <span class="n">A</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">adj</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="n">adj</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">adj</span><span class="p">[</span><span class="mi">1</span><span class="p">])),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
-        <span class="n">deg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
-        <span class="n">D</span> <span class="o">=</span> <span class="n">sparse</span><span class="o">.</span><span class="n">diags</span><span class="p">(</span><span class="n">deg</span><span class="p">)</span>
-        <span class="n">L0</span> <span class="o">=</span> <span class="n">D</span> <span class="o">-</span> <span class="n">A</span>
-
-        <span class="c1"># Eigenvalue computation (scipy on CPU)</span>
-        <span class="n">n_eigs_h0</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
-        <span class="n">n_eigs_h1</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mi">50</span><span class="p">,</span> <span class="n">n_edges_active</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="k">if</span> <span class="n">n_edges_active</span> <span class="o">&gt;</span> <span class="mi">2</span> <span class="k">else</span> <span class="mi">0</span>
-
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">eigs_h0</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">eigsh</span><span class="p">(</span><span class="n">L0</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">n_eigs_h0</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;SM&#39;</span><span class="p">,</span> <span class="n">tol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">)</span>
-            <span class="n">eigs_h0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">eigs_h0</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pylint: disable=broad-exception-caught</span>
-            <span class="n">eigs_h0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-
-        <span class="k">if</span> <span class="n">n_eigs_h1</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">eigs_h1</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">eigsh</span><span class="p">(</span><span class="n">L1</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">n_eigs_h1</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;SM&#39;</span><span class="p">,</span> <span class="n">tol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">)</span>
-                <span class="n">eigs_h1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">eigs_h1</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pylint: disable=broad-exception-caught</span>
-                <span class="n">eigs_h1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">eigs_h1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-
-        <span class="n">beta_0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">eigs_h0</span> <span class="o">&lt;</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">eigs_h0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">1</span>
-        <span class="n">beta_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">eigs_h1</span> <span class="o">&lt;</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">eigs_h1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">_compute_betti_rank</span><span class="p">(</span>
+                <span class="n">n</span><span class="p">,</span> <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span>
+            <span class="p">)</span>
 
         <span class="n">beta_0_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_0</span><span class="p">)</span>
         <span class="n">beta_1_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_1</span><span class="p">)</span>
@@ -595,9 +805,9 @@
                 <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span>
             <span class="p">)</span>
         <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GPU not available (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to CPU&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;GPU not available (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to fast CPU&quot;</span><span class="p">,</span> <span class="ne">UserWarning</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">compute_betti_curve_cpu</span><span class="p">(</span>
+    <span class="k">return</span> <span class="n">compute_betti_curve_fast</span><span class="p">(</span>
         <span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="n">k_neighbors</span><span class="p">,</span>
         <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span>
         <span class="n">overlap_factor</span><span class="o">=</span><span class="n">overlap_factor</span><span class="p">,</span>

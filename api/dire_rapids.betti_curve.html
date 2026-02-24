@@ -57,7 +57,9 @@
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html">dire_rapids.dire_cuvs module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">dire_rapids.betti_curve module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.UnionFind"><code class="docutils literal notranslate"><span class="pre">UnionFind</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_cpu"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_cpu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_fast"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_fast()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_gpu"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_gpu()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve()</span></code></a></li>
 </ul>
@@ -103,6 +105,28 @@
 3. Progressively adding edges by distance threshold
 4. Recomputing Laplacians and Betti numbers at each step</p>
 <p>Contains both CPU and GPU implementations with automatic backend selection.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.UnionFind">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">UnionFind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#UnionFind"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.UnionFind" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Disjoint-set with path compression and union by rank.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.UnionFind.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#UnionFind.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.UnionFind.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.UnionFind.find">
+<span class="sig-name descname"><span class="pre">find</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#UnionFind.find"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.UnionFind.find" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.UnionFind.union">
+<span class="sig-name descname"><span class="pre">union</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#UnionFind.union"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.UnionFind.union" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve_cpu">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve_cpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve_cpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve_cpu" title="Link to this definition"></a></dt>
@@ -132,11 +156,43 @@
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve_fast">
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve_fast</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve_fast"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve_fast" title="Link to this definition"></a></dt>
+<dd><p>Fast Betti curve computation using union-find (β₀) and matrix rank (β₁).</p>
+<p>Instead of computing eigenvalues of Hodge Laplacians via eigsh (the bottleneck
+in compute_betti_curve_cpu), this uses algebraic topology identities:</p>
+<blockquote>
+<div><p>β₀ = connected components via union-find, O(E·α(E))
+β₁ = E - rank(B1) - rank(B2) via Hodge decomposition
+rank(B1) = V - β₀ (graph theory, free)
+rank(B2) via GPU-accelerated SVD (torch.linalg.matrix_rank)</p>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>array-like</em>) – Point cloud data (n_samples, n_features)</p></li>
+<li><p><strong>k_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Size of local neighborhood</p></li>
+<li><p><strong>density_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Percentile threshold for edge inclusion (0-1)</p></li>
+<li><p><strong>overlap_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Factor for expanding local neighborhoods</p></li>
+<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of filtration steps</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>dict</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Same structure as compute_betti_curve_cpu</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve_gpu">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve_gpu" title="Link to this definition"></a></dt>
 <dd><p>GPU implementation of filtered Betti curve computation.</p>
-<p>Uses CuPy for sparse matrix operations and eigenvalue computation.
-Atlas building runs on CPU (set operations are faster there).</p>
+<p>Uses GPU kNN (cuVS/cuML) for graph construction and rank-based Betti
+computation (union-find for β₀, GPU SVD for β₁). Atlas building runs
+on CPU (set operations are faster there).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
