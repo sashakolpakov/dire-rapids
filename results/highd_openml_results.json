@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "timestamp": "2026-02-24T03:03:16.577713+00:00",
+    "platform": "Linux-6.8.0-1013-nvidia-64k-aarch64-with-glibc2.35",
+    "python": "3.13.12",
+    "pytorch": "2.10.0+cu128",
+    "n_neighbors": 16,
+    "n_components": 2,
+    "max_iter": 128,
+    "quality_k": 16,
+    "gpu": "NVIDIA GH200 480GB",
+    "gpu_memory_gb": 94.5,
+    "cuml_version": "26.02.00"
+  },
+  "results": [
+    {
+      "dataset": "ovarianTumour",
+      "N": 283,
+      "D": 54621,
+      "dire_time": 1.224,
+      "dire_quality": 0.048365723341703415,
+      "cuml_time": 0.137,
+      "cuml_quality": 0.31824204325675964,
+      "speedup_vs_cuml": 0.11
+    },
+    {
+      "dataset": "Dorothea",
+      "N": 1150,
+      "D": 100000,
+      "dire_time": 0.834,
+      "dire_quality": 0.014510869979858398,
+      "cuml_time": 0.32,
+      "cuml_quality": 0.01760869473218918,
+      "speedup_vs_cuml": 0.38
+    },
+    {
+      "dataset": "Flora",
+      "N": 15000,
+      "D": 200000,
+      "dire_time": 4.611,
+      "dire_quality": 0.0014583333395421505,
+      "cuml_time": 15.657,
+      "cuml_quality": 0.030379166826605797,
+      "speedup_vs_cuml": 3.4
+    }
+  ]
+}

@@ -653,11 +653,13 @@ class DiRePyTorch(TransformerMixin):
         if self.init == 'pca':
             self.logger.info("Initializing with PCA")
             if self.device.type == 'cuda' and X.shape[1] > 32:
-                # GPU-accelerated PCA via truncated SVD — much faster for high-D data
+                # GPU-accelerated PCA via truncated SVD
                 X_t = torch.tensor(X, dtype=torch.float32, device=self.device)
                 X_t = X_t - X_t.mean(dim=0)
-                U, S, _ = torch.linalg.svd(X_t, full_matrices=False)
-                embedding = (U[:, :self.n_components] * S[:self.n_components]).cpu().numpy()
+                # Use randomized SVD (pca_lowrank) — O(N*D*q) instead of full SVD,
+                # and avoids cusolver limits on very wide matrices (D >> N).
+                U, S, _ = torch.pca_lowrank(X_t, q=self.n_components)
+                embedding = (U * S).cpu().numpy()
                 del X_t, U, S
                 if self.device.type == 'cuda':
                     torch.cuda.empty_cache()
