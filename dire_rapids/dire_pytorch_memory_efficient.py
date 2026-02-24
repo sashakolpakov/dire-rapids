@@ -394,9 +394,9 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
 
         elif self.use_exact_repulsion:
             self.logger.debug("Using exact all-pairs repulsion (memory intensive)")
-            raise NotImplementedError(
-                "use_exact_repulsion=True is not supported in memory-efficient backend"
-            )
+            # Delegate to parent which computes both attraction + repulsion;
+            # discard the attraction forces we already accumulated above.
+            return super()._compute_forces(positions, iteration, max_iterations)
         else:
             self.logger.debug("Using chunked random sampling for repulsion")
             n_neg = min(int(self.neg_ratio * self.n_neighbors), n_samples - 1)
