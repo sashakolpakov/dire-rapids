@@ -515,8 +515,9 @@
 
                 <span class="n">chunk_repulsion_forces</span> <span class="o">=</span> <span class="p">(</span><span class="n">rep_coeff</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">*</span> <span class="n">inv_dist</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
                 <span class="n">forces</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span><span class="n">end_idx</span><span class="p">]</span> <span class="o">+=</span> <span class="n">chunk_repulsion_forces</span>
-
-                <span class="k">del</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">neg_positions</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">dist_sq</span><span class="p">,</span> <span class="n">rep_coeff</span><span class="p">,</span> <span class="n">cutoff_scale</span><span class="p">,</span> <span class="n">chunk_repulsion_forces</span>
+              
+                <span class="c1"># Clear intermediate tensors to free memory</span>
+                <span class="k">del</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">neg_positions</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">dist</span><span class="p">,</span> <span class="n">dist_sq</span><span class="p">,</span> <span class="n">rep_coeff</span><span class="p">,</span> <span class="n">cutoff_scale</span><span class="p">,</span> <span class="n">chunk_repulsion_forces</span>
 
         <span class="n">forces</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">forces</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
 
@@ -587,7 +588,9 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Iteration </span><span class="si">{</span><span class="n">iteration</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">max_iter_layout</span><span class="si">}</span><span class="s2">, avg force: </span><span class="si">{</span><span class="n">force_mag</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
-                    <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
+                    <span class="n">mem_available</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">mem_get_info</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="mf">1e9</span>
+                    <span class="k">if</span> <span class="n">mem_available</span> <span class="o">&lt;</span> <span class="mf">2.0</span><span class="p">:</span>
+                        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
 
         <span class="c1"># Final normalization</span>
         <span class="n">positions</span> <span class="o">-=</span> <span class="n">positions</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
