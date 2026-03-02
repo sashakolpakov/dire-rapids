@@ -439,8 +439,9 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
 
                 chunk_repulsion_forces = (rep_coeff * diff * inv_dist).sum(dim=1)
                 forces[start_idx:end_idx] += chunk_repulsion_forces
-
-                del neg_indices, neg_positions, diff, dist_sq, rep_coeff, cutoff_scale, chunk_repulsion_forces
+              
+                # Clear intermediate tensors to free memory
+                del neg_indices, neg_positions, diff, dist, dist_sq, rep_coeff, cutoff_scale, chunk_repulsion_forces
 
         forces = torch.clamp(forces, -self.cutoff, self.cutoff)
 
@@ -511,7 +512,9 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
                         self.logger.info(f"Iteration {iteration}/{self.max_iter_layout}, avg force: {force_mag:.6f}")
 
                 if self.device.type == 'cuda':
-                    torch.cuda.empty_cache()
+                    mem_available = torch.cuda.mem_get_info()[0] / 1e9
+                    if mem_available < 2.0:
+                        torch.cuda.empty_cache()
 
         # Final normalization
         positions -= positions.mean(dim=0)

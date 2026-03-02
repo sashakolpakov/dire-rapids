@@ -89,7 +89,7 @@ def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_val, cu
     rep_coeff = rep_coeff * torch.exp(-dist_n / cutoff)
     forces = forces + (rep_coeff * diff_n * inv_dist_n).sum(dim=1)
 
-    return forces
+    return torch.clamp(forces, -cutoff, cutoff)
 
 
 # torch.compile fuses the above into efficient CUDA kernels, eliminating
@@ -798,7 +798,7 @@ class DiRePyTorch(TransformerMixin):
         if use_bf16:
             forces = forces.float()
 
-        return torch.clamp(forces, -self.cutoff, self.cutoff)
+        return forces
 
     def _compute_forces_chunked(self, positions, knn_indices_torch, neg_indices,
                                 a_val, b_val, n_neg):
@@ -832,7 +832,7 @@ class DiRePyTorch(TransformerMixin):
             rep = rep * torch.exp(-dist_n / self.cutoff)
             forces[s] += (rep * diff_n * inv_dist_n).sum(dim=1)
 
-        return forces
+        return torch.clamp(forces, -self.cutoff, self.cutoff)
 
     def _optimize_layout(self, initial_positions):
         """
