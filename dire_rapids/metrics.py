@@ -27,6 +27,13 @@ except ImportError:
     HAS_CUPY = False
     warnings.warn("CuPy not available. GPU acceleration disabled.", UserWarning)
 
+# sklearn imports (always needed for CPU fallback paths)
+from sklearn.neighbors import NearestNeighbors
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
+from sklearn.neighbors import KNeighborsClassifier
+
 # RAPIDS cuML imports
 try:
     from cuml.neighbors import NearestNeighbors as cumlNearestNeighbors
@@ -42,11 +49,6 @@ except ImportError:
         "Install RAPIDS for GPU acceleration.",
         UserWarning
     )
-    from sklearn.neighbors import NearestNeighbors
-    from sklearn.model_selection import train_test_split
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.svm import LinearSVC
-    from sklearn.neighbors import KNeighborsClassifier
 
 # Additional dependencies for persistence
 try:

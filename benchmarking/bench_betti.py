@@ -1,12 +1,18 @@
 """
-Benchmark Betti curve computation: CPU (scipy) vs GPU (CuPy/cuVS).
+Benchmark Betti curve computation: correctness and speed.
 
-Part 1: Speed — CPU vs GPU on synthetic datasets
-Part 2: Quality — Betti curve DTW distance for DiRe vs cuML UMAP embeddings
-        (how well does each method preserve topology?)
+Three backends:
+  - CPU (eigsh): sparse eigenvalue reference, fast at small N but approximate
+  - Fast (UF+rank): exact union-find β₀ + GPU SVD rank β₁, slower but exact
+  - GPU (CuPy): CuPy-accelerated eigsh
+
+Part 1: Correctness — all backends on small synthetic datasets with known topology
+Part 2: Speed scaling — circle with varying N (each backend runs at its tractable sizes)
+Part 3: Topological preservation — Betti curve DTW for DiRe vs cuML UMAP embeddings
 """
 
 import gc
+import sys
 import time
 import warnings
 
@@ -94,7 +100,6 @@ def extract_betti_at_full(result):
     """Extract β₀, β₁ at the full complex (first filtration step = all edges)."""
     if isinstance(result, str):
         return None, None
-    # Filtration goes from 100th percentile (index 0, all edges) to 0th (last, fewest edges)
     return int(result['beta_0'][0]), int(result['beta_1'][0])
 
 
@@ -108,113 +113,136 @@ def dtw_betti(curve_orig, curve_emb):
     return float(dist)
 
 
+def fmt_time(t):
+    return f"{t:.2f}s" if t is not None else "-"
+
+
+def fmt_betti(b0, b1):
+    return f"β₀={b0},β₁={b1}" if b0 is not None else "FAILED"
+
+
+def log(msg="", **kwargs):
+    print(msg, **kwargs)
+    sys.stdout.flush()
+
+
 # ── Main ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("=" * 90)
-    print("Betti Curve Benchmark: Speed + Topological Quality")
-    print("=" * 90)
+    log("=" * 100)
+    log("Betti Curve Benchmark: Correctness + Speed")
+    log("=" * 100)
 
     has_gpu = False
     try:
         import cupy as cp
         has_gpu = True
         gpu_name = cp.cuda.runtime.getDeviceProperties(0)['name'].decode()
-        print(f"GPU: {gpu_name}")
+        log(f"GPU: {gpu_name}")
     except ImportError:
-        print("GPU: Not available (CuPy not installed)")
-    print()
+        log("GPU: Not available (CuPy not installed)")
+    log()
 
-    from dire_rapids.betti_curve import compute_betti_curve_cpu
+    from dire_rapids.betti_curve import compute_betti_curve_cpu, compute_betti_curve_fast
     if has_gpu:
         from dire_rapids.betti_curve import compute_betti_curve_gpu
 
-    # ── Part 1: Correctness + Speed (CPU vs GPU) ───────────────────────
-    print("-" * 90)
-    print("PART 1: Betti numbers on synthetic datasets (full complex)")
-    print("-" * 90)
+    # ── Part 1: Correctness ───────────────────────────────────────────
+    log("-" * 100)
+    log("PART 1: Correctness — Betti numbers on synthetic datasets (full complex)")
+    log("  Small N, k=15 to keep eigsh tractable. Focus: do all backends agree?")
+    log("-" * 100)
 
     datasets = [
-        make_circle(n=500),
-        make_sphere(n=800),
-        make_torus(n=1000),
-        make_linked_rings(n=800),
-        make_blobs(n=500, k=5, dim=10),
-        make_blobs(n=500, k=3, dim=5),
+        make_circle(n=200),
+        make_sphere(n=200),
+        make_torus(n=300),
+        make_linked_rings(n=200),
+        make_blobs(n=200, k=5, dim=10),
+        make_blobs(n=200, k=3, dim=5),
     ]
 
-    betti_params = dict(k_neighbors=20, density_threshold=0.8, overlap_factor=1.5, n_steps=30)
+    betti_params = dict(k_neighbors=15, density_threshold=0.8, overlap_factor=1.5, n_steps=10)
 
-    print(f"\n  {'Dataset':<22} {'N':>5} {'D':>3} | {'Expected':>10} | {'CPU β₀,β₁':>10} {'CPU time':>9}", end="")
+    hdr = f"  {'Dataset':<22} {'N':>5} {'D':>3} | {'Expected':>10} | {'CPU (eigsh)':>12} {'time':>7} | {'Fast (UF+rank)':>14} {'time':>7}"
     if has_gpu:
-        print(f" | {'GPU β₀,β₁':>10} {'GPU time':>9} {'Speedup':>8}", end="")
-    print()
-    print("  " + "-" * (75 + (30 if has_gpu else 0)))
+        hdr += f" | {'GPU (CuPy)':>12} {'time':>7}"
+    hdr += " | Match?"
+    log(f"\n{hdr}")
+    log("  " + "-" * (len(hdr) - 2))
 
     for data, name, expected in datasets:
         n, d = data.shape
         exp_str = f"β₀={expected['β₀']},β₁={expected['β₁']}"
 
-        # CPU
+        # CPU (eigsh reference)
+        log(f"  {name} (cpu)...", end=" ")
         t_cpu, res_cpu = time_betti(compute_betti_curve_cpu, data, **betti_params)
         b0_cpu, b1_cpu = extract_betti_at_full(res_cpu)
-        cpu_str = f"β₀={b0_cpu},β₁={b1_cpu}" if b0_cpu is not None else "FAILED"
-        cpu_t_str = f"{t_cpu:.2f}s" if t_cpu is not None else "-"
 
-        line = f"  {name:<22} {n:>5} {d:>3} | {exp_str:>10} | {cpu_str:>10} {cpu_t_str:>9}"
+        # Fast (union-find + GPU SVD rank)
+        log("(fast)...", end=" ")
+        t_fast, res_fast = time_betti(compute_betti_curve_fast, data, **betti_params)
+        b0_fast, b1_fast = extract_betti_at_full(res_fast)
+
+        line = f"\r  {name:<22} {n:>5} {d:>3} | {exp_str:>10} | {fmt_betti(b0_cpu, b1_cpu):>12} {fmt_time(t_cpu):>7} | {fmt_betti(b0_fast, b1_fast):>14} {fmt_time(t_fast):>7}"
 
         if has_gpu:
+            log("(gpu)...", end=" ")
             t_gpu, res_gpu = time_betti(compute_betti_curve_gpu, data, **betti_params)
             b0_gpu, b1_gpu = extract_betti_at_full(res_gpu)
-            gpu_str = f"β₀={b0_gpu},β₁={b1_gpu}" if b0_gpu is not None else "FAILED"
-            gpu_t_str = f"{t_gpu:.2f}s" if t_gpu is not None else "-"
-            if t_cpu and t_gpu:
-                speedup = t_cpu / t_gpu
-                line += f" | {gpu_str:>10} {gpu_t_str:>9} {speedup:>7.1f}x"
-            else:
-                line += f" | {gpu_str:>10} {gpu_t_str:>9} {'  -':>8}"
+            line += f" | {fmt_betti(b0_gpu, b1_gpu):>12} {fmt_time(t_gpu):>7}"
+            all_match = (b0_cpu == b0_fast == b0_gpu) and (b1_cpu == b1_fast == b1_gpu)
+        else:
+            all_match = (b0_cpu == b0_fast) and (b1_cpu == b1_fast)
 
-        print(line)
+        line += f" | {'YES' if all_match else 'NO':>6}"
+        log(line)
 
     # ── Part 2: Scaling ─────────────────────────────────────────────────
-    print()
-    print("-" * 90)
-    print("PART 2: Scaling benchmark (circle, varying N)")
-    print("-" * 90)
+    log()
+    log("-" * 100)
+    log("PART 2: Speed scaling (circle, k=15, n_steps=10)")
+    log("  Note: 'fast' uses dense SVD for rank(B2) — O(E^3) per step.")
+    log("  At small N, eigsh is faster. The rank method's advantage is exactness, not speed.")
+    log("-" * 100)
 
-    sizes = [500, 1000, 2000, 3000, 5000]
-    betti_params_scale = dict(k_neighbors=20, density_threshold=0.8, overlap_factor=1.5, n_steps=20)
+    # CPU eigsh scales well at small N; fast/GPU only at sizes where eigsh becomes unreliable
+    cpu_sizes = [100, 200, 500]
+    fast_sizes = [100, 200, 500]
+    betti_params_scale = dict(k_neighbors=15, density_threshold=0.8, overlap_factor=1.5, n_steps=10)
 
-    print(f"\n  {'N':>6} | {'CPU time':>10}", end="")
-    if has_gpu:
-        print(f" | {'GPU time':>10} | {'Speedup':>8}", end="")
-    print()
-    print("  " + "-" * (20 + (25 if has_gpu else 0)))
-
-    for sz in sizes:
+    log(f"\n  CPU (eigsh):")
+    for sz in cpu_sizes:
+        log(f"    N={sz}...", end=" ")
         data, _, _ = make_circle(n=sz)
-        t_cpu, _ = time_betti(compute_betti_curve_cpu, data, **betti_params_scale)
-        cpu_t_str = f"{t_cpu:.2f}s" if t_cpu else "-"
-        line = f"  {sz:>6} | {cpu_t_str:>10}"
+        t, _ = time_betti(compute_betti_curve_cpu, data, **betti_params_scale)
+        log(f"\r    N={sz:>5}  {fmt_time(t):>8}")
 
-        if has_gpu:
-            t_gpu, _ = time_betti(compute_betti_curve_gpu, data, **betti_params_scale)
-            gpu_t_str = f"{t_gpu:.2f}s" if t_gpu else "-"
-            if t_cpu and t_gpu:
-                speedup = t_cpu / t_gpu
-                line += f" | {gpu_t_str:>10} | {speedup:>7.1f}x"
-            else:
-                line += f" | {gpu_t_str:>10} | {'  -':>8}"
+    log(f"\n  Fast (union-find + rank):")
+    for sz in fast_sizes:
+        log(f"    N={sz}...", end=" ")
+        data, _, _ = make_circle(n=sz)
+        t, _ = time_betti(compute_betti_curve_fast, data, **betti_params_scale)
+        log(f"\r    N={sz:>5}  {fmt_time(t):>8}")
 
-        print(line)
+    if has_gpu:
+        log(f"\n  GPU (CuPy eigsh):")
+        gpu_sizes = [100, 200, 500]
+        for sz in gpu_sizes:
+            log(f"    N={sz}...", end=" ")
+            data, _, _ = make_circle(n=sz)
+            t, _ = time_betti(compute_betti_curve_gpu, data, **betti_params_scale)
+            log(f"\r    N={sz:>5}  {fmt_time(t):>8}")
 
     # ── Part 3: Topological preservation — DiRe vs cuML UMAP ──────────
     if has_gpu:
-        print()
-        print("-" * 90)
-        print("PART 3: Topological preservation — DiRe vs cuML UMAP")
-        print("  Compare Betti curves of ORIGINAL data vs EMBEDDING (DTW distance, lower = better)")
-        print("-" * 90)
+        log()
+        log("-" * 100)
+        log("PART 3: Topological preservation — DiRe vs cuML UMAP")
+        log("  Betti curve DTW distance: ORIGINAL vs EMBEDDING (lower = better)")
+        log("  Using CPU eigsh for Betti (faster at these sizes)")
+        log("-" * 100)
 
         from dire_rapids import DiRePyTorch
         try:
@@ -223,30 +251,30 @@ if __name__ == "__main__":
             has_cuml = True
         except ImportError:
             has_cuml = False
-            print("  cuML UMAP not available, skipping.")
+            log("  cuML UMAP not available, skipping.")
 
         if has_cuml:
             topo_datasets = [
-                make_circle(n=800),
-                make_torus(n=1500),
-                make_linked_rings(n=1000),
-                make_blobs(n=600, k=5, dim=10),
+                make_circle(n=300),
+                make_torus(n=500),
+                make_linked_rings(n=300),
+                make_blobs(n=300, k=5, dim=10),
             ]
 
-            # Betti curve params for quality comparison
-            qparams = dict(k_neighbors=20, density_threshold=0.8,
-                           overlap_factor=1.5, n_steps=30)
+            qparams = dict(k_neighbors=15, density_threshold=0.8,
+                           overlap_factor=1.5, n_steps=15)
 
-            print(f"\n  {'Dataset':<22} | {'Expected':>10} | {'Orig β₀,β₁':>12} | {'DiRe DTW β₀':>12} {'DiRe DTW β₁':>12} | {'cuML DTW β₀':>12} {'cuML DTW β₁':>12}")
-            print("  " + "-" * 105)
+            log(f"\n  {'Dataset':<22} | {'Expected':>10} | {'Orig β₀,β₁':>12} | {'DiRe DTW β₀':>12} {'DiRe DTW β₁':>12} | {'cuML DTW β₀':>12} {'cuML DTW β₁':>12}")
+            log("  " + "-" * 105)
 
             for data, name, expected in topo_datasets:
+                log(f"  {name}...", end=" ")
                 exp_str = f"β₀={expected['β₀']},β₁={expected['β₁']}"
 
                 # Betti curve on ORIGINAL data
                 _, res_orig = time_betti(compute_betti_curve_cpu, data, **qparams)
                 if isinstance(res_orig, str):
-                    print(f"  {name:<22} | original Betti curve FAILED: {res_orig}")
+                    log(f"\r  {name:<22} | original Betti curve FAILED: {res_orig}")
                     continue
                 b0_orig, b1_orig = extract_betti_at_full(res_orig)
                 orig_str = f"β₀={b0_orig},β₁={b1_orig}"
@@ -263,7 +291,7 @@ if __name__ == "__main__":
                     if not isinstance(res_dire, str):
                         dire_dtw0 = dtw_betti(res_orig['beta_0'], res_dire['beta_0'])
                         dire_dtw1 = dtw_betti(res_orig['beta_1'], res_dire['beta_1'])
-                except Exception as e:
+                except Exception:
                     pass
 
                 # cuML UMAP embedding
@@ -276,18 +304,12 @@ if __name__ == "__main__":
                     if not isinstance(res_umap, str):
                         cuml_dtw0 = dtw_betti(res_orig['beta_0'], res_umap['beta_0'])
                         cuml_dtw1 = dtw_betti(res_orig['beta_1'], res_umap['beta_1'])
-                except Exception as e:
+                except Exception:
                     pass
 
                 def fv(v):
                     return f"{v:.1f}" if v is not None else "-"
 
-                dire_d0 = fv(dire_dtw0)
-                dire_d1 = fv(dire_dtw1)
-                cuml_d0 = fv(cuml_dtw0)
-                cuml_d1 = fv(cuml_dtw1)
-
-                # Highlight winner
                 def winner(d, c):
                     if d is None or c is None:
                         return "", ""
@@ -300,13 +322,13 @@ if __name__ == "__main__":
                 w_d0, w_c0 = winner(dire_dtw0, cuml_dtw0)
                 w_d1, w_c1 = winner(dire_dtw1, cuml_dtw1)
 
-                print(f"  {name:<22} | {exp_str:>10} | {orig_str:>12} | {dire_d0:>10}{w_d0:2} {dire_d1:>10}{w_d1:2} | {cuml_d0:>10}{w_c0:2} {cuml_d1:>10}{w_c1:2}")
+                log(f"\r  {name:<22} | {exp_str:>10} | {orig_str:>12} | {fv(dire_dtw0):>10}{w_d0:2} {fv(dire_dtw1):>10}{w_d1:2} | {fv(cuml_dtw0):>10}{w_c0:2} {fv(cuml_dtw1):>10}{w_c1:2}")
 
-            print()
-            print("  DTW = Dynamic Time Warping distance between Betti curves")
-            print("  Lower DTW = embedding better preserves the topology of the original data")
-            print("  * = winner for that metric")
+            log()
+            log("  DTW = Dynamic Time Warping distance between Betti curves")
+            log("  Lower DTW = embedding better preserves the topology of the original data")
+            log("  * = winner for that metric")
 
-    print()
-    print("=" * 90)
-    print("Done.")
+    log()
+    log("=" * 100)
+    log("Done.")

@@ -65,15 +65,19 @@ The `compute_betti_curve` selector tries GPU first, then falls back to fast.
 
 ### Performance
 
-On GH200 (480GB), with n=500 points, k=15, 30 filtration steps:
+The rank-based method is **not faster** than eigsh at typical sizes. Dense SVD
+for rank(B2) via the Gram matrix G = B2·B2ᵀ scales as O(E³) per filtration
+step, while eigsh exploits sparsity and only computes a handful of eigenvalues.
 
-| Backend | Time | vs eigsh |
-|---------|------|----------|
-| fast (rank-based) | ~50-100s | 5-11x faster |
-| cpu (eigsh reference) | ~500s | baseline |
+On GH200 (480GB), with k=15, 10 filtration steps:
 
-The speedup grows with dataset size since eigsh scales poorly with matrix
-dimension while SVD of the (smaller) Gram matrix scales as O(E^3).
+| N   | CPU (eigsh) | Fast (rank) | Ratio    |
+|-----|-------------|-------------|----------|
+| 100 | ~0.2s       | ~1.7s       | eigsh 8x faster |
+| 200 | ~0.4s       | ~6.0s       | eigsh 15x faster |
+| 500 | ~2.5s       | ~31s        | eigsh 12x faster |
+
+The advantage of the rank-based method is **correctness**, not speed (see below).
 
 ### Correctness
 
