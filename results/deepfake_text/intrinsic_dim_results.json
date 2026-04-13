@@ -1,0 +1,139 @@
+{
+  "n_samples": 421,
+  "real": {
+    "label": "real (Wikipedia)",
+    "n_samples": 421,
+    "n_features": 384,
+    "sweep": [
+      {
+        "d": 1,
+        "neighbor_preservation": 0.5426761678543152
+      },
+      {
+        "d": 2,
+        "neighbor_preservation": 0.610609659540776
+      },
+      {
+        "d": 3,
+        "neighbor_preservation": 0.62486144101346
+      },
+      {
+        "d": 4,
+        "neighbor_preservation": 0.6158353127474268
+      },
+      {
+        "d": 5,
+        "neighbor_preservation": 0.6294536817102138
+      },
+      {
+        "d": 6,
+        "neighbor_preservation": 0.6392715756136184
+      },
+      {
+        "d": 7,
+        "neighbor_preservation": 0.6327790973871734
+      },
+      {
+        "d": 8,
+        "neighbor_preservation": 0.6330958036421219
+      },
+      {
+        "d": 9,
+        "neighbor_preservation": 0.6304038004750594
+      },
+      {
+        "d": 10,
+        "neighbor_preservation": 0.631987331749802
+      },
+      {
+        "d": 11,
+        "neighbor_preservation": 0.6315122723673793
+      },
+      {
+        "d": 12,
+        "neighbor_preservation": 0.6397466349960411
+      },
+      {
+        "d": 13,
+        "neighbor_preservation": 0.6356294536817102
+      },
+      {
+        "d": 14,
+        "neighbor_preservation": 0.640221694378464
+      },
+      {
+        "d": 15,
+        "neighbor_preservation": 0.6353127474267617
+      }
+    ],
+    "detected_dim": 3
+  },
+  "fake": {
+    "label": "fake (Gemini)",
+    "n_samples": 421,
+    "n_features": 384,
+    "sweep": [
+      {
+        "d": 1,
+        "neighbor_preservation": 0.6014251781472684
+      },
+      {
+        "d": 2,
+        "neighbor_preservation": 0.6571654790182107
+      },
+      {
+        "d": 3,
+        "neighbor_preservation": 0.6969121140142518
+      },
+      {
+        "d": 4,
+        "neighbor_preservation": 0.6965954077593033
+      },
+      {
+        "d": 5,
+        "neighbor_preservation": 0.7024544734758512
+      },
+      {
+        "d": 6,
+        "neighbor_preservation": 0.6965954077593033
+      },
+      {
+        "d": 7,
+        "neighbor_preservation": 0.7056215360253365
+      },
+      {
+        "d": 8,
+        "neighbor_preservation": 0.6905779889152811
+      },
+      {
+        "d": 9,
+        "neighbor_preservation": 0.6872525732383215
+      },
+      {
+        "d": 10,
+        "neighbor_preservation": 0.6598574821852732
+      },
+      {
+        "d": 11,
+        "neighbor_preservation": 0.6953285827395091
+      },
+      {
+        "d": 12,
+        "neighbor_preservation": 0.6799683293745051
+      },
+      {
+        "d": 13,
+        "neighbor_preservation": 0.6711005542359462
+      },
+      {
+        "d": 14,
+        "neighbor_preservation": 0.6826603325415677
+      },
+      {
+        "d": 15,
+        "neighbor_preservation": 0.68756927949327
+      }
+    ],
+    "detected_dim": 3
+  }
+}

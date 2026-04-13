@@ -54,3 +54,9 @@ NOTES_*.md
 # PNG files (except those in /images)
 *.png
 !images/*.png
+
+# Large result artifacts (images, embeddings)
+results/deepfake_dim/*/real/
+results/deepfake_dim/*/fake/
+results/deepfake_text/*.npy
+results/deepfake_text/*_paragraphs.json

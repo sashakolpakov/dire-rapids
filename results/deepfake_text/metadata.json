@@ -1,0 +1,28 @@
+{
+  "topics": [
+    "Photosynthesis",
+    "Roman Empire",
+    "General relativity",
+    "Jazz music",
+    "Coral reef",
+    "French Revolution",
+    "DNA replication",
+    "Renaissance art",
+    "Plate tectonics",
+    "Quantum computing",
+    "Industrial Revolution",
+    "Honey bee",
+    "Ancient Egypt",
+    "Machine learning",
+    "Volcanic eruption",
+    "Impressionism",
+    "Game theory",
+    "Migration (ecology)",
+    "Fermentation",
+    "Cold War"
+  ],
+  "n_real_paragraphs": 1977,
+  "n_fake_paragraphs": 421,
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "embedding_dim": 384
+}

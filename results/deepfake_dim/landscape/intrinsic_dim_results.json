@@ -1,0 +1,140 @@
+{
+  "category": "landscape",
+  "image_size": 64,
+  "real": {
+    "label": "real",
+    "n_samples": 50,
+    "n_features": 12288,
+    "sweep": [
+      {
+        "d": 1,
+        "neighbor_preservation": 0.5946666666666667
+      },
+      {
+        "d": 2,
+        "neighbor_preservation": 0.7053333333333334
+      },
+      {
+        "d": 3,
+        "neighbor_preservation": 0.7093333333333334
+      },
+      {
+        "d": 4,
+        "neighbor_preservation": 0.732
+      },
+      {
+        "d": 5,
+        "neighbor_preservation": 0.6880000000000001
+      },
+      {
+        "d": 6,
+        "neighbor_preservation": 0.7226666666666667
+      },
+      {
+        "d": 7,
+        "neighbor_preservation": 0.7146666666666667
+      },
+      {
+        "d": 8,
+        "neighbor_preservation": 0.7293333333333333
+      },
+      {
+        "d": 9,
+        "neighbor_preservation": 0.7373333333333334
+      },
+      {
+        "d": 10,
+        "neighbor_preservation": 0.7066666666666667
+      },
+      {
+        "d": 11,
+        "neighbor_preservation": 0.7346666666666667
+      },
+      {
+        "d": 12,
+        "neighbor_preservation": 0.7373333333333334
+      },
+      {
+        "d": 13,
+        "neighbor_preservation": 0.7546666666666667
+      },
+      {
+        "d": 14,
+        "neighbor_preservation": 0.76
+      },
+      {
+        "d": 15,
+        "neighbor_preservation": 0.736
+      }
+    ],
+    "detected_dim": 4
+  },
+  "fake": {
+    "label": "fake",
+    "n_samples": 50,
+    "n_features": 12288,
+    "sweep": [
+      {
+        "d": 1,
+        "neighbor_preservation": 0.5933333333333334
+      },
+      {
+        "d": 2,
+        "neighbor_preservation": 0.6359999999999999
+      },
+      {
+        "d": 3,
+        "neighbor_preservation": 0.644
+      },
+      {
+        "d": 4,
+        "neighbor_preservation": 0.6679999999999999
+      },
+      {
+        "d": 5,
+        "neighbor_preservation": 0.676
+      },
+      {
+        "d": 6,
+        "neighbor_preservation": 0.6893333333333334
+      },
+      {
+        "d": 7,
+        "neighbor_preservation": 0.7066666666666667
+      },
+      {
+        "d": 8,
+        "neighbor_preservation": 0.6893333333333334
+      },
+      {
+        "d": 9,
+        "neighbor_preservation": 0.7093333333333334
+      },
+      {
+        "d": 10,
+        "neighbor_preservation": 0.7173333333333333
+      },
+      {
+        "d": 11,
+        "neighbor_preservation": 0.7173333333333333
+      },
+      {
+        "d": 12,
+        "neighbor_preservation": 0.7040000000000001
+      },
+      {
+        "d": 13,
+        "neighbor_preservation": 0.6880000000000001
+      },
+      {
+        "d": 14,
+        "neighbor_preservation": 0.7053333333333334
+      },
+      {
+        "d": 15,
+        "neighbor_preservation": 0.7186666666666667
+      }
+    ],
+    "detected_dim": 7
+  }
+}
