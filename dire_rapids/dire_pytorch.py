@@ -326,6 +326,7 @@ class DiRePyTorch(TransformerMixin):
             random_state=None,
             use_exact_repulsion=False,  # If True, use all-pairs repulsion (for testing)
             metric=None,
+            normalize=True,
     ):
         """
         Initialize DiRePyTorch reducer with specified parameters.
@@ -360,6 +361,13 @@ class DiRePyTorch(TransformerMixin):
             If True, use exact all-pairs repulsion (memory intensive, testing only).
         metric : str, callable, or None, default=None
             Custom distance metric for k-NN computation. See class docstring for details.
+        normalize : bool, default=True
+            If True, mean-center and scale inputs to fit in [-1, 1] (global scalar
+            rescale) before kNN and PCA. This preserves neighbor rankings exactly
+            (kNN is translation- and scale-invariant) but keeps squared distances
+            in a numerically safe range for fp16. Without it, high-dimensional
+            data on large scales (e.g. raw [0, 255] MNIST pixels) overflows fp16
+            during distance computation, silently corrupting the kNN graph.
         """
 
         self.n_components = n_components
@@ -375,6 +383,7 @@ class DiRePyTorch(TransformerMixin):
         self.verbose = verbose
         self.random_state = random_state if random_state is not None else np.random.randint(0, 2 ** 32)
         self.use_exact_repulsion = use_exact_repulsion
+        self.normalize = normalize
 
         # Store RNG state -- defer torch/cuda seeding to fit_transform
         # to avoid mutating global state from a library constructor.
@@ -513,7 +522,24 @@ class DiRePyTorch(TransformerMixin):
             use_fp16 = n_dims >= 500 or n_samples >= 100000
         elif self.device.type == 'cpu':
             use_fp16 = False  # CPU doesn't benefit from FP16
-        
+
+        # Safety guard: fp16 has a finite range (|x|²-sums must stay below ~65504).
+        # If the data scale would push squared distances near overflow, fall back
+        # to fp32 rather than silently corrupting the neighbor graph.  The guard
+        # triggers when the user passes un-normalized data directly to
+        # _compute_knn (callers who do not go through fit_transform) or supplies
+        # use_fp16=True explicitly on unsafe data.
+        if use_fp16 and self.device.type == 'cuda':
+            x_abs_max = float(np.abs(X).max())
+            worst_sq_dist = 4.0 * n_dims * x_abs_max * x_abs_max  # |2 * max|^2 * D
+            if worst_sq_dist > 30000.0:  # leave headroom below fp16 max (65504)
+                self.logger.warning(
+                    f"Disabling FP16 k-NN: data scale |x|_max={x_abs_max:.3g} at "
+                    f"D={n_dims} would overflow fp16 squared distances "
+                    f"(worst case {worst_sq_dist:.3g} > 30000). Falling back to FP32."
+                )
+                use_fp16 = False
+
         # Choose precision
         if use_fp16 and self.device.type == 'cuda':
             dtype = torch.float16
@@ -925,6 +951,20 @@ class DiRePyTorch(TransformerMixin):
         # Store data
         self._data = np.asarray(X, dtype=np.float32)
         self._n_samples = self._data.shape[0]
+
+        if self.normalize:
+            # Mean-center, then scale by a single global scalar so all values lie
+            # in [-1, 1].  Centering and uniform scaling preserve kNN rankings
+            # exactly (Euclidean neighbors are translation- and scale-invariant),
+            # so this is a pure numerical-safety transformation: it prevents
+            # fp16 squared-distance overflow on unnormalized inputs such as raw
+            # [0, 255] pixels.  PCA init is scale-equivariant, and the layout
+            # re-normalizes to unit std, so the final embedding is unchanged for
+            # data that was already in a safe range.
+            self._data = self._data - self._data.mean(axis=0, keepdims=True)
+            max_abs = float(np.abs(self._data).max())
+            if max_abs > 0:
+                self._data /= max_abs
 
         self.logger.info(f"Processing {self._n_samples} samples with {self._data.shape[1]} features")
 

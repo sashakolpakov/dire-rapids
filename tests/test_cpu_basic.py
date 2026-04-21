@@ -258,6 +258,62 @@ class TestDiRePyTorchBasic:
         assert not np.allclose(X3, X4)
 
 
+class TestDiRePyTorchNormalization:
+    """Regression tests for input normalization / fp16 safety."""
+
+    def _cluster_separation(self, emb, labels):
+        """Ratio of between-cluster to within-cluster std — a label-aware
+        proxy for whether the embedding preserved cluster structure."""
+        classes = np.unique(labels)
+        centroids = np.stack([emb[labels == c].mean(axis=0) for c in classes])
+        within = np.mean([emb[labels == c].std(axis=0).mean() for c in classes])
+        between = centroids.std(axis=0).mean()
+        return between / max(within, 1e-12)
+
+    def test_raw_scale_high_dim(self):
+        """Unnormalized high-D inputs must not collapse.
+
+        Regression test for the fp16-overflow bug: before the fix, high-D data
+        at a large scale (e.g. raw [0, 255] pixels) overflowed fp16 squared
+        distances inside _compute_knn, silently corrupting the neighbor graph
+        and producing a uniform blob. The internal normalization in
+        fit_transform and the fp16 safety guard together should prevent this.
+        """
+        rng = np.random.default_rng(0)
+        n_per_cluster = 60
+        n_features = 600
+        centers = rng.standard_normal((4, n_features)).astype(np.float32) * 3.0
+        X = np.concatenate([
+            centers[c] + 0.3 * rng.standard_normal((n_per_cluster, n_features)).astype(np.float32)
+            for c in range(4)
+        ], axis=0)
+        y = np.repeat(np.arange(4), n_per_cluster)
+        # Push data into the fp16-unsafe regime (raw-pixel-like scale).
+        X = (X * 85.0 + 128.0).clip(0, 255).astype(np.float32)
+
+        model = DiRePyTorch(n_components=2, n_neighbors=15, max_iter_layout=64,
+                            verbose=False, random_state=0)
+        emb = model.fit_transform(X)
+
+        assert np.all(np.isfinite(emb))
+        ratio = self._cluster_separation(emb, y)
+        # Collapsed embeddings give ratios ~0.01; well-separated give >1.
+        assert ratio > 0.5, (
+            f"cluster structure collapsed (between/within std ratio = {ratio:.3f}); "
+            f"likely an fp16-overflow or normalization regression"
+        )
+
+    def test_normalize_false_preserves_old_behavior(self):
+        """normalize=False should leave _data untouched, for back-compat."""
+        X = np.full((40, 10), 7.0, dtype=np.float32)
+        X += np.random.default_rng(0).standard_normal(X.shape).astype(np.float32)
+        model = DiRePyTorch(n_components=2, n_neighbors=5, max_iter_layout=5,
+                            verbose=False, normalize=False, random_state=0)
+        model.fit_transform(X)
+        # With normalize=False, _data is the float32 copy of X (mean ~7, not 0).
+        assert abs(model._data.mean() - X.mean()) < 1e-5
+
+
 class TestDiRePyTorchErrors:
     """Test error handling and edge cases."""
     
