@@ -303,6 +303,30 @@ class TestDiRePyTorchNormalization:
             f"likely an fp16-overflow or normalization regression"
         )
 
+    def test_spectral_init(self):
+        """Spectral init must produce a valid, finite embedding and preserve
+        cluster structure at least as well as random init on a simple dataset."""
+        X, y = make_blobs(n_samples=300, n_features=15, centers=3,
+                          cluster_std=0.8, random_state=0)
+        r_spec = DiRePyTorch(n_components=2, n_neighbors=10, max_iter_layout=0,
+                             init='spectral', verbose=False, random_state=0)
+        emb_spec = r_spec.fit_transform(X)
+        assert emb_spec.shape == (300, 2)
+        assert np.all(np.isfinite(emb_spec))
+        ratio_spec = self._cluster_separation(emb_spec, y)
+
+        r_rand = DiRePyTorch(n_components=2, n_neighbors=10, max_iter_layout=0,
+                             init='random', verbose=False, random_state=0)
+        emb_rand = r_rand.fit_transform(X)
+        ratio_rand = self._cluster_separation(emb_rand, y)
+
+        # Spectral should at least match random; on separable blobs it usually
+        # beats it substantially. Don't be too strict — just enforce "not worse".
+        assert ratio_spec >= 0.8 * ratio_rand, (
+            f"spectral init ({ratio_spec:.2f}) worse than random "
+            f"({ratio_rand:.2f}) on separable blobs"
+        )
+
     def test_normalize_false_preserves_old_behavior(self):
         """normalize=False should leave _data untouched, for back-compat."""
         X = np.full((40, 10), 7.0, dtype=np.float32)

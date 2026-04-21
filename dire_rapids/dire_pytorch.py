@@ -225,7 +225,7 @@ class DiRePyTorch(TransformerMixin):
         Number of dimensions in the target embedding space.
     n_neighbors : int, default=16
         Number of nearest neighbors to use for attraction forces.
-    init : {'pca', 'random'}, default='pca'
+    init : {'pca', 'spectral', 'random'}, default='pca'
         Method for initializing the embedding. 'pca' uses PCA initialization,
         'random' uses random projection.
     max_iter_layout : int, default=128
@@ -337,8 +337,13 @@ class DiRePyTorch(TransformerMixin):
             Number of dimensions in the target embedding space.
         n_neighbors : int, default=16
             Number of nearest neighbors to use for attraction forces.
-        init : {'pca', 'random'}, default='pca'
-            Method for initializing the embedding.
+        init : {'pca', 'spectral', 'random'}, default='pca'
+            Method for initializing the embedding. 'spectral' uses the bottom
+            eigenvectors of the normalized graph Laplacian built from the kNN
+            graph (Laplacian Eigenmaps) — good at surfacing cluster structure
+            on datasets whose PCA projection has overlapping classes. On CUDA
+            this runs via ``cupyx.scipy.sparse.linalg.lobpcg`` (seconds at
+            500K+ points); on CPU it falls back to ``scipy.sparse.linalg.eigsh``.
         max_iter_layout : int, default=128
             Maximum number of optimization iterations.
         min_dist : float, default=1e-2
@@ -699,10 +704,100 @@ class DiRePyTorch(TransformerMixin):
         del X_gpu, index
         cp.get_default_memory_pool().free_all_blocks()
 
+    def _spectral_init(self):
+        """Laplacian-Eigenmap initialization from the kNN graph.
+
+        Builds the symmetrized unweighted kNN adjacency `A`, forms the
+        normalized adjacency `A_norm = D^{-1/2} A D^{-1/2}`, and returns the
+        eigenvectors of `A_norm` associated with its top `n_components + 1`
+        eigenvalues (dropping the trivial constant eigenvector at λ = 1 on each
+        connected component).  Because the normalized Laplacian is
+        `L_sym = I − A_norm`, largest eigenvalues of `A_norm` correspond to
+        smallest of `L_sym`; this avoids shift-invert factorization, which is
+        intractable on a 500K-node graph.
+
+        On CUDA, eigenvectors are computed with
+        `cupyx.scipy.sparse.linalg.lobpcg` (seconds on a 580K-node graph).
+        On CPU, falls back to `scipy.sparse.linalg.eigsh(which='LA')`.
+
+        Returns
+        -------
+        numpy.ndarray of shape (n_samples, n_components)
+            Initial embedding; the outer `_initialize_embedding` normalizes it
+            to zero mean and unit std per component.
+        """
+        from scipy.sparse import csr_matrix, diags
+        self.logger.info("Initializing with spectral embedding (Laplacian eigenmaps)")
+
+        n = self._n_samples
+        k = self._knn_indices.shape[1]
+        n_eigs = self.n_components + 1  # +1 to drop the trivial constant
+
+        # Build symmetric unweighted adjacency on CPU. OR with its transpose so
+        # (i→j ∈ kNN) ∨ (j→i ∈ kNN) ⇒ edge. nnz ≤ 2*N*k.
+        rows = np.repeat(np.arange(n, dtype=np.int32), k)
+        cols = self._knn_indices.ravel().astype(np.int32)
+        vals = np.ones(len(rows), dtype=np.float32)
+        A = csr_matrix((vals, (rows, cols)), shape=(n, n))
+        A = A.maximum(A.T).tocsr()
+        A.setdiag(0)
+        A.eliminate_zeros()
+
+        deg = np.asarray(A.sum(axis=1)).ravel()
+        d_inv_sqrt = np.where(deg > 0, 1.0 / np.sqrt(deg), 0.0).astype(np.float32)
+
+        # Reproducible random start for the iterative eigensolver.
+        rng = np.random.default_rng(self.random_state)
+        X0 = rng.standard_normal((n, n_eigs)).astype(np.float32)
+
+        use_gpu = self.device.type == 'cuda'
+        if use_gpu:
+            try:
+                import cupy as cp
+                import cupyx.scipy.sparse as cusp
+                import cupyx.scipy.sparse.linalg as cuspl
+
+                D_inv_sqrt_gpu = cusp.diags(cp.asarray(d_inv_sqrt),
+                                            0, format='csr', dtype=cp.float32)
+                A_gpu = cusp.csr_matrix(A.astype(np.float32))
+                A_norm_gpu = (D_inv_sqrt_gpu @ A_gpu @ D_inv_sqrt_gpu).tocsr()
+                X0_gpu = cp.asarray(X0)
+
+                vals_gpu, vecs_gpu = cuspl.lobpcg(
+                    A_norm_gpu, X0_gpu, largest=True, tol=1e-4, maxiter=200
+                )
+                vals_np = cp.asnumpy(vals_gpu)
+                vecs_np = cp.asnumpy(vecs_gpu)
+                del A_gpu, A_norm_gpu, D_inv_sqrt_gpu, X0_gpu, vals_gpu, vecs_gpu
+                cp.get_default_memory_pool().free_all_blocks()
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                self.logger.warning(
+                    f"GPU spectral solver failed ({e}); falling back to CPU eigsh"
+                )
+                use_gpu = False
+
+        if not use_gpu:
+            from scipy.sparse.linalg import eigsh
+            D_inv_sqrt_cpu = diags(d_inv_sqrt, 0, format='csr', dtype=np.float32)
+            A_norm_cpu = (D_inv_sqrt_cpu @ A.astype(np.float32) @ D_inv_sqrt_cpu).tocsr()
+            vals_np, vecs_np = eigsh(
+                A_norm_cpu, k=n_eigs, which='LA', tol=1e-4, maxiter=500,
+                v0=X0[:, 0],
+            )
+
+        # Sort eigenvalues descending (largest on A_norm = smallest on L_sym)
+        # and drop the single most-trivial eigenvector (the constant-per-component
+        # mode at λ ≈ 1). On a disconnected graph, additional λ ≈ 1 eigenvectors
+        # are per-component indicators — these are useful for separating clusters,
+        # so keep them rather than discarding (matches UMAP's spectral init).
+        order = np.argsort(-vals_np)
+        vecs_np = vecs_np[:, order[1:1 + self.n_components]]
+        return vecs_np.astype(np.float32)
+
     def _initialize_embedding(self, X):
         """
         Initialize the low-dimensional embedding.
-        
+
         This private method creates the initial embedding using either PCA or random
         projection, then normalizes the result.
         
@@ -747,6 +842,9 @@ class DiRePyTorch(TransformerMixin):
             projection = rng.standard_normal((X.shape[1], self.n_components))
             projection /= np.linalg.norm(projection, axis=0)
             embedding = X @ projection
+
+        elif self.init == 'spectral':
+            embedding = self._spectral_init()
 
         else:
             raise ValueError(f"Unknown init method: {self.init}")
