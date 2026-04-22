@@ -225,7 +225,7 @@ class DiRePyTorch(TransformerMixin):
         Number of dimensions in the target embedding space.
     n_neighbors : int, default=16
         Number of nearest neighbors to use for attraction forces.
-    init : {'pca', 'spectral', 'random'}, default='pca'
+    init : {'pca', 'spectral', 'diffusion', 'jl', 'random'}, default='pca'
         Method for initializing the embedding. 'pca' uses PCA initialization,
         'random' uses random projection.
     max_iter_layout : int, default=128
@@ -327,6 +327,8 @@ class DiRePyTorch(TransformerMixin):
             use_exact_repulsion=False,  # If True, use all-pairs repulsion (for testing)
             metric=None,
             normalize=True,
+            spectral_reweight="none",
+            diffusion_time=1,
     ):
         """
         Initialize DiRePyTorch reducer with specified parameters.
@@ -337,13 +339,25 @@ class DiRePyTorch(TransformerMixin):
             Number of dimensions in the target embedding space.
         n_neighbors : int, default=16
             Number of nearest neighbors to use for attraction forces.
-        init : {'pca', 'spectral', 'random'}, default='pca'
-            Method for initializing the embedding. 'spectral' uses the bottom
-            eigenvectors of the normalized graph Laplacian built from the kNN
-            graph (Laplacian Eigenmaps) — good at surfacing cluster structure
-            on datasets whose PCA projection has overlapping classes. On CUDA
-            this runs via ``cupyx.scipy.sparse.linalg.lobpcg`` (seconds at
-            500K+ points); on CPU it falls back to ``scipy.sparse.linalg.eigsh``.
+        init : {'pca', 'spectral', 'diffusion', 'jl', 'random'}, default='pca'
+            Method for initializing the embedding.
+
+            * ``'spectral'`` — Laplacian Eigenmaps on the kNN graph via the
+              *symmetric* normalized Laplacian :math:`L_{sym} = I - D^{-1/2} A
+              D^{-1/2}`. Good at surfacing cluster structure on datasets whose
+              PCA projection has overlapping classes.
+            * ``'diffusion'`` — diffusion-map coordinates from the *random-walk*
+              Laplacian :math:`L_{rw} = I - D^{-1} A`. Same eigenvalues as
+              ``'spectral'``; eigenvectors are :math:`\\psi_k = D^{-1/2} v_k^{sym}`
+              scaled by :math:`\\sigma_k^t` where :math:`t` is ``diffusion_time``.
+              Emphasises slow diffusion modes.
+            * ``'jl'`` — Johnson-Lindenstrauss random projection. Oblivious to
+              the data's manifold structure; useful as a baseline.
+            * ``'pca'`` and ``'random'`` — classic.
+
+            On CUDA the ``'spectral'``/``'diffusion'`` eigensolver is
+            ``cupyx.scipy.sparse.linalg.lobpcg`` (seconds at 500K+ points); on
+            CPU it falls back to ``scipy.sparse.linalg.eigsh``.
         max_iter_layout : int, default=128
             Maximum number of optimization iterations.
         min_dist : float, default=1e-2
@@ -366,6 +380,14 @@ class DiRePyTorch(TransformerMixin):
             If True, use exact all-pairs repulsion (memory intensive, testing only).
         metric : str, callable, or None, default=None
             Custom distance metric for k-NN computation. See class docstring for details.
+        spectral_reweight : {'none', 'forman'}, default='none'
+            Only used when ``init='spectral'``. If 'forman', the kNN adjacency
+            is reweighted by a sigmoid of the augmented-Forman-Ricci curvature
+            :math:`F(e) = 2 - \\deg(u) - \\deg(v) + T(e)` (triangle-aware) on the
+            mutual kNN graph, then fed into the spectral solver. Edges in
+            flat, well-clustered regions (higher F) get larger weights; edges
+            in dense, non-clustered regions get smaller weights. Sreejith et
+            al. "Forman curvature for complex networks" (J. Stat. Mech. 2016).
         normalize : bool, default=True
             If True, mean-center and scale inputs to fit in [-1, 1] (global scalar
             rescale) before kNN and PCA. This preserves neighbor rankings exactly
@@ -389,6 +411,12 @@ class DiRePyTorch(TransformerMixin):
         self.random_state = random_state if random_state is not None else np.random.randint(0, 2 ** 32)
         self.use_exact_repulsion = use_exact_repulsion
         self.normalize = normalize
+        if spectral_reweight not in ('none', 'forman'):
+            raise ValueError(
+                f"spectral_reweight must be 'none' or 'forman', got {spectral_reweight!r}"
+            )
+        self.spectral_reweight = spectral_reweight
+        self.diffusion_time = diffusion_time
 
         # Store RNG state -- defer torch/cuda seeding to fit_transform
         # to avoid mutating global state from a library constructor.
@@ -704,30 +732,135 @@ class DiRePyTorch(TransformerMixin):
         del X_gpu, index
         cp.get_default_memory_pool().free_all_blocks()
 
-    def _spectral_init(self):
-        """Laplacian-Eigenmap initialization from the kNN graph.
+    def _forman_reweight_adjacency(self, A_or):
+        """Return a Forman-Ricci-reweighted symmetric adjacency matrix.
 
-        Builds the symmetrized unweighted kNN adjacency `A`, forms the
-        normalized adjacency `A_norm = D^{-1/2} A D^{-1/2}`, and returns the
-        eigenvectors of `A_norm` associated with its top `n_components + 1`
-        eigenvalues (dropping the trivial constant eigenvector at λ = 1 on each
-        connected component).  Because the normalized Laplacian is
-        `L_sym = I − A_norm`, largest eigenvalues of `A_norm` correspond to
-        smallest of `L_sym`; this avoids shift-invert factorization, which is
-        intractable on a 500K-node graph.
+        The augmented Forman curvature for a unit-weighted graph is
+        :math:`F(e=(u,v)) = 2 - \\deg(u) - \\deg(v) + T(e)`, where :math:`T(e)`
+        is the number of triangles containing edge :math:`e` (i.e.
+        :math:`|N(u) \\cap N(v)|`). High/less-negative F marks edges in flat,
+        well-clustered regions; very negative F marks edges in dense,
+        over-connected regions (likely spurious shortcuts through the manifold).
 
-        On CUDA, eigenvectors are computed with
-        `cupyx.scipy.sparse.linalg.lobpcg` (seconds on a 580K-node graph).
-        On CPU, falls back to `scipy.sparse.linalg.eigsh(which='LA')`.
+        We compute F on the *mutual* kNN graph (the intersection of A and A^T
+        from the directed kNN), because asymmetric edges inflate degree counts
+        and skew curvature. The returned adjacency matches the structure of
+        the input ``A_or`` (the OR-symmetrized directed kNN that is passed in)
+        but with edge values replaced by a sigmoid transform of F:
+
+            :math:`w_e = \\sigma((F(e) - \\mathrm{med}\\,F) / \\tau)`
+
+        with :math:`\\tau = \\max(\\mathrm{MAD}(F), 1)`. Higher F ⇒ larger
+        weight. Edges present only in ``A_or`` but absent from mutual kNN
+        (i.e. asymmetric edges) get the median weight 0.5 — they are retained
+        (so DiRe's downstream force-directed stage still sees them) but are
+        treated as neutral information.
+
+        Triangles are counted via :math:`T = A \\odot A^2` (elementwise product
+        with the 2-step matrix), which matches a brute-force
+        neighbor-intersection on synthetic grids to the last edge.
+        """
+        from scipy.sparse import csr_matrix, find
+        self.logger.info("Computing Forman-Ricci edge weights on mutual kNN…")
+
+        # Mutual kNN graph: edges present in both directions of the directed kNN.
+        n = A_or.shape[0]
+        k = self._knn_indices.shape[1]
+        rows = np.repeat(np.arange(n, dtype=np.int32), k)
+        cols = self._knn_indices.ravel().astype(np.int32)
+        A_dir = csr_matrix(
+            (np.ones(len(rows), dtype=np.float32), (rows, cols)), shape=(n, n)
+        )
+        A_dir.setdiag(0)
+        A_dir.eliminate_zeros()
+        A_mut = A_dir.minimum(A_dir.T).tocsr()
+
+        deg_mut = np.asarray(A_mut.sum(axis=1)).ravel().astype(np.int32)
+
+        # Triangle counts per edge via A ⊙ A².
+        A_sq = A_mut @ A_mut
+        T_mut = A_mut.multiply(A_sq).tocsr()
+
+        # F per edge (only for edges present in mutual kNN). Work with COO view.
+        rc = find(A_mut)  # (row, col, val) — val is 1 everywhere in A_mut
+        er, ec = rc[0], rc[1]
+        # Triangles at same positions
+        rct = find(T_mut)
+        # T_mut is a subset of A_mut's support (with possible zeros); map via dict
+        t_dict = {(int(r), int(c)): int(v) for r, c, v in zip(*rct)}
+        T_e = np.fromiter(
+            (t_dict.get((int(u), int(v)), 0) for u, v in zip(er, ec)),
+            dtype=np.int32, count=len(er)
+        )
+        F_e = 2 - deg_mut[er] - deg_mut[ec] + T_e
+
+        # Sigmoid reweighting on mutual edges.
+        med = float(np.median(F_e))
+        mad = float(np.median(np.abs(F_e - med)))
+        tau = max(mad, 1.0)
+        w_mut = 1.0 / (1.0 + np.exp(-(F_e - med) / tau))
+
+        self.logger.info(
+            f"Forman-Ricci: F mean={F_e.mean():.1f} std={F_e.std():.1f}  "
+            f"median={med:.1f} MAD={mad:.1f} tau={tau:.1f}  "
+            f"weights: min={w_mut.min():.3f} max={w_mut.max():.3f}"
+        )
+
+        # Build the reweighted mutual-kNN adjacency.
+        A_mut_w = csr_matrix(
+            (w_mut.astype(np.float32), (er, ec)), shape=(n, n)
+        )
+        # Put asymmetric edges (present in A_or but not A_mut) back at weight 0.5.
+        A_asym = A_or - A_mut  # both binary; A_asym has values in {0, 1}.
+        A_asym = A_asym.multiply(A_asym > 0)  # clamp any numerical negatives
+        A_out = (A_mut_w + 0.5 * A_asym.astype(np.float32)).tocsr()
+        A_out.eliminate_zeros()
+        return A_out
+
+    def _spectral_init(self, kind='sym'):
+        """Laplacian-Eigenmap / diffusion-map initialization from the kNN graph.
+
+        Builds the symmetrized unweighted kNN adjacency ``A``, solves the
+        eigenproblem of ``A_norm = D^{-1/2} A D^{-1/2}``, and returns an
+        initial embedding.
+
+        Parameters
+        ----------
+        kind : {'sym', 'rw'}, default='sym'
+            Which Laplacian spectrum to use.  ``'sym'`` returns the eigenvectors
+            of the symmetric normalized Laplacian ``L_sym = I - A_norm``
+            directly (standard Laplacian Eigenmaps).  ``'rw'`` returns the
+            eigenvectors of the random-walk Laplacian ``L_rw = I - D^{-1} A``,
+            obtained via the similarity ``L_rw = D^{-1/2} L_sym D^{1/2}`` so
+            ``ψ_k^{rw} = D^{-1/2} v_k^{sym}`` — the standard diffusion-map
+            basis.  When ``self.diffusion_time > 0`` the k-th coordinate is
+            further scaled by ``σ_k^t`` (where ``σ_k`` is the A_norm eigenvalue),
+            which damps fast-decaying modes and emphasises slow diffusion modes.
+
+        Notes
+        -----
+        Because the normalized Laplacian is ``L_sym = I − A_norm``, largest
+        eigenvalues of ``A_norm`` correspond to smallest of ``L_sym``; this
+        avoids shift-invert factorization, which is intractable on a 500K-node
+        graph.  On CUDA the solver is
+        ``cupyx.scipy.sparse.linalg.lobpcg``; on CPU,
+        ``scipy.sparse.linalg.eigsh(which='LA')``.
 
         Returns
         -------
         numpy.ndarray of shape (n_samples, n_components)
-            Initial embedding; the outer `_initialize_embedding` normalizes it
-            to zero mean and unit std per component.
+            Initial embedding; the outer ``_initialize_embedding`` normalizes
+            it to zero mean and unit std per component.
         """
         from scipy.sparse import csr_matrix, diags
-        self.logger.info("Initializing with spectral embedding (Laplacian eigenmaps)")
+        if kind == 'sym':
+            self.logger.info("Initializing with spectral embedding (L_sym Laplacian eigenmaps)")
+        elif kind == 'rw':
+            self.logger.info(
+                f"Initializing with diffusion map (L_rw, t={self.diffusion_time})"
+            )
+        else:
+            raise ValueError(f"Unknown spectral kind {kind!r}; expected 'sym' or 'rw'")
 
         n = self._n_samples
         k = self._knn_indices.shape[1]
@@ -742,6 +875,9 @@ class DiRePyTorch(TransformerMixin):
         A = A.maximum(A.T).tocsr()
         A.setdiag(0)
         A.eliminate_zeros()
+
+        if self.spectral_reweight == 'forman':
+            A = self._forman_reweight_adjacency(A)
 
         deg = np.asarray(A.sum(axis=1)).ravel()
         d_inv_sqrt = np.where(deg > 0, 1.0 / np.sqrt(deg), 0.0).astype(np.float32)
@@ -791,8 +927,19 @@ class DiRePyTorch(TransformerMixin):
         # are per-component indicators — these are useful for separating clusters,
         # so keep them rather than discarding (matches UMAP's spectral init).
         order = np.argsort(-vals_np)
-        vecs_np = vecs_np[:, order[1:1 + self.n_components]]
-        return vecs_np.astype(np.float32)
+        pick = order[1:1 + self.n_components]
+        vecs_sym = vecs_np[:, pick]
+
+        if kind == 'sym':
+            return vecs_sym.astype(np.float32)
+
+        # Random-walk / diffusion-map coordinates.
+        # ψ_k = D^{-1/2} v_k^{sym}, optionally scaled by σ_k^t.
+        psi = vecs_sym * d_inv_sqrt[:, None]
+        t = self.diffusion_time
+        if t and t != 0:
+            psi = psi * (vals_np[pick][None, :] ** t)
+        return psi.astype(np.float32)
 
     def _initialize_embedding(self, X):
         """
@@ -844,7 +991,17 @@ class DiRePyTorch(TransformerMixin):
             embedding = X @ projection
 
         elif self.init == 'spectral':
-            embedding = self._spectral_init()
+            embedding = self._spectral_init(kind='sym')
+
+        elif self.init == 'diffusion':
+            embedding = self._spectral_init(kind='rw')
+
+        elif self.init == 'jl':
+            self.logger.info("Initializing with Johnson-Lindenstrauss random projection")
+            rng = np.random.default_rng(self.random_state)
+            R = rng.standard_normal((X.shape[1], self.n_components)).astype(np.float32)
+            R /= np.sqrt(self.n_components)  # JL scaling for expected distance preservation
+            embedding = X @ R
 
         else:
             raise ValueError(f"Unknown init method: {self.init}")
