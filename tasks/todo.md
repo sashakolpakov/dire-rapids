@@ -39,16 +39,35 @@
 
 ## Performance (future)
 
-- [ ] **Speed up Betti curve computation via cuGraph triangle finding**
-  `compute_betti_curve_cpu` uses scipy eigsh on the sparse Laplacian of the
-  kNN complex and becomes intractable beyond ~N=2K (e.g. MNIST n=3000 ran for
-  6+ hours with no progress). cuGraph exposes a GPU `triangle_count` primitive
-  (part of the RAPIDS stack we already depend on) — per-vertex and per-edge
-  triangle counts are a common building block for the B2 rank computation and
-  the connected-components β₀ estimate. Replacing the CPU path with a
-  cuGraph-backed triangle enumerator would let us use Betti DTW as an objective
-  during hyperparameter tuning and in production ablations on real datasets.
-  Currently deferred because the CPU Betti is the blocker, not the DR pipeline.
+- [ ] **Speed up Betti curve computation — the bottleneck is boundary-matrix
+  rank reduction, NOT triangle enumeration**
+  Diagnosed 2026-04-22 while the earlier "cuGraph triangle_count" idea was
+  on the todo list. Three implementations exist in `betti_curve.py`:
+    * `compute_betti_curve_cpu` — eigsh on L₀, L₁. Hangs beyond ~N=2K because
+      `which='SM'` forces ARPACK shift-invert (sparse LU on L), same fill-in
+      catastrophe as the pre-LOBPCG spectral init.
+    * `compute_betti_curve_fast` / `_gpu` — union-find for β₀ (genuinely fast,
+      O(E α)) + dense SVD for rank(B₂). **At n=300 the dense SVD is already
+      13× slower than eigsh**, and it times out at n=1000. The "fast" name
+      is misleading.
+  Triangle counting is not the problem: `A ⊙ A²` via cupyx gives triangle
+  counts in sub-second at 500K nodes (verified during the Forman experiment).
+  Empirical test showed `rank(B₂) = T_active` (the β₂=0 shortcut that
+  would skip SVD) **fails badly** — β₂ of the 2-complex is on the order of
+  tens of thousands on n=300 data (many closed 2-surfaces in dense kNN
+  complexes). So we need the actual rank.
+  Real options:
+    (1) Depend on `ripser.py` (C++ persistent homology). Drop the `eigsh` /
+        dense-SVD paths; it's much faster at all scales and gives full
+        persistence diagrams from which Betti curves fall out.
+    (2) Hand-roll incremental column reduction over F₂: per filtration step,
+        each new edge/triangle changes rank by 0 or 1. Maintain a reduced
+        basis bitset; O(E) per step, O(E × n_steps) total.
+    (3) β₀-only mode: union-find on GPU via cupyx.csgraph.connected_components.
+        Trivially fast (ms at MNIST scale). Useful right now as an Optuna /
+        RL-harness objective that captures cluster-preservation signal
+        without the β₁ cost.
+  Prefer (3) for optimization objectives and (1) for ablation figures.
 
 ## Research Ideas
 
