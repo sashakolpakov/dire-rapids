@@ -37,6 +37,19 @@
   - High-D benchmarks (Flora 3.4x speedup)
   - Intrinsic dimension detection results
 
+## Performance (future)
+
+- [ ] **Speed up Betti curve computation via cuGraph triangle finding**
+  `compute_betti_curve_cpu` uses scipy eigsh on the sparse Laplacian of the
+  kNN complex and becomes intractable beyond ~N=2K (e.g. MNIST n=3000 ran for
+  6+ hours with no progress). cuGraph exposes a GPU `triangle_count` primitive
+  (part of the RAPIDS stack we already depend on) — per-vertex and per-edge
+  triangle counts are a common building block for the B2 rank computation and
+  the connected-components β₀ estimate. Replacing the CPU path with a
+  cuGraph-backed triangle enumerator would let us use Betti DTW as an objective
+  during hyperparameter tuning and in production ablations on real datasets.
+  Currently deferred because the CPU Betti is the blocker, not the DR pipeline.
+
 ## Research Ideas
 
 - [ ] **Deepfake detection via intrinsic dimension**
