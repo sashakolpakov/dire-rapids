@@ -64,6 +64,13 @@ Evaluate embedding quality::
 
 __version__ = "0.2.0"
 
+# Import cuML-using submodule first: cuML (and cuVS) pull shared libraries
+# that must be loaded before torch on some rapids-26.04+ setups, because
+# torch's pip-installed libnvJitLink can shadow conda's version and break
+# later cuML imports with an undefined-symbol error. `metrics` is safe to
+# import early — it has no torch dependency at module load time.
+from . import metrics
+
 # Import PyTorch backends
 from .dire_pytorch import DiRePyTorch, create_dire
 from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient
@@ -78,8 +85,7 @@ try:
 except ImportError:
     HAS_CUVS = False
 
-# Import submodules for convenient access
-from . import metrics
+# Remaining submodules for convenient access
 from . import betti_curve
 from . import presets
 from .presets import TOPOLOGY_TUNED
