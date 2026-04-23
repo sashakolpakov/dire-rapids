@@ -758,33 +758,152 @@
 
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Ripser-based persistent-homology implementation (preferred for any N &gt; ~500)</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="compute_betti_curve_ripser">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.compute_betti_curve_ripser">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_betti_curve_ripser</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">maxdim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">thresh</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Betti curves via ripser&#39;s persistent-homology reduction.</span>
+
+<span class="sd">    Much faster than the eigsh and dense-SVD paths at every scale: empirically</span>
+<span class="sd">    ~4000× on MNIST n=3000 (eigsh path hangs for hours; ripser: ~6 s). The</span>
+<span class="sd">    cost grows roughly O(N²) for maxdim=1 and O(N³) for maxdim=2, but the</span>
+<span class="sd">    constants are small thanks to cohomology + apparent-pairs sparsification.</span>
+
+<span class="sd">    Persistent-homology view: ripser returns, for each dimension, a list of</span>
+<span class="sd">    (birth, death) intervals. The Betti curve is β_d(t) = #{intervals with</span>
+<span class="sd">    birth ≤ t &lt; death} — &quot;number of d-cycles alive at filtration t&quot;.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data : array-like of shape (n_samples, n_features)</span>
+<span class="sd">        Point cloud.</span>
+<span class="sd">    n_steps : int, default=50</span>
+<span class="sd">        Number of filtration samples at which to evaluate each Betti curve.</span>
+<span class="sd">    maxdim : int, default=1</span>
+<span class="sd">        Highest homology dimension to compute. maxdim=1 returns β_0 and β_1;</span>
+<span class="sd">        maxdim=2 additionally computes β_2 at O(N³) cost.</span>
+<span class="sd">    thresh : float or None, default=None</span>
+<span class="sd">        Maximum filtration radius. None lets ripser run to its default</span>
+<span class="sd">        (≈ the enclosing radius of the data). Cap this on large data if you</span>
+<span class="sd">        only care about small-scale topology.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict : same shape as the other compute_betti_curve_* backends.</span>
+<span class="sd">        &#39;filtration_values&#39; : n_steps evenly spaced values from 0 to the</span>
+<span class="sd">            longest finite death time seen (plus a 5% margin).</span>
+<span class="sd">        &#39;beta_0&#39;, &#39;beta_1&#39; : length-n_steps arrays.</span>
+<span class="sd">        &#39;beta_2&#39; : present only if maxdim &gt;= 2.</span>
+<span class="sd">        &#39;n_edges_active&#39;, &#39;n_triangles_active&#39; : filled with NaN — ripser</span>
+<span class="sd">            does not expose these. Callers depending on the counts should</span>
+<span class="sd">            use compute_betti_curve_fast instead.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    Requires ``ripser``: install via ``pip install dire-rapids[persistent]``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">ripser</span><span class="w"> </span><span class="kn">import</span> <span class="n">ripser</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
+    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;compute_betti_curve_ripser requires ripser. &quot;</span>
+            <span class="s2">&quot;Install via `pip install dire-rapids[persistent]` &quot;</span>
+            <span class="s2">&quot;or `pip install ripser`.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">zeros</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s1">&#39;filtration_values&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">]),</span>
+            <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">zeros</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">),</span>
+            <span class="s1">&#39;n_edges_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">]),</span>
+            <span class="s1">&#39;n_triangles_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">]),</span>
+        <span class="p">}</span>
+
+    <span class="n">ripser_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;maxdim&#39;</span><span class="p">:</span> <span class="n">maxdim</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">thresh</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ripser_kwargs</span><span class="p">[</span><span class="s1">&#39;thresh&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">thresh</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">ripser</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="o">**</span><span class="n">ripser_kwargs</span><span class="p">)</span>
+    <span class="n">dgms</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="s1">&#39;dgms&#39;</span><span class="p">]</span>  <span class="c1"># list: [H0_dgm, H1_dgm, ..., H{maxdim}_dgm]</span>
+
+    <span class="c1"># Pick n_steps filtration values across the range where anything interesting</span>
+    <span class="c1"># happens. Use the longest finite death time (across all dims), plus margin.</span>
+    <span class="n">finite_deaths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dgm</span> <span class="ow">in</span> <span class="n">dgms</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dgm</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">fd</span> <span class="o">=</span> <span class="n">dgm</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">dgm</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]),</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fd</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">finite_deaths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">fd</span><span class="o">.</span><span class="n">max</span><span class="p">()))</span>
+    <span class="n">max_filt</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">finite_deaths</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1.05</span> <span class="k">if</span> <span class="n">finite_deaths</span> <span class="k">else</span> <span class="mf">1.0</span>
+    <span class="n">filtration_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">max_filt</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">betti_curve_from_dgm</span><span class="p">(</span><span class="n">dgm</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dgm</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">births</span> <span class="o">=</span> <span class="n">dgm</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">deaths</span> <span class="o">=</span> <span class="n">dgm</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">curve</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">n_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">filtration_values</span><span class="p">):</span>
+            <span class="n">curve</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(((</span><span class="n">births</span> <span class="o">&lt;=</span> <span class="n">t</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">deaths</span> <span class="o">&gt;</span> <span class="n">t</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">curve</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;filtration_values&#39;</span><span class="p">:</span> <span class="n">filtration_values</span><span class="p">,</span>
+        <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">betti_curve_from_dgm</span><span class="p">(</span><span class="n">dgms</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+        <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="p">(</span><span class="n">betti_curve_from_dgm</span><span class="p">(</span><span class="n">dgms</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dgms</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+                   <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_steps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)),</span>
+        <span class="s1">&#39;n_edges_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n_steps</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+        <span class="s1">&#39;n_triangles_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n_steps</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">),</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">maxdim</span> <span class="o">&gt;=</span> <span class="mi">2</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">dgms</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">result</span><span class="p">[</span><span class="s1">&#39;beta_2&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">betti_curve_from_dgm</span><span class="p">(</span><span class="n">dgms</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">result</span></div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
 <span class="c1"># Backend selector</span>
 <span class="c1"># ---------------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="compute_betti_curve">
 <a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.compute_betti_curve">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">compute_betti_curve</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
-                        <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                        <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">prefer_ripser</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Compute filtered Betti curve (backend selector).</span>
 
-<span class="sd">    Automatically selects GPU or CPU implementation based on availability</span>
-<span class="sd">    and use_gpu parameter.</span>
+<span class="sd">    Preference order (if available):</span>
+<span class="sd">      ripser (if ``prefer_ripser`` and ``ripser`` is installed)</span>
+<span class="sd">      → GPU rank-based path (``compute_betti_curve_gpu``) if ``use_gpu``</span>
+<span class="sd">      → fast CPU rank-based path (``compute_betti_curve_fast``) as fallback.</span>
+
+<span class="sd">    Ripser is the correct default: ~4000× faster than the eigsh path on</span>
+<span class="sd">    MNIST n=3000, and well-suited to large N; the older paths remain for</span>
+<span class="sd">    correctness cross-checks and for environments without ripser.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    data : array-like</span>
-<span class="sd">        Point cloud data (n_samples, n_features)</span>
+<span class="sd">        Point cloud data (n_samples, n_features).</span>
 <span class="sd">    k_neighbors : int</span>
-<span class="sd">        Size of local neighborhood</span>
+<span class="sd">        Size of local neighborhood (ignored by the ripser path, which uses</span>
+<span class="sd">        Vietoris-Rips filtration on the full distance matrix up to ``thresh``).</span>
 <span class="sd">    density_threshold : float</span>
-<span class="sd">        Percentile threshold for edge inclusion (0-1)</span>
+<span class="sd">        Percentile threshold for edge inclusion, 0-1 (ignored by ripser).</span>
 <span class="sd">    overlap_factor : float</span>
-<span class="sd">        Factor for expanding local neighborhoods</span>
+<span class="sd">        Factor for expanding local neighborhoods (ignored by ripser).</span>
 <span class="sd">    n_steps : int</span>
-<span class="sd">        Number of filtration steps</span>
+<span class="sd">        Number of filtration steps.</span>
 <span class="sd">    use_gpu : bool</span>
-<span class="sd">        Whether to use GPU acceleration (if available)</span>
+<span class="sd">        Whether to try the GPU rank-based path if ripser is not picked.</span>
+<span class="sd">    prefer_ripser : bool</span>
+<span class="sd">        Prefer ripser when available. Set to False to skip ripser and use</span>
+<span class="sd">        the rank-based backends only (e.g. for correctness comparison).</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -792,10 +911,16 @@
 <span class="sd">        &#39;filtration_values&#39;: array of filtration thresholds,</span>
 <span class="sd">        &#39;beta_0&#39;: array of H0 Betti numbers,</span>
 <span class="sd">        &#39;beta_1&#39;: array of H1 Betti numbers,</span>
-<span class="sd">        &#39;n_edges_active&#39;: array of active edge counts,</span>
-<span class="sd">        &#39;n_triangles_active&#39;: array of active triangle counts</span>
+<span class="sd">        &#39;n_edges_active&#39;: array of active edge counts (NaN under ripser),</span>
+<span class="sd">        &#39;n_triangles_active&#39;: array of active triangle counts (NaN under ripser)</span>
 <span class="sd">    }</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">prefer_ripser</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">compute_betti_curve_ripser</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="k">pass</span>   <span class="c1"># ripser not installed — fall through to the rank-based paths</span>
+
     <span class="k">if</span> <span class="n">use_gpu</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">compute_betti_curve_gpu</span><span class="p">(</span>

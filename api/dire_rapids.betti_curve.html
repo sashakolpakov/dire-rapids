@@ -61,6 +61,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_cpu"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_cpu()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_fast"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_fast()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_gpu"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_gpu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_ripser"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_ripser()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve()</span></code></a></li>
 </ul>
 </li>
@@ -213,20 +214,76 @@ on CPU (set operations are faster there).</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve">
-<span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve" title="Link to this definition"></a></dt>
-<dd><p>Compute filtered Betti curve (backend selector).</p>
-<p>Automatically selects GPU or CPU implementation based on availability
-and use_gpu parameter.</p>
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve_ripser">
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve_ripser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxdim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thresh</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve_ripser"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve_ripser" title="Link to this definition"></a></dt>
+<dd><p>Betti curves via ripser’s persistent-homology reduction.</p>
+<p>Much faster than the eigsh and dense-SVD paths at every scale: empirically
+~4000× on MNIST n=3000 (eigsh path hangs for hours; ripser: ~6 s). The
+cost grows roughly O(N²) for maxdim=1 and O(N³) for maxdim=2, but the
+constants are small thanks to cohomology + apparent-pairs sparsification.</p>
+<p>Persistent-homology view: ripser returns, for each dimension, a list of
+(birth, death) intervals. The Betti curve is β_d(t) = #{intervals with
+birth ≤ t &lt; death} — “number of d-cycles alive at filtration t”.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>array-like</em>) – Point cloud data (n_samples, n_features)</p></li>
-<li><p><strong>k_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Size of local neighborhood</p></li>
-<li><p><strong>density_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Percentile threshold for edge inclusion (0-1)</p></li>
-<li><p><strong>overlap_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Factor for expanding local neighborhoods</p></li>
-<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of filtration steps</p></li>
-<li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to use GPU acceleration (if available)</p></li>
+<li><p><strong>data</strong> (<em>array-like</em><em> of </em><em>shape</em><em> (</em><em>n_samples</em><em>, </em><em>n_features</em><em>)</em>) – Point cloud.</p></li>
+<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=50</em>) – Number of filtration samples at which to evaluate each Betti curve.</p></li>
+<li><p><strong>maxdim</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=1</em>) – Highest homology dimension to compute. maxdim=1 returns β_0 and β_1;
+maxdim=2 additionally computes β_2 at O(N³) cost.</p></li>
+<li><p><strong>thresh</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Maximum filtration radius. None lets ripser run to its default
+(≈ the enclosing radius of the data). Cap this on large data if you
+only care about small-scale topology.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p><strong>dict</strong> –</p>
+<dl class="simple">
+<dt>‘filtration_values’<span class="classifier">n_steps evenly spaced values from 0 to the</span></dt><dd><p>longest finite death time seen (plus a 5% margin).</p>
+</dd>
+</dl>
+<p>’beta_0’, ‘beta_1’ : length-n_steps arrays.
+‘beta_2’ : present only if maxdim &gt;= 2.
+‘n_edges_active’, ‘n_triangles_active’ : filled with NaN — ripser</p>
+<blockquote>
+<div><p>does not expose these. Callers depending on the counts should
+use compute_betti_curve_fast instead.</p>
+</div></blockquote>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>same shape as the other compute_betti_curve_* backends.</p>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Requires <code class="docutils literal notranslate"><span class="pre">ripser</span></code>: install via <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">dire-rapids[persistent]</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve">
+<span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefer_ripser</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve" title="Link to this definition"></a></dt>
+<dd><p>Compute filtered Betti curve (backend selector).</p>
+<dl class="simple">
+<dt>Preference order (if available):</dt><dd><p>ripser (if <code class="docutils literal notranslate"><span class="pre">prefer_ripser</span></code> and <code class="docutils literal notranslate"><span class="pre">ripser</span></code> is installed)
+→ GPU rank-based path (<code class="docutils literal notranslate"><span class="pre">compute_betti_curve_gpu</span></code>) if <code class="docutils literal notranslate"><span class="pre">use_gpu</span></code>
+→ fast CPU rank-based path (<code class="docutils literal notranslate"><span class="pre">compute_betti_curve_fast</span></code>) as fallback.</p>
+</dd>
+</dl>
+<p>Ripser is the correct default: ~4000× faster than the eigsh path on
+MNIST n=3000, and well-suited to large N; the older paths remain for
+correctness cross-checks and for environments without ripser.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>array-like</em>) – Point cloud data (n_samples, n_features).</p></li>
+<li><p><strong>k_neighbors</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Size of local neighborhood (ignored by the ripser path, which uses
+Vietoris-Rips filtration on the full distance matrix up to <code class="docutils literal notranslate"><span class="pre">thresh</span></code>).</p></li>
+<li><p><strong>density_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Percentile threshold for edge inclusion, 0-1 (ignored by ripser).</p></li>
+<li><p><strong>overlap_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Factor for expanding local neighborhoods (ignored by ripser).</p></li>
+<li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of filtration steps.</p></li>
+<li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to try the GPU rank-based path if ripser is not picked.</p></li>
+<li><p><strong>prefer_ripser</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Prefer ripser when available. Set to False to skip ripser and use
+the rank-based backends only (e.g. for correctness comparison).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -234,8 +291,8 @@ and use_gpu parameter.</p>
 <li><p><strong>dict</strong> (<em>{</em>) – ‘filtration_values’: array of filtration thresholds,
 ‘beta_0’: array of H0 Betti numbers,
 ‘beta_1’: array of H1 Betti numbers,
-‘n_edges_active’: array of active edge counts,
-‘n_triangles_active’: array of active triangle counts</p></li>
+‘n_edges_active’: array of active edge counts (NaN under ripser),
+‘n_triangles_active’: array of active triangle counts (NaN under ripser)</p></li>
 <li><p><em>}</em></p></li>
 </ul>
 </p>
