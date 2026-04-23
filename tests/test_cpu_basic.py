@@ -327,6 +327,20 @@ class TestDiRePyTorchNormalization:
             f"({ratio_rand:.2f}) on separable blobs"
         )
 
+    def test_topology_tuned_preset_importable_and_usable(self):
+        """TOPOLOGY_TUNED preset is exposed and produces a valid embedding."""
+        from dire_rapids import TOPOLOGY_TUNED, presets  # noqa: F401
+        assert isinstance(TOPOLOGY_TUNED, dict)
+        assert TOPOLOGY_TUNED['init'] == 'spectral'
+        assert TOPOLOGY_TUNED['spread'] > 2.0   # the signature deviation from default
+        X, _ = make_blobs(n_samples=120, n_features=10, centers=3, random_state=0)
+        # Override max_iter_layout for test speed (preset default is higher).
+        cfg = {**TOPOLOGY_TUNED, 'max_iter_layout': 20}
+        model = DiRePyTorch(n_components=2, verbose=False, random_state=0, **cfg)
+        emb = model.fit_transform(X)
+        assert emb.shape == (120, 2)
+        assert np.all(np.isfinite(emb))
+
     def test_normalize_false_preserves_old_behavior(self):
         """normalize=False should leave _data untouched, for back-compat."""
         X = np.full((40, 10), 7.0, dtype=np.float32)

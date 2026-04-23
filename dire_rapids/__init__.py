@@ -81,6 +81,8 @@ except ImportError:
 # Import submodules for convenient access
 from . import metrics
 from . import betti_curve
+from . import presets
+from .presets import TOPOLOGY_TUNED
 
 # Build __all__ based on available modules
 __all__ = [
@@ -91,6 +93,8 @@ __all__ = [
     'ReducerConfig',
     'metrics',
     'betti_curve',
+    'presets',
+    'TOPOLOGY_TUNED',
 ]
 if HAS_CUVS:
     __all__.append('DiReCuVS')
