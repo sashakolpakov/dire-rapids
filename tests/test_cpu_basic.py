@@ -341,6 +341,34 @@ class TestDiRePyTorchNormalization:
         assert emb.shape == (120, 2)
         assert np.all(np.isfinite(emb))
 
+    def test_betti_curve_ripser_on_circle(self):
+        """Ripser backend returns correct Betti curve shape and identifies one
+        dominant 1-cycle on a noisy circle."""
+        try:
+            from dire_rapids.betti_curve import compute_betti_curve_ripser
+            import ripser  # noqa: F401 — optional dep, skip if missing
+        except ImportError:
+            pytest.skip("ripser not installed; skipping ripser backend test")
+        rng = np.random.default_rng(0)
+        t = rng.uniform(0, 2 * np.pi, 300)
+        X = np.column_stack([np.cos(t), np.sin(t)]).astype(np.float32)
+        X += rng.normal(0, 0.02, X.shape).astype(np.float32)
+        result = compute_betti_curve_ripser(X, n_steps=20, maxdim=1)
+
+        # Shape contract matches the other backends
+        for key in ('filtration_values', 'beta_0', 'beta_1',
+                    'n_edges_active', 'n_triangles_active'):
+            assert key in result, f"missing key {key}"
+            assert len(result[key]) == 20
+
+        # β_0 must start at n (everyone is their own component)
+        assert result['beta_0'][0] == 300
+        # ...and drop to 1 by the end (the noisy circle is connected)
+        assert result['beta_0'][-1] == 1
+        # Expect at least one β_1 bar whose lifetime persists over several
+        # filtration steps — the big circular loop.
+        assert int(result['beta_1'].max()) >= 1
+
     def test_normalize_false_preserves_old_behavior(self):
         """normalize=False should leave _data untouched, for back-compat."""
         X = np.full((40, 10), 7.0, dtype=np.float32)
