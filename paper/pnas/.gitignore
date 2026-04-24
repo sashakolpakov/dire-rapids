@@ -1,0 +1,10 @@
+# LaTeX build artifacts — keep main.pdf for review, drop the rest.
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.fdb_latexmk
+*.fls
+*.synctex.gz

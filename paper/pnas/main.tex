@@ -1,0 +1,407 @@
+% PNAS-style skeleton. Self-contained; compiles with stock LaTeX.
+% Port to the official pnas-new.cls / PNAS Overleaf template at submission time.
+
+\documentclass[twocolumn,9pt]{article}
+
+\usepackage[letterpaper,margin=0.75in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage[numbers,sort&compress]{natbib}
+\bibliographystyle{unsrtnat}
+
+% PNAS-like Significance Statement box.
+% Simple significance block — migrate to \significancestatement{...} when
+% porting to the official PNAS class.
+\newenvironment{significance}
+  {\par\medskip\noindent
+    \rule{\columnwidth}{0.5pt}\par
+    \noindent\textbf{Significance Statement.}\par\noindent\ignorespaces}
+  {\par\noindent\rule{\columnwidth}{0.5pt}\par\medskip}
+
+\title{DiRe: Topology-faithful dimensionality reduction at scale}
+
+\author{Alexander Kolpakov\thanks{University of Austin, Austin TX, USA. \texttt{akolpakov@uaustin.org}}
+  \and Igor Rivin\thanks{Temple University, Philadelphia PA, USA. \texttt{rivin@temple.edu}}}
+
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{significance}
+Dimensionality reduction methods like UMAP and t-SNE are central tools for
+visualising high-dimensional data, but both preserve local neighborhoods
+aggressively at the cost of faithfully representing global structure --- in
+particular the topological invariants (connected components, cycles, voids)
+of the underlying manifold. We show that the standard local-neighborhood
+evaluation metric rewards noise memorisation, and that the best-performing
+methods under that metric systematically invent cycles and voids that are
+not in the data. We introduce a direct topology-faithfulness benchmark
+based on noisy manifolds with known homology, tune a force-directed method
+(DiRe) against it, and report Pareto-optimal configurations that
+simultaneously match or beat GPU-accelerated UMAP on classification and
+recover exact first-Betti-number on stress tests. Applied to 723K arXiv
+paper embeddings the same method preserves 3--4$\times$ more topological
+structure than UMAP in the same wall-clock time.
+\end{significance}
+
+\begin{abstract}
+\noindent We revisit the evaluation of dimensionality-reduction algorithms
+in light of the observation that metrics based on $k$-nearest-neighbor
+preservation reward faithful reproduction of sampling noise as well as
+manifold structure. We propose a direct replacement: \emph{topology error}
+on noisy-manifold stress tests, measuring deviation from known first Betti
+numbers in the 2-D embedding via \texttt{ripser}-computed persistence
+diagrams. Using this metric alongside classification accuracy as objectives
+in a multi-objective NSGA-II search, we tune the DiRe force-directed
+embedding method and compare against GPU-accelerated cuML UMAP on 11
+OpenML datasets and on a 723-thousand-paper arXiv embedding corpus. On 7
+of 11 OpenML datasets, tuned DiRe strictly Pareto-dominates cuML UMAP on
+both axes; on \emph{every} dataset, a DiRe configuration exists that
+recovers exact first Betti numbers on both stress manifolds while UMAP
+never drops below a topology error of 5. On the arXiv corpus, DiRe
+preserves 3--4$\times$ more topological structure (Betti-curve DTW
+distance) than UMAP at comparable wall-clock (20\,s vs 32\,s for 723K
+points on a single H100-class GPU). The resulting hyperparameter preset
+is published as part of the open-source DiRe library.
+\end{abstract}
+
+% =========================================================================
+\section{Introduction}
+% =========================================================================
+\label{sec:intro}
+
+Dimensionality reduction methods such as t-SNE \citep{tsne} and UMAP
+\citep{umap} are the standard tools for two-dimensional visualisation of
+high-dimensional datasets, from single-cell expression profiles to language
+model embeddings. Both methods optimise a local-neighborhood-preservation
+objective: the embedding is good to the extent that each point's $k$
+nearest neighbors in the original space remain its $k$ nearest neighbors
+in the embedding. This design emphasises cluster structure and short-range
+relationships, and both methods are effective at it.
+
+The local objective is, however, known to come at the expense of global
+and topological structure. UMAP in particular produces embeddings whose
+2-D layouts introduce gaps, folds, and spurious cycles that are not in
+the underlying data \citep{pachter,chari-pachter-2023}. These artefacts
+are visually striking and scientifically misleading: two papers appearing
+in separate UMAP islands need not be more dissimilar than two papers in
+the same island, yet published biological UMAPs are routinely read as
+though they were.
+
+We make three contributions. First, we argue that the local-neighborhood
+metric rewards reproduction of sampling noise as well as manifold
+structure. We demonstrate this by sweeping noise level on manifolds with
+known topology and showing that UMAP's $\beta_1$ estimate tracks the
+inflating noisy-sample $\beta_1$, while a force-directed alternative
+(DiRe, \citep{dire-joss}) stays near the theoretical value
+(Figure~\ref{fig:noise-sweep}).
+
+Second, we propose \emph{topology error} --- the absolute deviation of
+$\beta_1$ in the 2-D embedding from the known $\beta_1$ of a fixed pair
+of stress manifolds --- as a direct, scale-invariant measurement of
+topological faithfulness. Using NSGA-II multi-objective optimisation over
+hyperparameters with $k$-NN classification accuracy maximised and topology
+error minimised, we produce Pareto fronts for DiRe across 11 OpenML
+datasets. We observe strict Pareto dominance of cuML UMAP on 7 of 11; on
+\emph{every} dataset there exist DiRe configurations that reach topology
+error 0 (Figure~\ref{fig:pareto}).
+
+Third, we apply the tuned method to 723\,457 arXiv papers embedded in
+$\mathbb{R}^{384}$. DiRe preserves the reference Betti curves of the
+high-dimensional corpus 3--4$\times$ more faithfully than UMAP
+(Figure~\ref{fig:arxiv}) in comparable wall-clock.
+
+% =========================================================================
+\section{Method}
+% =========================================================================
+\label{sec:method}
+
+\subsection{The DiRe embedding}
+DiRe \citep{dire-joss,dire-rapids} is a three-stage method. (i) A $k$-NN
+graph of the input point cloud is computed on the GPU via cuVS
+\citep{cuvs}. (ii) An initial low-dimensional embedding is produced by
+one of: Principal Component Analysis, Laplacian Eigenmaps via LOBPCG on
+the normalised adjacency \citep{lobpcg}, diffusion maps
+\citep{coifman-diffusion-maps}, or Johnson--Lindenstrauss random
+projection \citep{jl}. (iii) A force-directed layout refines the
+embedding using an attractive/repulsive potential
+\[
+\Phi_{\text{att}}(d) = \log(1 + a\, d^{2b}),
+\qquad
+\Phi_{\text{rep}}(d) = -\log\!\left( \tfrac{a\, d^{2b}}{1 + a\, d^{2b}} \right),
+\]
+with $(a, b)$ fit from \emph{spread} and \emph{min\_dist} parameters, but
+evaluated with a \emph{bounded} force kernel and accumulated in mixed
+precision for efficient GPU execution. The full pipeline is available in
+\texttt{dire-rapids}, with \texttt{init='spectral'} the effective default
+from the studies reported below.
+
+\subsection{Why local-neighborhood metrics can be misleading}
+The standard $k$-NN preservation metric rewards an embedding for matching
+the \emph{exact} set of $k$ nearest neighbors of each point. On a noisy
+sampled manifold, which specific $k$ points are closest depends both on
+the manifold geometry and on the noise draw. An embedding that crinkles
+itself to reproduce both the signal and the noise scores higher than one
+that preserves only the signal. Section~\ref{sec:results}
+(Figure~\ref{fig:noise-sweep}) shows this quantitatively on figure-8.
+
+\subsection{Topology error}
+We define \emph{topology error} as a single scalar:
+\begin{equation}
+\mathrm{TE} = \sum_{M \in \mathcal{M}}
+              \bigl| \beta_1^{\text{embed}}(M) - \beta_1^{\text{true}}(M) \bigr|
+\label{eq:te}
+\end{equation}
+over a fixed stress-test set $\mathcal{M}$. In this work
+$\mathcal{M} = \{\text{figure-8 at } \sigma = 0.2,\ \text{torus}^2 \text{ at } \sigma = 0.05\}$,
+both with theoretical $\beta_1 = 2$. The noisier figure-8 tests
+robustness to sampling noise; the torus tests whether the method can
+represent a 2-manifold with two independent cycles in two dimensions.
+$\beta_1^{\text{embed}}$ is measured by running \texttt{ripser}
+\citep{ripser} on the embedding, converting the persistence diagram to
+Betti curves, and counting significant bars (persistence $\geq 0.3$ of
+maximum persistence).
+
+\subsection{Multi-objective hyperparameter search}
+For each benchmark dataset we run an NSGA-II study \citep{nsga2} with two
+objectives: maximise 2-D $k$-NN classification accuracy on the dataset,
+minimise the topology error of Equation~\ref{eq:te}. The search space
+covers initialization method (\{pca, spectral, diffusion, jl\}),
+$k$-neighbors $\in [8,48]$, cutoff $\in [2,42]$, spread $\in [0.5,4.0]$,
+min\_dist $\in [10^{-4}, 10^{-1}]$, negative-sample ratio $\in [2,32]$,
+and layout iterations $\in [64,256]$. We run 150--200 trials per dataset
+with a population of 25. The Pareto front is compared against default
+DiRe configurations and cuML UMAP at default hyperparameters.
+
+% =========================================================================
+\section{Results}
+% =========================================================================
+\label{sec:results}
+
+\subsection{Noise-robustness discriminator}
+\label{sec:noise}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig1_noise_sweep.pdf}
+\caption{As sampling noise grows, the noisy point-cloud's $\beta_1$ count
+inflates sharply (from 2 at $\sigma = 0.01$ to $\approx 38$ at $\sigma =
+0.2$). UMAP's embedding partially tracks this inflation ($\beta_1 \approx
+7.7$ at $\sigma = 0.2$); DiRe's embedding stays close to the theoretical
+value ($\beta_1 \approx 2.5$ at $\sigma = 0.2$). This is the effect of
+UMAP memorising noise that nbr@$k$-style metrics reward.}
+\label{fig:noise-sweep}
+\end{figure}
+
+Table~\ref{tab:noise} reports $\beta_1$ bar counts on noisy figure-8
+samples (1000 points, 10 seeds per $\sigma$). The naive noisy-sample
+$\beta_1$ climbs from 2.0 at $\sigma = 0.01$ to 38.4 at $\sigma = 0.2$.
+DiRe-pca rises only to 2.5; cuML UMAP rises to 7.7.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+$\sigma$ & noisy-sample & DiRe-pca & DiRe-spec & cuML UMAP \\
+\midrule
+0.01 & 2.0 & 2.1 & 2.0 & 2.2 \\
+0.02 & 2.0 & 2.0 & 1.9 & 1.5 \\
+0.05 & 2.0 & 1.9 & 2.0 & 1.9 \\
+0.10 & 2.1 & 1.9 & 1.8 & 1.9 \\
+0.20 & \textbf{38.4} & \textbf{2.5} & \textbf{3.0} & \textbf{7.7} \\
+\bottomrule
+\end{tabular}
+\caption{$\beta_1$ significant-bar count on figure-8 (theoretical
+$\beta_1 = 2$). Each entry is mean over 10 seeds at 1000 points.}
+\label{tab:noise}
+\end{table}
+
+\subsection{Pareto dominance on 11 OpenML datasets}
+\label{sec:pareto}
+
+\begin{table*}[t]
+\centering
+\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Dataset & UMAP $k$NN & UMAP TE & best $k$NN (TE) & best TE ($k$NN) & UMAP dominated by \\
+\midrule
+mfeat-factors   & 0.893 & 5 & \textbf{0.915} (7) & \textbf{0.907} (0) & 3/4 \\
+satimage        & 0.883 & 5 & 0.876 (2) & 0.874 (\textbf{0}) & 0/2 \\
+pendigits       & \textbf{0.987} & 5 & 0.985 (1) & 0.984 (\textbf{0}) & 0/2 \\
+isolet          & 0.810 & 5 & \textbf{0.842} (11) & \textbf{0.833} (\textbf{0}) & 2/3 \\
+HAR             & 0.918 & 5 & \textbf{0.936} (6) & \textbf{0.925} (\textbf{0}) & 3/4 \\
+letter          & 0.875 & 5 & \textbf{0.895} (13) & 0.872 (\textbf{0}) & 3/7 \\
+magic           & \textbf{0.766} & 5 & 0.762 (7) & 0.748 (\textbf{0}) & 0/8 \\
+MNIST           & \textbf{0.970} & 5 & 0.961 (1) & 0.960 (\textbf{0}) & 0/2 \\
+Fashion-MNIST   & 0.782 & 5 & \textbf{0.798} (2) & \textbf{0.792} (\textbf{0}) & 3/3 \\
+connect-4       & 0.648 & 5 & \textbf{0.663} (1) & \textbf{0.652} (\textbf{0}) & 2/2 \\
+covertype       & 0.695 & 5 & \textbf{0.727} (4) & \textbf{0.715} (\textbf{0}) & 3/3 \\
+\bottomrule
+\end{tabular}
+\caption{NSGA-II Pareto search for DiRe versus cuML UMAP on 11 OpenML
+datasets. Objectives: maximise $k$NN accuracy in 2-D, minimise topology
+error (Equation~\ref{eq:te}). Bold entries indicate a strict improvement
+over UMAP on that axis. \emph{UMAP dominated by} reports the number of
+Pareto trials that strictly dominate cuML UMAP on both axes
+simultaneously. On every dataset there exists a DiRe configuration with
+topology error 0; cuML UMAP never falls below 5.}
+\label{tab:pareto}
+\end{table*}
+
+Table~\ref{tab:pareto} summarises the outcome of 150-trial NSGA-II
+searches on 11 OpenML datasets. On 7 of 11 datasets a Pareto-optimal DiRe
+configuration strictly dominates cuML UMAP on both $k$NN accuracy and
+topology error. On all 11 datasets, a DiRe configuration exists that
+reaches topology error 0 (exact Betti recovery on both stress manifolds);
+cuML UMAP never reaches topology error below 5.
+
+Across the four Pareto studies run on different datasets, the
+Pareto-optimal hyperparameters converge on a consistent region:
+\texttt{init='spectral'}, \texttt{spread} $\in [2.0, 3.9]$ (vs default
+1.0), \texttt{max\_iter\_layout} $\in [125, 242]$ (vs default 128),
+\texttt{n\_neighbors} $\in [10, 30]$. We publish this region as a preset,
+\texttt{dire\_rapids.presets.TOPOLOGY\_TUNED}, available with
+\texttt{from dire\_rapids import TOPOLOGY\_TUNED; DiRePyTorch(**TOPOLOGY\_TUNED)}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig2_pareto_covertype.pdf}
+\caption{Pareto front from the 200-trial NSGA-II study on covertype
+(N = 581\,012, D = 54). All three Pareto-optimal DiRe trials strictly
+dominate cuML UMAP on both kNN accuracy (higher) and topology error
+(lower). The best-topology trial achieves topology error 0 at $k$NN
+= 0.715, a +2\,pp absolute kNN improvement over cuML UMAP.}
+\label{fig:pareto}
+\end{figure}
+
+\subsection{arXiv paper embeddings}
+\label{sec:arxiv}
+
+As a real-world stress test we embed 723\,457 arXiv papers into two
+dimensions, starting from 384-dimensional chunk-mean BGE-small-en-v1.5
+embeddings \citep{bge-small} of the abstracts and full texts. Reference
+Betti curves are computed on the 384-D point cloud on stratified samples
+of $N = 4000$ and averaged over three seeds.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+                            & DiRe       & cuML UMAP  & ratio \\
+\midrule
+$\beta_0$ DTW (lower better) & \textbf{3338} $\pm$ 832 & 10429 $\pm$ 466 & 3.1 \\
+$\beta_1$ DTW (lower better) & \textbf{218} $\pm$ 34   & 818 $\pm$ 328   & 3.8 \\
+Trustworthiness             & 0.796 & \textbf{0.869} & --- \\
+$k$NN-preservation@15       & 0.74  & \textbf{0.82}  & --- \\
+Wall-clock (GH200)          & 20.3\,s & 32.4\,s    & 1.6 \\
+\bottomrule
+\end{tabular}
+\caption{723\,457 arXiv papers, 384-D embeddings $\to$ 2-D. DiRe
+preserves 3--4$\times$ more topological structure than UMAP (measured by
+Betti-curve DTW distance between reference and layout). UMAP wins on
+local-neighborhood metrics, consistent with the noise-memorisation
+account from Section~\ref{sec:noise}. DiRe is 1.6$\times$ faster.}
+\label{tab:arxiv}
+\end{table}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/fig3_arxiv_layouts.pdf}
+\caption{arXiv-paper 2-D layout, DiRe (left) vs cuML UMAP (right),
+coloured by primary arXiv category. Both methods recover category
+structure; UMAP produces tighter but more fragmented islands with
+visible gaps in long-range category similarity (e.g.\ math.DG vs
+math.SG). DiRe's layout is smoother and preserves the inter-category
+topology of the reference 384-D point cloud more faithfully.}
+\label{fig:arxiv}
+\end{figure*}
+
+% =========================================================================
+\section{Discussion}
+% =========================================================================
+\label{sec:discuss}
+
+Our results argue for two methodological shifts in how dimensionality
+reduction is evaluated and deployed. First, local-neighborhood
+preservation metrics are \emph{necessary but not sufficient}: they can be
+gamed by methods that faithfully reproduce noise, and they rank those
+methods above alternatives that produce globally more faithful
+embeddings. Topology error on known manifolds gives a direct, scale-free
+check for noise reproduction versus manifold preservation. Second, the
+hyperparameter defaults shipped with force-directed methods deserve the
+same multi-objective scrutiny that large models get --- the 1.0 spread
+default in DiRe turns out to be off by a factor of 3.6 for
+topology-faithful embedding, discoverable in under 15 minutes of NSGA-II
+on a single GPU.
+
+\textbf{Limitations.} Ripser's maxdim=2 cost grows as $O(N^3)$, which
+confined our topology objective to $\beta_0$ and $\beta_1$ on $N = 1000$
+stress samples. Scaling the topology objective to higher-dimensional
+homology at larger $N$ requires GPU-native persistent-homology
+infrastructure, which to our knowledge does not yet exist at research-grade
+reliability for dimensions $\geq 2$. Our present 2-D/3-D embedding
+comparisons do not probe $\beta_k$ for $k \geq 3$ in the original data.
+
+\textbf{Reproducibility.} All experiments are reproducible via
+\texttt{benchmarking/bench\_topology\_pareto.py} in the
+\texttt{dire-rapids} open-source package. The preset is in
+\texttt{dire\_rapids.presets.TOPOLOGY\_TUNED}. arXiv-corpus-specific
+code, including the BGE embedding pipeline and stratified Betti
+evaluation, is in the companion \texttt{dire-rapids-arxiv} repository.
+
+% =========================================================================
+\section{Materials and Methods}
+% =========================================================================
+\label{sec:methods}
+
+\textbf{Hardware and software.} All benchmarks run on a single NVIDIA
+GH200 GPU under conda env \texttt{rapids-26.04} (Python 3.14, PyTorch
+2.11, RAPIDS 26.04). DiRe is implemented in \texttt{dire-rapids} v0.2.0.
+UMAP baseline: cuML 26.04 with default hyperparameters ($k = 16$). TSNE
+baseline: cuML 26.04 with default perplexity. Topology: ripser 0.6.14
+via ripser.py.
+
+\textbf{Preprocessing.} DiRe's default pipeline mean-centres the input
+and rescales by the global maximum absolute value, bringing all features
+to $[-1, 1]$. This normalisation is translation- and scale-invariant for
+Euclidean $k$-NN and avoids squared-distance overflow in fp16 $k$-NN
+computation on un-normalised high-D inputs. UMAP is fed the same
+normalised inputs for fair comparison.
+
+\textbf{Topology-error metric.} Stress manifolds: figure-8 (a lemniscate,
+$\beta_1 = 2$) sampled at $\sigma = 0.2$ Gaussian noise, and a standard
+torus ($R = 2$, $r = 1$, $\beta_1 = 2$) at $\sigma = 0.05$. Both sampled
+with 1000 points. For each trial, ripser maxdim=1 is run on the 2-D
+embedding; the first-Betti curve is extracted, and the number of
+significant bars (persistence $\geq 0.3 \times$ max persistence) is
+recorded. Topology error for a trial is
+$|b_1^{\text{fig-8}} - 2| + |b_1^{\text{torus}} - 2|$.
+
+\textbf{Pareto search.} optuna 4.x NSGA-II sampler, population 25,
+seed 0. 150--200 trials per dataset. Search space in
+Section~\ref{sec:method}. Each trial fits DiRe on the target dataset,
+computes $k$NN accuracy with \texttt{KNeighborsClassifier}(15) on a
+fixed 70/30 train/test split, and computes topology error on the
+stress manifolds. Missing-value rows in OpenML datasets are dropped.
+
+\textbf{arXiv corpus.} 723\,457 arXiv papers embedded with
+BAAI/bge-small-en-v1.5 \citep{bge-small}, chunk-level embeddings
+mean-pooled per paper to a 384-D vector. Reference Betti curves: ripser
+maxdim=1 on stratified samples of $N \in \{1000, 4000\}$, averaged over
+three seeds. Embedding Betti curves: ripser on the 2-D layout at the
+same stratified sample indices. DTW distance: \texttt{fastdtw} on the
+Betti curve time series.
+
+\section*{Acknowledgements}
+This work was supported by the Google Cloud Research Award GCP19980904.
+
+\bibliography{refs}
+
+\end{document}
