@@ -20,4 +20,8 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        pylint --output-format=colorized --rcfile=.pylintrc $(git ls-files '*.py' || echo "no-python-files-yet.py")
+        # Lint the library only. `benchmarking/` is ad-hoc research code
+        # (missing docstrings, broad excepts that are deliberate, etc.) and
+        # shouldn't gate the CI; `tests/` has its own stylistic conventions.
+        pylint --output-format=colorized --rcfile=.pylintrc \
+            $(git ls-files 'dire_rapids/*.py' || echo "no-python-files-yet.py")

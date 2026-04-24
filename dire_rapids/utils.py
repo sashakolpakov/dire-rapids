@@ -208,6 +208,10 @@ def _load_file(path, **kwargs):
     path = str(path)
     ext = Path(path).suffix.lower()
 
+    # pandas is an optional dep (ships in [viz]). Import lazily so users
+    # who never touch tabular file formats don't need it installed.
+    import pandas as pd  # pylint: disable=import-outside-toplevel
+
     if ext == ".csv":
         df = pd.read_csv(path)
         label_col = kwargs.pop("label_column", None)
@@ -387,6 +391,10 @@ def _load_cytof(name, **kwargs):
       - drop_columns
       - arcsinh_cofactor (if raw)
     """
+
+    # pandas ships in the [viz] extra; import lazily so users who never load
+    # CyTOF datasets don't need it installed.
+    import pandas as pd  # pylint: disable=import-outside-toplevel
 
     key = _normalize_key(name)
     spec = _CYTOF_REGISTRY.get(key)
