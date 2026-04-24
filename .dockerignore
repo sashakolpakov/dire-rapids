@@ -1,0 +1,38 @@
+# Keep the build context and final image small and deterministic.
+
+# VCS + tool state
+.git
+.github
+.gitignore
+.claude
+
+# Build artifacts
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+.coverage
+coverage.xml
+htmlcov
+build
+dist
+
+# Editor state
+.vscode
+.idea
+*.swp
+
+# Large / irrelevant at runtime
+paper
+docs
+*.pdf
+*.zip
+*.tar.gz
+*.h5
+*.npy
+*.npz
+*.parquet
+
+# Local notebooks' checkpoints
+.ipynb_checkpoints
