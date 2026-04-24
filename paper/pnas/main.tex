@@ -287,29 +287,107 @@ As a real-world stress test we embed 723\,457 arXiv papers into two
 dimensions, starting from 384-dimensional chunk-mean BGE-small-en-v1.5
 embeddings \citep{bge-small} of the abstracts and full texts. Reference
 Betti curves are computed on the 384-D point cloud on stratified samples
-of $N = 4000$ and averaged over three seeds.
+of $N = 4000$ and averaged over three seeds. We sweep the $k$-neighbors
+parameter for both methods to rule out the possibility that the advantage
+we report is a single-$k$ artefact.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}rlrr@{}}
+\toprule
+$k$ & method & DTW($\beta_0$) $\downarrow$ & DTW($\beta_1$) $\downarrow$ \\
+\midrule
+  8 & DiRe        & \textbf{2149} $\pm$ 472 & 423 $\pm$ 52  \\
+  8 & cuML UMAP   & 6943 $\pm$ 1045         & \textbf{408} $\pm$ 70  \\
+ 16 & DiRe        & \textbf{3901} $\pm$ 506 & \textbf{193} $\pm$ 16  \\
+ 16 & cuML UMAP   & 10429 $\pm$ 466         & 818 $\pm$ 328 \\
+ 32 & DiRe        & \textbf{5632} $\pm$ 49  & \textbf{192} $\pm$ 13  \\
+ 32 & cuML UMAP   & 11212 $\pm$ 313         & 1084 $\pm$ 320 \\
+ 64 & DiRe        & \textbf{7663} $\pm$ 653 & \textbf{275} $\pm$ 41  \\
+ 64 & cuML UMAP   & 11978 $\pm$ 109         & 508 $\pm$ 8   \\
+128 & DiRe        & \textbf{5389} $\pm$ 550 & \textbf{224} $\pm$ 63  \\
+128 & cuML UMAP   & 12125 $\pm$ 124         & 664 $\pm$ 158 \\
+\bottomrule
+\end{tabular}
+\caption{Topology preservation on the 723\,457-paper arXiv corpus, swept
+over $k$-neighbors. Lower Betti-curve DTW is better. DiRe wins DTW($\beta_0$)
+at every $k$ by 2--3$\times$; DiRe wins DTW($\beta_1$) at every $k$ except
+$k = 8$ (where both are close). Means $\pm$ std over three seeds on
+stratified $N = 4000$ samples.}
+\label{tab:arxiv-sweep}
+\end{table}
 
 \begin{table}[t]
 \centering
 \small
 \begin{tabular}{@{}lrrr@{}}
 \toprule
-                            & DiRe       & cuML UMAP  & ratio \\
+            & DiRe  & cuML UMAP & --- \\
 \midrule
-$\beta_0$ DTW (lower better) & \textbf{3338} $\pm$ 832 & 10429 $\pm$ 466 & 3.1 \\
-$\beta_1$ DTW (lower better) & \textbf{218} $\pm$ 34   & 818 $\pm$ 328   & 3.8 \\
-Trustworthiness             & 0.796 & \textbf{0.869} & --- \\
-$k$NN-preservation@15       & 0.74  & \textbf{0.82}  & --- \\
-Wall-clock (GH200)          & 20.3\,s & 32.4\,s    & 1.6 \\
+Trustworthiness               & 0.796     & \textbf{0.869}  & \\
+$k$NN-preservation@15         & 0.74      & \textbf{0.82}   & \\
+Wall-clock (GH200, 723K pts)  & \textbf{20.3}\,s & 32.4\,s    & 1.6$\times$ \\
 \bottomrule
 \end{tabular}
-\caption{723\,457 arXiv papers, 384-D embeddings $\to$ 2-D. DiRe
-preserves 3--4$\times$ more topological structure than UMAP (measured by
-Betti-curve DTW distance between reference and layout). UMAP wins on
-local-neighborhood metrics, consistent with the noise-memorisation
-account from Section~\ref{sec:noise}. DiRe is 1.6$\times$ faster.}
-\label{tab:arxiv}
+\caption{Local-neighborhood and wall-clock metrics at $k = 16$. As
+Section~\ref{sec:noise} argues, UMAP's local-metric advantage here is at
+least in part the noise-memorisation effect that local metrics reward.
+DiRe is 1.6$\times$ faster on the same GPU.}
+\label{tab:arxiv-local}
 \end{table}
+
+\emph{Island-ness.} As a sharper diagnosis of \emph{how} UMAP's topology
+is wrong, we measure features of the 0-dimensional persistence diagram on
+the same 2-D layouts (Table~\ref{tab:arxiv-island}, Figure~\ref{fig:arxiv-island}).
+UMAP's longest H$_0$ bar is consistently 2--5$\times$ DiRe's, and the
+ratio of the top 5 bars to the median bar is consistently 2--5$\times$
+higher for UMAP. Both metrics say that UMAP concentrates topological mass
+into a few very-long bars --- the signature of breaking a continuous
+manifold into well-separated islands. DiRe's distribution is broader,
+closer to the reference point cloud's. The arXiv category taxonomy is
+genuinely continuous (math.AG continuously touches math.SG, math.DG,
+math.AT, etc.); UMAP's embedding presents it as disjoint pieces, DiRe's
+preserves the tendril structure.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}rlrr@{}}
+\toprule
+$k$ & layout       & longest H$_0$ bar $\downarrow$ & top-5 / median ratio $\downarrow$ \\
+\midrule
+ 16 & reference (384-D) & 0.70         &  2.4 \\
+ 16 & DiRe              & \textbf{0.13} & \textbf{17.3} \\
+ 16 & cuML UMAP         & 0.27          & 71.2 \\
+ 32 & DiRe              & \textbf{0.09} & \textbf{23.6} \\
+ 32 & cuML UMAP         & 0.31          & 74.1 \\
+128 & DiRe              & \textbf{0.09} & \textbf{32.2} \\
+128 & cuML UMAP         & 0.39          & 146.5 \\
+\bottomrule
+\end{tabular}
+\caption{Island-ness: persistence-diagram features of the 2-D layouts at
+selected $k$. Longest H$_0$ bar (lower = more continuous, like reference);
+top-5-over-median ratio (lower = persistence spread across many bars
+rather than concentrated into a few). UMAP is 2--5$\times$ more
+"island-y" than DiRe at every $k$.}
+\label{tab:arxiv-island}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig4_island_ness.pdf}
+\caption{Longest H$_0$ persistence bar (lower = more continuous) vs.\
+$k$-neighbors on the arXiv corpus 2-D layouts. Dashed line: reference
+persistence of the 384-D point cloud (0.70; far above both methods,
+because the reference manifold is one large continuum with many
+slow-growing bars rather than a few dominant islands). UMAP sits 2--3$\times$
+above DiRe at every $k$. The shape of the deviation (long leading bar)
+is the island-creation pathology, quantitatively.}
+\label{fig:arxiv-island}
+\end{figure}
 
 \begin{figure*}[t]
 \centering

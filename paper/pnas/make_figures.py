@@ -217,9 +217,63 @@ def make_fig3():
     plt.close(fig)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Figure 4: island-ness (longest H₀ bar) vs k-neighbors on the arXiv corpus
+# ──────────────────────────────────────────────────────────────────────────
+def make_fig4():
+    import csv
+    path = "/home/igor/devel/dire-rapids-arxiv/data/island_ness_agg.csv"
+    rows = []
+    with open(path) as f:
+        rows = list(csv.DictReader(f))
+
+    by = {"dire": [], "umap": [], "reference": []}
+    for r in rows:
+        m = r["method"]
+        k = int(r["n_neighbors"])
+        lb = float(r["longest_bar"])
+        lb_std = float(r["longest_bar_std"])
+        by[m].append((k, lb, lb_std))
+    for k in by:
+        by[k].sort(key=lambda t: t[0])
+
+    fig, ax = plt.subplots(figsize=(3.3, 2.6))
+
+    # Reference is a single value (k=-1 in the file); draw it as a horizontal line.
+    if by["reference"]:
+        ref_val = by["reference"][0][1]
+        ax.axhline(ref_val, ls="--", color="k", lw=0.9, alpha=0.7,
+                   label=f"384-D reference ({ref_val:.2f})")
+
+    for method, color, marker, label in [
+        ("dire", "tab:green", "s", "DiRe"),
+        ("umap", "tab:orange", "D", "cuML UMAP"),
+    ]:
+        pts = by[method]
+        ks = [p[0] for p in pts]
+        lbs = [p[1] for p in pts]
+        errs = [p[2] for p in pts]
+        ax.errorbar(ks, lbs, yerr=errs, marker=marker, color=color,
+                    label=label, capsize=2, linewidth=1.1, markersize=5)
+
+    ax.set_xlabel(r"$k$-neighbors")
+    ax.set_ylabel(r"longest H$_0$ persistence bar")
+    ax.set_xscale("log", base=2)
+    ax.set_xticks([8, 16, 32, 64, 128])
+    ax.set_xticklabels(["8", "16", "32", "64", "128"])
+    ax.legend(frameon=False, loc="upper left")
+    ax.set_title("arXiv 2-D layouts: island-ness vs $k$")
+
+    outpath = os.path.join(FIG_DIR, "fig4_island_ness.pdf")
+    fig.savefig(outpath)
+    print("wrote", outpath, flush=True)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(line_buffering=True)
     make_fig1()
     make_fig2()
     make_fig3()
+    make_fig4()
     print("done", flush=True)
