@@ -62,6 +62,17 @@ class TestDiRePyTorchBasic:
         
         # Check that values are finite
         assert np.all(np.isfinite(X_embedded))
+
+    def test_visualize_after_fit(self):
+        """Test that visualize imports optional plotting dependencies lazily."""
+        X, y = make_blobs(n_samples=20, n_features=5, centers=2, random_state=42)
+
+        model = DiRePyTorch(n_components=2, max_iter_layout=1, verbose=False, random_state=42)
+        model.fit_transform(X)
+        fig = model.visualize(labels=y, max_points=20)
+
+        assert fig is not None
+        assert len(fig.data) == 1
         
     def test_different_n_components(self):
         """Test with different number of components."""
@@ -544,6 +555,24 @@ class TestDiRePyTorchCustomMetrics:
         assert model.metric_spec == cosine_expr
         assert model._metric_fn is not None
         assert callable(model._metric_fn)
+
+    def test_cosine_metric_alias(self):
+        """Test built-in cosine distance alias."""
+        X = np.array(
+            [
+                [1.0, 0.0],
+                [2.0, 0.0],
+                [0.0, 1.0],
+            ],
+            dtype=np.float32,
+        )
+
+        model = DiRePyTorch(metric='cosine', n_neighbors=1, verbose=False)
+        model._compute_knn(X)
+
+        assert model._metric_fn is not None
+        assert model._knn_indices[0, 0] == 1
+        assert model._knn_indices[1, 0] == 0
 
     def test_callable_metric(self):
         """Test custom callable metric function."""

@@ -17,7 +17,6 @@ Performance characteristics:
 """
 
 import gc
-import sys
 
 import numpy as np
 import torch
@@ -33,7 +32,7 @@ try:
     PYKEOPS_AVAILABLE = True
 except ImportError:
     PYKEOPS_AVAILABLE = False
-    logger.warning("PyKeOps not available. Install with: pip install pykeops")
+    logger.trace("PyKeOps not available. Install with: pip install pykeops")
 
 # cuVS for fast approximate k-NN at scale (optional RAPIDS dependency)
 try:
@@ -169,7 +168,8 @@ def _compile_metric(spec):
       - KeOps path:  x: LazyTensor(A,1,D), y: LazyTensor(1,B,D) -> LazyTensor(A,B)
 
     If spec is None or 'euclidean'/'l2', return None (fast-path Euclidean stays in backend).
-    Named metrics like 'euclidean', 'l2', 'inner_product' return None (handled by backend).
+    Other named metrics such as 'sqeuclidean', 'inner_product', and 'cosine'
+    are compiled to explicit tensor callables for the PyTorch path.
     If spec is str expression, it's eval'ed with {'x': x, 'y': y} and no builtins.
     If spec is callable, it's returned unchanged.
 
@@ -182,9 +182,20 @@ def _compile_metric(spec):
         return None
     if isinstance(spec, str):
         expr = spec.strip().lower()
-        # These named metrics can be handled by backends (cuVS, PyTorch)
-        if expr in ("euclidean", "l2", "sqeuclidean", "inner_product", "cosine"):
-            return None  # use built-in backend metric
+        # Euclidean/L2 can use the fastest backend-native path.
+        if expr in ("euclidean", "l2"):
+            return None
+        if expr == "sqeuclidean":
+            return lambda x, y: ((x - y) ** 2).sum(-1)
+        if expr == "inner_product":
+            return lambda x, y: -(x * y).sum(-1)
+        if expr == "cosine":
+            def _cosine_metric(x, y):
+                numerator = (x * y).sum(-1)
+                x_norm = (x ** 2).sum(-1).sqrt()
+                y_norm = (y ** 2).sum(-1).sqrt()
+                return 1.0 - numerator / (x_norm * y_norm + 1e-8)
+            return _cosine_metric
         # Custom expression - compile to callable
         def _expr_metric(x, y, _expr=spec):
             # Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.
@@ -194,6 +205,51 @@ def _compile_metric(spec):
     if callable(spec):
         return spec
     raise ValueError("metric must be None, a string expression, or a callable")
+
+
+def _remove_self_from_knn(indices, distances, row_start, n_neighbors):
+    """Remove each query row's own index from a top-k result, preserving ties."""
+    out_indices = np.empty((indices.shape[0], n_neighbors), dtype=indices.dtype)
+    out_distances = np.empty((distances.shape[0], n_neighbors), dtype=distances.dtype)
+
+    for row in range(indices.shape[0]):
+        self_idx = row_start + row
+        keep = indices[row] != self_idx
+        row_indices = indices[row][keep]
+        row_distances = distances[row][keep]
+        if row_indices.shape[0] < n_neighbors:
+            raise RuntimeError(
+                "k-NN result did not contain enough non-self neighbors; "
+                "increase the internal candidate count."
+            )
+        out_indices[row] = row_indices[:n_neighbors]
+        out_distances[row] = row_distances[:n_neighbors]
+
+    return out_indices, out_distances
+
+
+class _InstanceLogger:
+    """Small adapter that makes per-instance verbosity deterministic."""
+
+    def __init__(self, enabled, instance_id):
+        self.enabled = enabled
+        self._logger = logger.bind(dire_instance=instance_id)
+
+    def debug(self, message, *args, **kwargs):
+        if self.enabled:
+            self._logger.debug(message, *args, **kwargs)
+
+    def info(self, message, *args, **kwargs):
+        if self.enabled:
+            self._logger.info(message, *args, **kwargs)
+
+    def warning(self, message, *args, **kwargs):
+        if self.enabled:
+            self._logger.warning(message, *args, **kwargs)
+
+    def error(self, message, *args, **kwargs):
+        if self.enabled:
+            self._logger.error(message, *args, **kwargs)
 
 
 class DiRePyTorch(TransformerMixin):
@@ -398,28 +454,9 @@ class DiRePyTorch(TransformerMixin):
         self.metric_spec = metric
         self._metric_fn = _compile_metric(self.metric_spec)
 
-        # Setup instance-specific logger
-        # Use logger.bind() for context but track handler IDs to avoid
-        # corrupting the global loguru logger for other users.
-        self.logger = logger.bind(dire_instance=id(self))
-        self._logger_handler_ids = []
-
-        if verbose:
-            # Add handler that outputs to stderr with formatting
-            handler_id = self.logger.add(
-                sys.stderr,
-                level="INFO",
-                filter=lambda record: record["extra"].get("dire_instance") == id(self)
-            )
-            self._logger_handler_ids.append(handler_id)
-        else:
-            # Add null handler that discards all messages
-            handler_id = self.logger.add(
-                lambda msg: None,
-                level="TRACE",
-                filter=lambda record: record["extra"].get("dire_instance") == id(self)
-            )
-            self._logger_handler_ids.append(handler_id)
+        # Do not add/remove Loguru handlers from a library class. The adapter
+        # keeps verbose=False quiet without mutating global logger state.
+        self.logger = _InstanceLogger(verbose, id(self))
 
         # Internal state
         self._data = None
@@ -622,14 +659,18 @@ class DiRePyTorch(TransformerMixin):
                 # Find k+1 nearest neighbors (including self)
                 knn_dists, knn_indices = D_ij.Kmin_argKmin(K=self.n_neighbors + 1, dim=1)
 
-                # Remove self
-                chunk_indices = knn_indices[:, 1:].cpu().numpy()
                 # For custom metrics, distances are already in metric space
                 # For Euclidean, convert from squared to actual distances
                 if self._metric_fn is None:
-                    chunk_distances = torch.sqrt(knn_dists[:, 1:]).cpu().numpy()
+                    knn_dists_np = torch.sqrt(knn_dists).cpu().numpy()
                 else:
-                    chunk_distances = knn_dists[:, 1:].cpu().numpy()
+                    knn_dists_np = knn_dists.cpu().numpy()
+                chunk_indices, chunk_distances = _remove_self_from_knn(
+                    knn_indices.cpu().numpy(),
+                    knn_dists_np,
+                    start_idx,
+                    self.n_neighbors,
+                )
             else:
                 # Use PyTorch for HIGH dimensional data (MUCH faster!)
                 if self._metric_fn is not None:
@@ -645,9 +686,12 @@ class DiRePyTorch(TransformerMixin):
                 knn_dists, knn_indices = torch.topk(distances, k=self.n_neighbors + 1,
                                                    dim=1, largest=False)
 
-                # Remove self
-                chunk_indices = knn_indices[:, 1:].cpu().numpy()
-                chunk_distances = knn_dists[:, 1:].cpu().numpy()
+                chunk_indices, chunk_distances = _remove_self_from_knn(
+                    knn_indices.cpu().numpy(),
+                    knn_dists.cpu().numpy(),
+                    start_idx,
+                    self.n_neighbors,
+                )
 
             all_knn_indices.append(chunk_indices)
             all_knn_distances.append(chunk_distances)
@@ -694,9 +738,15 @@ class DiRePyTorch(TransformerMixin):
         indices_np = cp.asnumpy(cp.asarray(indices))
         distances_np = cp.asnumpy(cp.asarray(distances))
 
-        # Remove self (first neighbor) and convert squared distances to distances
-        self._knn_indices = indices_np[:, 1:]
-        self._knn_distances = np.sqrt(np.maximum(distances_np[:, 1:], 0.0))
+        # Remove self and convert squared distances to distances. Self is not
+        # guaranteed to be column 0 when there are duplicate/tied points.
+        self._knn_indices, squared_distances = _remove_self_from_knn(
+            indices_np,
+            distances_np,
+            0,
+            self.n_neighbors,
+        )
+        self._knn_distances = np.sqrt(np.maximum(squared_distances, 0.0))
 
         self.logger.info(f"k-NN graph computed via cuVS: shape {self._knn_indices.shape}")
 
@@ -1186,6 +1236,9 @@ class DiRePyTorch(TransformerMixin):
             self.logger.warning("No layout available for visualization")
             return None
 
+        import pandas as pd  # pylint: disable=import-outside-toplevel
+        import plotly.express as px  # pylint: disable=import-outside-toplevel
+
         if title is None:
             title = f"PyTorch {self.n_components}D Embedding"
 
@@ -1221,10 +1274,8 @@ class DiRePyTorch(TransformerMixin):
         vis_params.update(kwargs)
 
         if self.n_components == 2:
+            vis_params.setdefault('render_mode', 'webgl')
             fig = px.scatter(df, x='x', y='y', **vis_params)
-            # Convert to WebGL for performance
-            for trace in fig.data:
-                trace.type = 'scattergl'
         else:
             fig = px.scatter_3d(df, x='x', y='y', z='z', **vis_params)
 
@@ -1413,4 +1464,3 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         f"Unknown backend: {backend}. "
         f"Choose from: 'auto', 'cuvs', 'pytorch', 'pytorch_gpu', 'pytorch_cpu'"
     )
-

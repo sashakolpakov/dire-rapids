@@ -23,7 +23,7 @@ except ImportError:
 from dire_rapids.dire_pytorch import DiRePyTorch
 
 
-def test_backend(backend_class, X, backend_name="Backend", **kwargs):
+def run_backend(backend_class, X, backend_name="Backend", **kwargs):
     """Test a specific backend."""
     print(f"\n{backend_name}:")
     print("-" * 50)
@@ -103,7 +103,14 @@ def compare_knn_accuracy(X, k=30):
         print("cuVS not available for comparison")
 
 
-def test_scaling():
+def test_backend_imports():
+    """Pytest smoke test; heavy benchmark helpers are script-only."""
+    assert DiRePyTorch is not None
+    if CUVS_AVAILABLE:
+        assert DiReCuVS is not None
+
+
+def run_scaling():
     """Test scaling with different dataset sizes."""
     print("\n" + "=" * 70)
     print("SCALING TEST: cuVS vs PyTorch")
@@ -130,14 +137,14 @@ def test_scaling():
             )
             
             # Test PyTorch
-            _, time_torch = test_backend(
+            _, time_torch = run_backend(
                 DiRePyTorch, X, 
                 backend_name="PyTorch Backend"
             )
             
             # Test cuVS if available
             if CUVS_AVAILABLE:
-                _, time_cuvs = test_backend(
+                _, time_cuvs = run_backend(
                     DiReCuVS, X,
                     backend_name="cuVS Backend",
                     use_cuvs=True
@@ -162,7 +169,7 @@ def test_scaling():
             print(f"{n:<10} {d:<10} {speedup:.1f}x")
 
 
-def test_index_types():
+def run_index_types():
     """Test different cuVS index types."""
     if not CUVS_AVAILABLE:
         print("cuVS not available, skipping index type test")
@@ -179,7 +186,7 @@ def test_index_types():
     
     for idx_type in index_types:
         print(f"\nTesting {idx_type}:")
-        _, dt = test_backend(
+        _, dt = run_backend(
             DiReCuVS, X,
             backend_name=f"cuVS ({idx_type})",
             use_cuvs=True,
@@ -223,14 +230,14 @@ if __name__ == "__main__":
     )
     
     # Test PyTorch backend
-    embed_torch, _ = test_backend(
+    embed_torch, _ = run_backend(
         DiRePyTorch, X_test,
         backend_name="PyTorch Backend"
     )
     
     # Test cuVS backend if available
     if CUVS_AVAILABLE:
-        embed_cuvs, _ = test_backend(
+        embed_cuvs, _ = run_backend(
             DiReCuVS, X_test,
             backend_name="cuVS Backend",
             use_cuvs=True
@@ -241,8 +248,8 @@ if __name__ == "__main__":
     
     # Scaling tests
     if CUVS_AVAILABLE:
-        test_scaling()
-        test_index_types()
+        run_scaling()
+        run_index_types()
     
     print("\n" + "=" * 70)
     print("TEST COMPLETE")

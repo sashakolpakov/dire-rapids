@@ -25,7 +25,7 @@ try:
     PYKEOPS_AVAILABLE = True
 except ImportError:
     PYKEOPS_AVAILABLE = False
-    logger.warning("PyKeOps not available. Install with: pip install pykeops")
+    logger.trace("PyKeOps not available. Install with: pip install pykeops")
 
 
 class DiRePyTorchMemoryEfficient(DiRePyTorch):

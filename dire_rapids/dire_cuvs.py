@@ -15,29 +15,29 @@ import torch  # pylint: disable=unused-import # Used via parent class (self.devi
 from loguru import logger
 
 # Import base DIRE PyTorch implementation
-from .dire_pytorch import DiRePyTorch  # pylint: disable=cyclic-import
+from .dire_pytorch import DiRePyTorch, _remove_self_from_knn  # pylint: disable=cyclic-import
 
 # Try to import cuVS and CuPy
 try:
     import cupy as cp
     from cuvs.neighbors import cagra, ivf_pq, ivf_flat
     CUVS_AVAILABLE = True
-    logger.info("cuVS available - GPU-accelerated k-NN enabled")
+    logger.trace("cuVS available - GPU-accelerated k-NN enabled")
 except ImportError:
     CUVS_AVAILABLE = False
-    logger.warning("cuVS not available. Install RAPIDS for GPU-accelerated k-NN: "
-                  "Follow the installation instructions at https://docs.rapids.ai/install/")
+    logger.trace("cuVS not available. Install RAPIDS for GPU-accelerated k-NN: "
+                 "Follow the installation instructions at https://docs.rapids.ai/install/")
 
 # Try to import cuML for GPU-accelerated PCA
 try:
     from cuml.decomposition import PCA as cuPCA
     from cuml.decomposition import TruncatedSVD as cuTruncatedSVD
     CUML_AVAILABLE = True
-    logger.info("cuML available - GPU-accelerated PCA enabled")
+    logger.trace("cuML available - GPU-accelerated PCA enabled")
 except ImportError:
     CUML_AVAILABLE = False
     if CUVS_AVAILABLE:
-        logger.warning("cuML not available but cuVS is. PCA will run on CPU.")
+        logger.trace("cuML not available but cuVS is. PCA will run on CPU.")
 
 
 class DiReCuVS(DiRePyTorch):
@@ -220,36 +220,36 @@ class DiReCuVS(DiRePyTorch):
         """
         super().__init__(*args, **kwargs)
 
-        # Seed CuPy random generator for cuML/cuVS operations (if available)
-        if CUVS_AVAILABLE:
-            cp.random.seed(self.random_state)
-            if self.verbose:
-                self.logger.debug(f"Seeded CuPy random generator: {self.random_state}")
-
         # Auto-detect cuVS usage
         if use_cuvs is None:
             # Use cuVS if available and we have a GPU
             self.use_cuvs = CUVS_AVAILABLE and self.device.type == 'cuda'
         else:
-            self.use_cuvs = use_cuvs and CUVS_AVAILABLE
+            self.use_cuvs = use_cuvs and CUVS_AVAILABLE and self.device.type == 'cuda'
         
         if self.use_cuvs:
-            logger.info("cuVS backend enabled for k-NN computation")
+            self.logger.info("cuVS backend enabled for k-NN computation")
+            cp.random.seed(self.random_state)
+            self.logger.debug(f"Seeded CuPy random generator: {self.random_state}")
         else:
             if use_cuvs and not CUVS_AVAILABLE:
-                logger.warning("cuVS requested but not available, falling back to PyTorch")
+                self.logger.warning("cuVS requested but not available, falling back to PyTorch")
+            elif use_cuvs and self.device.type != 'cuda':
+                self.logger.warning("cuVS requested but CUDA is not available, falling back to PyTorch")
         
         # Auto-detect cuML usage for PCA
         if use_cuml is None:
             self.use_cuml = CUML_AVAILABLE and self.device.type == 'cuda'
         else:
-            self.use_cuml = use_cuml and CUML_AVAILABLE
+            self.use_cuml = use_cuml and CUML_AVAILABLE and self.device.type == 'cuda'
         
         if self.use_cuml:
-            logger.info("cuML backend enabled for PCA initialization")
+            self.logger.info("cuML backend enabled for PCA initialization")
         else:
             if use_cuml and not CUML_AVAILABLE:
-                logger.warning("cuML requested but not available, falling back to sklearn")
+                self.logger.warning("cuML requested but not available, falling back to sklearn")
+            elif use_cuml and self.device.type != 'cuda':
+                self.logger.warning("cuML requested but CUDA is not available, falling back to sklearn")
         
         self.cuvs_index_type = cuvs_index_type
         self.cuvs_build_params = cuvs_build_params
@@ -592,9 +592,15 @@ class DiReCuVS(DiRePyTorch):
         """
         n_samples, n_dims = X.shape
 
-        # Check if custom metric expression/callable is specified
-        # cuVS only supports named metrics like 'euclidean', 'inner_product'
-        if self._metric_fn is not None:
+        native_cuvs_metric = (
+            isinstance(self.metric_spec, str) and
+            self.metric_spec.strip().lower() in
+            ('euclidean', 'l2', 'sqeuclidean', 'inner_product', 'cosine')
+        )
+
+        # Check if custom metric expression/callable is specified.
+        # cuVS only supports named metrics, not arbitrary tensor expressions.
+        if self._metric_fn is not None and not native_cuvs_metric:
             self.logger.warning(
                 "Custom metric expressions/callables not supported by cuVS. "
                 "Falling back to PyTorch backend for k-NN."
@@ -651,11 +657,16 @@ class DiReCuVS(DiRePyTorch):
             self.cuvs_index, index_type, X_gpu, self.n_neighbors, cuvs_metric
         )
         
-        # Convert to CuPy arrays first, then remove self (first neighbor) and convert to numpy
+        # Convert to NumPy, then remove self. Self is not guaranteed to be the
+        # first column when there are duplicate/tied distances.
         indices_cp = cp.asarray(indices)
         distances_cp = cp.asarray(distances)
-        self._knn_indices = cp.asnumpy(indices_cp[:, 1:])
-        self._knn_distances = cp.asnumpy(distances_cp[:, 1:])
+        self._knn_indices, self._knn_distances = _remove_self_from_knn(
+            cp.asnumpy(indices_cp),
+            cp.asnumpy(distances_cp),
+            0,
+            self.n_neighbors,
+        )
         
         self.logger.info(f"k-NN graph computed: shape {self._knn_indices.shape}")
         
