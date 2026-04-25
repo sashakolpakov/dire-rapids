@@ -45,6 +45,11 @@ dmypy.json
 # Documentation builds
 docs/_build/
 
+# Paper drafts/artifacts
+/paper/*
+!/paper/pnas/
+!/paper/pnas/**
+
 # Project notes (not tracked)
 NOTES_*.md
 
