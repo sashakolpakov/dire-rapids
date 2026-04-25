@@ -86,29 +86,29 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
 <span class="c1"># Import base DIRE PyTorch implementation</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span>  <span class="c1"># pylint: disable=cyclic-import</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span><span class="p">,</span> <span class="n">_remove_self_from_knn</span>  <span class="c1"># pylint: disable=cyclic-import</span>
 
 <span class="c1"># Try to import cuVS and CuPy</span>
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">cupy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cp</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">cuvs.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">cagra</span><span class="p">,</span> <span class="n">ivf_pq</span><span class="p">,</span> <span class="n">ivf_flat</span>
     <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuVS available - GPU-accelerated k-NN enabled&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;cuVS available - GPU-accelerated k-NN enabled&quot;</span><span class="p">)</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS not available. Install RAPIDS for GPU-accelerated k-NN: &quot;</span>
-                  <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;cuVS not available. Install RAPIDS for GPU-accelerated k-NN: &quot;</span>
+                 <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span><span class="p">)</span>
 
 <span class="c1"># Try to import cuML for GPU-accelerated PCA</span>
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.decomposition</span><span class="w"> </span><span class="kn">import</span> <span class="n">PCA</span> <span class="k">as</span> <span class="n">cuPCA</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.decomposition</span><span class="w"> </span><span class="kn">import</span> <span class="n">TruncatedSVD</span> <span class="k">as</span> <span class="n">cuTruncatedSVD</span>
     <span class="n">CUML_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuML available - GPU-accelerated PCA enabled&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;cuML available - GPU-accelerated PCA enabled&quot;</span><span class="p">)</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">CUML_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="k">if</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuML not available but cuVS is. PCA will run on CPU.&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;cuML not available but cuVS is. PCA will run on CPU.&quot;</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="DiReCuVS">
@@ -295,36 +295,36 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
-        <span class="c1"># Seed CuPy random generator for cuML/cuVS operations (if available)</span>
-        <span class="k">if</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
-            <span class="n">cp</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Seeded CuPy random generator: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
         <span class="c1"># Auto-detect cuVS usage</span>
         <span class="k">if</span> <span class="n">use_cuvs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Use cuVS if available and we have a GPU</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="o">=</span> <span class="n">CUVS_AVAILABLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="o">=</span> <span class="n">use_cuvs</span> <span class="ow">and</span> <span class="n">CUVS_AVAILABLE</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="o">=</span> <span class="n">use_cuvs</span> <span class="ow">and</span> <span class="n">CUVS_AVAILABLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
         
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuVS backend enabled for k-NN computation&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuVS backend enabled for k-NN computation&quot;</span><span class="p">)</span>
+            <span class="n">cp</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Seeded CuPy random generator: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">use_cuvs</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS requested but not available, falling back to PyTorch&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS requested but not available, falling back to PyTorch&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">use_cuvs</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuVS requested but CUDA is not available, falling back to PyTorch&quot;</span><span class="p">)</span>
         
         <span class="c1"># Auto-detect cuML usage for PCA</span>
         <span class="k">if</span> <span class="n">use_cuml</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span> <span class="o">=</span> <span class="n">CUML_AVAILABLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span> <span class="o">=</span> <span class="n">use_cuml</span> <span class="ow">and</span> <span class="n">CUML_AVAILABLE</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span> <span class="o">=</span> <span class="n">use_cuml</span> <span class="ow">and</span> <span class="n">CUML_AVAILABLE</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
         
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuml</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuML backend enabled for PCA initialization&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;cuML backend enabled for PCA initialization&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">use_cuml</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">CUML_AVAILABLE</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuML requested but not available, falling back to sklearn&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuML requested but not available, falling back to sklearn&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">use_cuml</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;cuML requested but CUDA is not available, falling back to sklearn&quot;</span><span class="p">)</span>
         
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span> <span class="o">=</span> <span class="n">cuvs_index_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span> <span class="o">=</span> <span class="n">cuvs_build_params</span>
@@ -668,9 +668,15 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
 
-        <span class="c1"># Check if custom metric expression/callable is specified</span>
-        <span class="c1"># cuVS only supports named metrics like &#39;euclidean&#39;, &#39;inner_product&#39;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">native_cuvs_metric</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span>
+            <span class="p">(</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">,</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">,</span> <span class="s1">&#39;cosine&#39;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Check if custom metric expression/callable is specified.</span>
+        <span class="c1"># cuVS only supports named metrics, not arbitrary tensor expressions.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">native_cuvs_metric</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
                 <span class="s2">&quot;Custom metric expressions/callables not supported by cuVS. &quot;</span>
                 <span class="s2">&quot;Falling back to PyTorch backend for k-NN.&quot;</span>
@@ -727,11 +733,16 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span> <span class="n">cuvs_metric</span>
         <span class="p">)</span>
         
-        <span class="c1"># Convert to CuPy arrays first, then remove self (first neighbor) and convert to numpy</span>
+        <span class="c1"># Convert to NumPy, then remove self. Self is not guaranteed to be the</span>
+        <span class="c1"># first column when there are duplicate/tied distances.</span>
         <span class="n">indices_cp</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
         <span class="n">distances_cp</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">indices_cp</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:])</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
+            <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">indices_cp</span><span class="p">),</span>
+            <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">),</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
+        <span class="p">)</span>
         
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;k-NN graph computed: shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         

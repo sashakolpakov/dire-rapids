@@ -88,7 +88,6 @@
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -104,7 +103,7 @@
     <span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;PyKeOps not available. Install with: pip install pykeops&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;PyKeOps not available. Install with: pip install pykeops&quot;</span><span class="p">)</span>
 
 <span class="c1"># cuVS for fast approximate k-NN at scale (optional RAPIDS dependency)</span>
 <span class="k">try</span><span class="p">:</span>
@@ -240,7 +239,8 @@
 <span class="sd">      - KeOps path:  x: LazyTensor(A,1,D), y: LazyTensor(1,B,D) -&gt; LazyTensor(A,B)</span>
 
 <span class="sd">    If spec is None or &#39;euclidean&#39;/&#39;l2&#39;, return None (fast-path Euclidean stays in backend).</span>
-<span class="sd">    Named metrics like &#39;euclidean&#39;, &#39;l2&#39;, &#39;inner_product&#39; return None (handled by backend).</span>
+<span class="sd">    Other named metrics such as &#39;sqeuclidean&#39;, &#39;inner_product&#39;, and &#39;cosine&#39;</span>
+<span class="sd">    are compiled to explicit tensor callables for the PyTorch path.</span>
 <span class="sd">    If spec is str expression, it&#39;s eval&#39;ed with {&#39;x&#39;: x, &#39;y&#39;: y} and no builtins.</span>
 <span class="sd">    If spec is callable, it&#39;s returned unchanged.</span>
 
@@ -253,9 +253,20 @@
         <span class="k">return</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">expr</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-        <span class="c1"># These named metrics can be handled by backends (cuVS, PyTorch)</span>
-        <span class="k">if</span> <span class="n">expr</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;euclidean&quot;</span><span class="p">,</span> <span class="s2">&quot;l2&quot;</span><span class="p">,</span> <span class="s2">&quot;sqeuclidean&quot;</span><span class="p">,</span> <span class="s2">&quot;inner_product&quot;</span><span class="p">,</span> <span class="s2">&quot;cosine&quot;</span><span class="p">):</span>
-            <span class="k">return</span> <span class="kc">None</span>  <span class="c1"># use built-in backend metric</span>
+        <span class="c1"># Euclidean/L2 can use the fastest backend-native path.</span>
+        <span class="k">if</span> <span class="n">expr</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;euclidean&quot;</span><span class="p">,</span> <span class="s2">&quot;l2&quot;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">expr</span> <span class="o">==</span> <span class="s2">&quot;sqeuclidean&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="p">((</span><span class="n">x</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">expr</span> <span class="o">==</span> <span class="s2">&quot;inner_product&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="o">-</span><span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">expr</span> <span class="o">==</span> <span class="s2">&quot;cosine&quot;</span><span class="p">:</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">_cosine_metric</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+                <span class="n">numerator</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">x_norm</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+                <span class="n">y_norm</span> <span class="o">=</span> <span class="p">(</span><span class="n">y</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sqrt</span><span class="p">()</span>
+                <span class="k">return</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">numerator</span> <span class="o">/</span> <span class="p">(</span><span class="n">x_norm</span> <span class="o">*</span> <span class="n">y_norm</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">_cosine_metric</span>
         <span class="c1"># Custom expression - compile to callable</span>
         <span class="k">def</span><span class="w"> </span><span class="nf">_expr_metric</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">_expr</span><span class="o">=</span><span class="n">spec</span><span class="p">):</span>
             <span class="c1"># Use ONLY tensor methods like .sum(-1), .sqrt(), .abs(), etc.</span>
@@ -265,6 +276,51 @@
     <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">spec</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">spec</span>
     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;metric must be None, a string expression, or a callable&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_remove_self_from_knn</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">distances</span><span class="p">,</span> <span class="n">row_start</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Remove each query row&#39;s own index from a top-k result, preserving ties.&quot;&quot;&quot;</span>
+    <span class="n">out_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">n_neighbors</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">indices</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">out_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">distances</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">n_neighbors</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">distances</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="n">self_idx</span> <span class="o">=</span> <span class="n">row_start</span> <span class="o">+</span> <span class="n">row</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">row</span><span class="p">]</span> <span class="o">!=</span> <span class="n">self_idx</span>
+        <span class="n">row_indices</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">row</span><span class="p">][</span><span class="n">keep</span><span class="p">]</span>
+        <span class="n">row_distances</span> <span class="o">=</span> <span class="n">distances</span><span class="p">[</span><span class="n">row</span><span class="p">][</span><span class="n">keep</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">row_indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_neighbors</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;k-NN result did not contain enough non-self neighbors; &quot;</span>
+                <span class="s2">&quot;increase the internal candidate count.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">out_indices</span><span class="p">[</span><span class="n">row</span><span class="p">]</span> <span class="o">=</span> <span class="n">row_indices</span><span class="p">[:</span><span class="n">n_neighbors</span><span class="p">]</span>
+        <span class="n">out_distances</span><span class="p">[</span><span class="n">row</span><span class="p">]</span> <span class="o">=</span> <span class="n">row_distances</span><span class="p">[:</span><span class="n">n_neighbors</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">out_indices</span><span class="p">,</span> <span class="n">out_distances</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_InstanceLogger</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Small adapter that makes per-instance verbosity deterministic.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">enabled</span><span class="p">,</span> <span class="n">instance_id</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span> <span class="o">=</span> <span class="n">enabled</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">dire_instance</span><span class="o">=</span><span class="n">instance_id</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">debug</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">enabled</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="DiRePyTorch">
@@ -473,28 +529,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="o">=</span> <span class="n">metric</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="o">=</span> <span class="n">_compile_metric</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">)</span>
 
-        <span class="c1"># Setup instance-specific logger</span>
-        <span class="c1"># Use logger.bind() for context but track handler IDs to avoid</span>
-        <span class="c1"># corrupting the global loguru logger for other users.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">bind</span><span class="p">(</span><span class="n">dire_instance</span><span class="o">=</span><span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_logger_handler_ids</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
-            <span class="c1"># Add handler that outputs to stderr with formatting</span>
-            <span class="n">handler_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
-                <span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">,</span>
-                <span class="n">level</span><span class="o">=</span><span class="s2">&quot;INFO&quot;</span><span class="p">,</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="k">lambda</span> <span class="n">record</span><span class="p">:</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;extra&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dire_instance&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_logger_handler_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">handler_id</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Add null handler that discards all messages</span>
-            <span class="n">handler_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">add</span><span class="p">(</span>
-                <span class="k">lambda</span> <span class="n">msg</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-                <span class="n">level</span><span class="o">=</span><span class="s2">&quot;TRACE&quot;</span><span class="p">,</span>
-                <span class="nb">filter</span><span class="o">=</span><span class="k">lambda</span> <span class="n">record</span><span class="p">:</span> <span class="n">record</span><span class="p">[</span><span class="s2">&quot;extra&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dire_instance&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_logger_handler_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">handler_id</span><span class="p">)</span>
+        <span class="c1"># Do not add/remove Loguru handlers from a library class. The adapter</span>
+        <span class="c1"># keeps verbose=False quiet without mutating global logger state.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">_InstanceLogger</span><span class="p">(</span><span class="n">verbose</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
 
         <span class="c1"># Internal state</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="kc">None</span>
@@ -698,14 +735,18 @@
                 <span class="c1"># Find k+1 nearest neighbors (including self)</span>
                 <span class="n">knn_dists</span><span class="p">,</span> <span class="n">knn_indices</span> <span class="o">=</span> <span class="n">D_ij</span><span class="o">.</span><span class="n">Kmin_argKmin</span><span class="p">(</span><span class="n">K</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 
-                <span class="c1"># Remove self</span>
-                <span class="n">chunk_indices</span> <span class="o">=</span> <span class="n">knn_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
                 <span class="c1"># For custom metrics, distances are already in metric space</span>
                 <span class="c1"># For Euclidean, convert from squared to actual distances</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:])</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                    <span class="n">knn_dists_np</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">knn_dists</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                    <span class="n">knn_dists_np</span> <span class="o">=</span> <span class="n">knn_dists</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                <span class="n">chunk_indices</span><span class="p">,</span> <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
+                    <span class="n">knn_indices</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+                    <span class="n">knn_dists_np</span><span class="p">,</span>
+                    <span class="n">start_idx</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
+                <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Use PyTorch for HIGH dimensional data (MUCH faster!)</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -721,9 +762,12 @@
                 <span class="n">knn_dists</span><span class="p">,</span> <span class="n">knn_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">topk</span><span class="p">(</span><span class="n">distances</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
                                                    <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">largest</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-                <span class="c1"># Remove self</span>
-                <span class="n">chunk_indices</span> <span class="o">=</span> <span class="n">knn_indices</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
-                <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">knn_dists</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                <span class="n">chunk_indices</span><span class="p">,</span> <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
+                    <span class="n">knn_indices</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+                    <span class="n">knn_dists</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+                    <span class="n">start_idx</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
+                <span class="p">)</span>
 
             <span class="n">all_knn_indices</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk_indices</span><span class="p">)</span>
             <span class="n">all_knn_distances</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk_distances</span><span class="p">)</span>
@@ -770,9 +814,15 @@
         <span class="n">indices_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span>
         <span class="n">distances_np</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">distances</span><span class="p">))</span>
 
-        <span class="c1"># Remove self (first neighbor) and convert squared distances to distances</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span> <span class="o">=</span> <span class="n">indices_np</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">distances_np</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:],</span> <span class="mf">0.0</span><span class="p">))</span>
+        <span class="c1"># Remove self and convert squared distances to distances. Self is not</span>
+        <span class="c1"># guaranteed to be column 0 when there are duplicate/tied points.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">squared_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
+            <span class="n">indices_np</span><span class="p">,</span>
+            <span class="n">distances_np</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">squared_distances</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;k-NN graph computed via cuVS: shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
@@ -1270,6 +1320,9 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No layout available for visualization&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
 
+        <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">plotly.express</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">px</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
+
         <span class="k">if</span> <span class="n">title</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;PyTorch </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="si">}</span><span class="s2">D Embedding&quot;</span>
 
@@ -1305,10 +1358,8 @@
         <span class="n">vis_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">vis_params</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;render_mode&#39;</span><span class="p">,</span> <span class="s1">&#39;webgl&#39;</span><span class="p">)</span>
             <span class="n">fig</span> <span class="o">=</span> <span class="n">px</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">vis_params</span><span class="p">)</span>
-            <span class="c1"># Convert to WebGL for performance</span>
-            <span class="k">for</span> <span class="n">trace</span> <span class="ow">in</span> <span class="n">fig</span><span class="o">.</span><span class="n">data</span><span class="p">:</span>
-                <span class="n">trace</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="s1">&#39;scattergl&#39;</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">fig</span> <span class="o">=</span> <span class="n">px</span><span class="o">.</span><span class="n">scatter_3d</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="s1">&#39;z&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">vis_params</span><span class="p">)</span>
 
@@ -1501,7 +1552,6 @@
         <span class="sa">f</span><span class="s2">&quot;Unknown backend: </span><span class="si">{</span><span class="n">backend</span><span class="si">}</span><span class="s2">. &quot;</span>
         <span class="sa">f</span><span class="s2">&quot;Choose from: &#39;auto&#39;, &#39;cuvs&#39;, &#39;pytorch&#39;, &#39;pytorch_gpu&#39;, &#39;pytorch_cpu&#39;&quot;</span>
     <span class="p">)</span></div>
-
 
 </pre></div>
 
