@@ -24,8 +24,8 @@ try:
     import cupy as cp
     HAS_CUPY = True
 except ImportError:
+    cp = None
     HAS_CUPY = False
-    warnings.warn("CuPy not available. GPU acceleration disabled.", UserWarning)
 
 # sklearn imports (always needed for CPU fallback paths)
 from sklearn.neighbors import NearestNeighbors
@@ -44,19 +44,14 @@ try:
     HAS_CUML = True
 except ImportError:
     HAS_CUML = False
-    warnings.warn(
-        "cuML not available. Falling back to CPU-based scikit-learn. "
-        "Install RAPIDS for GPU acceleration.",
-        UserWarning
-    )
 
 # Additional dependencies for persistence
 try:
     from fastdtw import fastdtw
     HAS_DTW = True
 except ImportError:
+    fastdtw = None
     HAS_DTW = False
-    warnings.warn("fastdtw not available. DTW distance will not be available.", UserWarning)
 
 
 
@@ -144,7 +139,7 @@ def welford_gpu(data):
     return mean, std
 
 
-def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_state=42):
+def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_state=42, use_gpu=True):
     """
     GPU-accelerated Bernoulli subsampling of data.
 
@@ -160,6 +155,8 @@ def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_sta
         Probability of keeping each sample (must be between 0.0 and 1.0)
     random_state : int
         Random seed
+    use_gpu : bool
+        Whether to use CuPy for subsampling when available
 
     Returns
     -------
@@ -173,26 +170,32 @@ def threshold_subsample_gpu(data, layout, labels=None, threshold=0.5, random_sta
     if not 0.0 <= threshold <= 1.0:
         raise ValueError(f"subsample_threshold must be between 0.0 and 1.0, got {threshold}")
 
-    if HAS_CUPY:
-        cp.random.seed(random_state)
+    if use_gpu and HAS_CUPY:
+        try:
+            cp.random.seed(random_state)
 
-        # Convert to CuPy if needed
-        data_gpu = cp.asarray(data) if not isinstance(data, cp.ndarray) else data
-        layout_gpu = cp.asarray(layout) if not isinstance(layout, cp.ndarray) else layout
+            # Convert to CuPy if needed
+            data_gpu = cp.asarray(data) if not isinstance(data, cp.ndarray) else data
+            layout_gpu = cp.asarray(layout) if not isinstance(layout, cp.ndarray) else layout
 
-        n_samples = data_gpu.shape[0]
-        random_numbers = cp.random.uniform(0, 1, size=n_samples)
-        selected_indices = random_numbers < threshold
+            n_samples = data_gpu.shape[0]
+            random_numbers = cp.random.uniform(0, 1, size=n_samples)
+            selected_indices = random_numbers < threshold
 
-        data_sub = data_gpu[selected_indices]
-        layout_sub = layout_gpu[selected_indices]
+            data_sub = data_gpu[selected_indices]
+            layout_sub = layout_gpu[selected_indices]
 
-        if labels is not None:
-            labels_gpu = cp.asarray(labels) if not isinstance(labels, cp.ndarray) else labels
-            labels_sub = labels_gpu[selected_indices]
-            return data_sub, layout_sub, labels_sub
+            if labels is not None:
+                labels_gpu = cp.asarray(labels) if not isinstance(labels, cp.ndarray) else labels
+                labels_sub = labels_gpu[selected_indices]
+                return data_sub, layout_sub, labels_sub
 
-        return data_sub, layout_sub
+            return data_sub, layout_sub
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            warnings.warn(
+                f"CuPy subsampling failed ({exc}); falling back to NumPy.",
+                UserWarning
+            )
 
     # CPU fallback
     np.random.seed(random_state)
@@ -506,7 +509,7 @@ def compute_local_metrics(data, layout, n_neighbors, subsample_threshold=1.0, ra
     # Apply subsampling if threshold < 1.0
     if subsample_threshold < 1.0:
         data_sub, layout_sub = threshold_subsample_gpu(
-            data, layout, threshold=subsample_threshold, random_state=random_state
+            data, layout, threshold=subsample_threshold, random_state=random_state, use_gpu=use_gpu
         )
         # Convert back to numpy if needed
         if HAS_CUPY and isinstance(data_sub, cp.ndarray):
@@ -717,7 +720,7 @@ def compute_svm_score(data, layout, labels, subsample_threshold=0.5, random_stat
 
     # Subsample
     X_hd, X_ld, y = threshold_subsample_gpu(  # pylint: disable=unbalanced-tuple-unpacking
-        data, layout, labels, threshold=subsample_threshold, random_state=random_state
+        data, layout, labels, threshold=subsample_threshold, random_state=random_state, use_gpu=use_gpu
     )
 
     # Convert back to NumPy for sklearn/cuml
@@ -786,7 +789,7 @@ def compute_knn_score(data, layout, labels, n_neighbors=16, subsample_threshold=
 
     # Subsample
     X_hd, X_ld, y = threshold_subsample_gpu(  # pylint: disable=unbalanced-tuple-unpacking
-        data, layout, labels, threshold=subsample_threshold, random_state=random_state
+        data, layout, labels, threshold=subsample_threshold, random_state=random_state, use_gpu=use_gpu
     )
 
     # Convert back to NumPy for sklearn/cuml
@@ -973,7 +976,7 @@ def compute_global_metrics(data, layout, subsample_threshold=0.5, random_state=4
 
     # Subsample data
     data_sub, layout_sub = threshold_subsample_gpu(
-        data, layout, threshold=subsample_threshold, random_state=random_state
+        data, layout, threshold=subsample_threshold, random_state=random_state, use_gpu=use_gpu
     )
 
     # Convert to NumPy if needed
