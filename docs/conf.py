@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.abspath('..'))
 project = 'dire-rapids'
 copyright = '2025, Alexander Kolpakov (UATX), Igor Rivin (Temple University)'  # pylint: disable=redefined-builtin
 author = 'Alexander Kolpakov (UATX), Igor Rivin (Temple University)'
-release = '0.2.0'
+release = '0.3.0'
 
 # -- General configuration ---------------------------------------------------
 

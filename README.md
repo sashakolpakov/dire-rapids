@@ -7,7 +7,7 @@
     <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg">
   </a>
   <a href="https://www.python.org/downloads/">
-    <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9+-blue.svg">
+    <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10+-blue.svg">
   </a>
   <a href="https://pypi.org/project/dire-rapids/">
     <img alt="PyPI" src="https://img.shields.io/pypi/v/dire-rapids.svg">
@@ -240,7 +240,7 @@ If you use this work, please cite:
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - PyTorch 2.0+
 - NumPy, SciPy, scikit-learn
 - (Optional) PyKeOps 2.1+ (`pip install dire-rapids[keops]`)

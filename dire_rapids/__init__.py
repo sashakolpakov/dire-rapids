@@ -62,7 +62,7 @@ Evaluate embedding quality::
     print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # Import cuML-using submodule first: cuML (and cuVS) pull shared libraries
 # that must be loaded before torch on some rapids-26.04+ setups, because
