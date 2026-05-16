@@ -820,10 +820,10 @@
             <span class="n">embedding_cp</span> <span class="o">-=</span> <span class="n">embedding_cp</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
             <span class="n">embedding_cp</span> <span class="o">/=</span> <span class="n">embedding_cp</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
             
-            <span class="c1"># Convert to PyTorch</span>
-            <span class="c1"># Use dlpack for zero-copy transfer from CuPy to PyTorch</span>
-            <span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.dlpack</span><span class="w"> </span><span class="kn">import</span> <span class="n">from_dlpack</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
-            <span class="n">embedding_torch</span> <span class="o">=</span> <span class="n">from_dlpack</span><span class="p">(</span><span class="n">embedding_cp</span><span class="o">.</span><span class="n">toDlpack</span><span class="p">())</span>
+            <span class="c1"># Use DLPack for zero-copy transfer from CuPy to PyTorch.</span>
+            <span class="c1"># Modern CuPy exposes the Python DLPack protocol directly;</span>
+            <span class="c1"># ``toDlpack()`` is deprecated.</span>
+            <span class="n">embedding_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_dlpack</span><span class="p">(</span><span class="n">embedding_cp</span><span class="p">)</span>
             
             <span class="k">return</span> <span class="n">embedding_torch</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         

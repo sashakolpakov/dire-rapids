@@ -82,20 +82,19 @@
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
 <span class="c1"># Import base class and compiled kernels</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._compat</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_pykeops_lazy_tensor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span><span class="p">,</span> <span class="n">_attraction_forces_compiled</span>  <span class="c1"># pylint: disable=cyclic-import</span>
 
-<span class="c1"># PyKeOps for efficient force computations</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pykeops.torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyTensor</span>
-    <span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="c1"># PyKeOps is imported lazily to avoid import-time CUDA probing warnings.</span>
+<span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;pykeops&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">PYKEOPS_AVAILABLE</span><span class="p">:</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;PyKeOps not available. Install with: pip install pykeops&quot;</span><span class="p">)</span>
 
 
@@ -450,6 +449,7 @@
         <span class="k">if</span> <span class="n">use_pykeops</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Using PyKeOps LazyTensors for repulsion&quot;</span><span class="p">)</span>
 
+            <span class="n">LazyTensor</span> <span class="o">=</span> <span class="n">import_pykeops_lazy_tensor</span><span class="p">()</span>
             <span class="n">X_i</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">positions</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>  <span class="c1"># (N, 1, D)</span>
             <span class="n">X_j</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">positions</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>  <span class="c1"># (1, N, D)</span>
 

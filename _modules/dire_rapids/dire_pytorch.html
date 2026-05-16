@@ -88,6 +88,7 @@
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -96,13 +97,11 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">TransformerMixin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.decomposition</span><span class="w"> </span><span class="kn">import</span> <span class="n">PCA</span>
 
-<span class="c1"># PyKeOps for efficient force computations</span>
-<span class="k">try</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">pykeops.torch</span><span class="w"> </span><span class="kn">import</span> <span class="n">LazyTensor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._compat</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_pykeops_lazy_tensor</span><span class="p">,</span> <span class="n">torch_tensor_to_numpy</span>
 
-    <span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
-<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-    <span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="c1"># PyKeOps is imported lazily to avoid import-time CUDA probing warnings.</span>
+<span class="n">PYKEOPS_AVAILABLE</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;pykeops&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">PYKEOPS_AVAILABLE</span><span class="p">:</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;PyKeOps not available. Install with: pip install pykeops&quot;</span><span class="p">)</span>
 
 <span class="c1"># cuVS for fast approximate k-NN at scale (optional RAPIDS dependency)</span>
@@ -720,6 +719,8 @@
 
             <span class="k">if</span> <span class="n">use_pykeops</span><span class="p">:</span>
                 <span class="c1"># Use PyKeOps for LOW dimensional data</span>
+                <span class="n">LazyTensor</span> <span class="o">=</span> <span class="n">import_pykeops_lazy_tensor</span><span class="p">()</span>
+
                 <span class="c1"># Ensure contiguity for PyKeOps</span>
                 <span class="n">X_i</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_chunk</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>  <span class="c1"># (chunk_size, 1, D)</span>
                 <span class="n">X_j</span> <span class="o">=</span> <span class="n">LazyTensor</span><span class="p">(</span><span class="n">X_torch</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>   <span class="c1"># (1, N, D)</span>
@@ -738,11 +739,11 @@
                 <span class="c1"># For custom metrics, distances are already in metric space</span>
                 <span class="c1"># For Euclidean, convert from squared to actual distances</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">knn_dists_np</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                    <span class="n">knn_dists_np</span> <span class="o">=</span> <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">))</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">knn_dists_np</span> <span class="o">=</span> <span class="n">knn_dists</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                    <span class="n">knn_dists_np</span> <span class="o">=</span> <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">)</span>
                 <span class="n">chunk_indices</span><span class="p">,</span> <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
-                    <span class="n">knn_indices</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+                    <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">knn_indices</span><span class="p">),</span>
                     <span class="n">knn_dists_np</span><span class="p">,</span>
                     <span class="n">start_idx</span><span class="p">,</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
@@ -763,8 +764,8 @@
                                                    <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">largest</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
                 <span class="n">chunk_indices</span><span class="p">,</span> <span class="n">chunk_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
-                    <span class="n">knn_indices</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
-                    <span class="n">knn_dists</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span>
+                    <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">knn_indices</span><span class="p">),</span>
+                    <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">knn_dists</span><span class="p">),</span>
                     <span class="n">start_idx</span><span class="p">,</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
                 <span class="p">)</span>
@@ -954,7 +955,7 @@
                 <span class="c1"># Use randomized SVD (pca_lowrank) — O(N*D*q) instead of full SVD,</span>
                 <span class="c1"># and avoids cusolver limits on very wide matrices (D &gt;&gt; N).</span>
                 <span class="n">U</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">pca_lowrank</span><span class="p">(</span><span class="n">X_t</span><span class="p">,</span> <span class="n">q</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">)</span>
-                <span class="n">embedding</span> <span class="o">=</span> <span class="p">(</span><span class="n">U</span> <span class="o">*</span> <span class="n">S</span><span class="p">)</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+                <span class="n">embedding</span> <span class="o">=</span> <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">U</span> <span class="o">*</span> <span class="n">S</span><span class="p">)</span>
                 <span class="k">del</span> <span class="n">X_t</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">S</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
                     <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
@@ -1224,7 +1225,7 @@
         <span class="n">final_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimize_layout</span><span class="p">(</span><span class="n">initial_embedding</span><span class="p">)</span>
 
         <span class="c1"># Convert back to numpy and store</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span> <span class="o">=</span> <span class="n">final_embedding</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span> <span class="o">=</span> <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">final_embedding</span><span class="p">)</span>
 
         <span class="c1"># Clear GPU memory</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
