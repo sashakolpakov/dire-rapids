@@ -744,10 +744,10 @@ class DiReCuVS(DiRePyTorch):
             embedding_cp -= embedding_cp.mean(axis=0)
             embedding_cp /= embedding_cp.std(axis=0)
             
-            # Convert to PyTorch
-            # Use dlpack for zero-copy transfer from CuPy to PyTorch
-            from torch.utils.dlpack import from_dlpack  # pylint: disable=import-outside-toplevel
-            embedding_torch = from_dlpack(embedding_cp.toDlpack())
+            # Use DLPack for zero-copy transfer from CuPy to PyTorch.
+            # Modern CuPy exposes the Python DLPack protocol directly;
+            # ``toDlpack()`` is deprecated.
+            embedding_torch = torch.from_dlpack(embedding_cp)
             
             return embedding_torch.to(self.device)
         
