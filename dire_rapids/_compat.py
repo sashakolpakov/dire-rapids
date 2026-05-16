@@ -3,8 +3,24 @@
 from __future__ import annotations
 
 from typing import Any
+import warnings
 
 import numpy as np
+
+
+def install_pykeops_warning_filters() -> None:
+    """Suppress known third-party warnings emitted by PyKeOps internals."""
+    warnings.filterwarnings(
+        "ignore",
+        category=ResourceWarning,
+        module=r"keopscore\.config\.cuda",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"`torch\.jit\.script_method` is deprecated.*",
+        category=DeprecationWarning,
+        module=r"torch\.jit\._script",
+    )
 
 
 def torch_tensor_to_numpy(tensor: Any, *, copy: bool = False) -> np.ndarray:
@@ -46,3 +62,11 @@ def check_torch_numpy_bridge() -> None:
                 "their ABI expectations match."
             ) from exc
         raise
+
+
+def import_pykeops_lazy_tensor():
+    """Import PyKeOps LazyTensor while containing known third-party warnings."""
+    install_pykeops_warning_filters()
+    from pykeops.torch import LazyTensor  # pylint: disable=import-outside-toplevel
+
+    return LazyTensor

@@ -17,6 +17,7 @@ Performance characteristics:
 """
 
 import gc
+import importlib.util
 
 import numpy as np
 import torch
@@ -25,15 +26,11 @@ from scipy.optimize import curve_fit
 from sklearn.base import TransformerMixin
 from sklearn.decomposition import PCA
 
-from ._compat import torch_tensor_to_numpy
+from ._compat import import_pykeops_lazy_tensor, torch_tensor_to_numpy
 
-# PyKeOps for efficient force computations
-try:
-    from pykeops.torch import LazyTensor
-
-    PYKEOPS_AVAILABLE = True
-except ImportError:
-    PYKEOPS_AVAILABLE = False
+# PyKeOps is imported lazily to avoid import-time CUDA probing warnings.
+PYKEOPS_AVAILABLE = importlib.util.find_spec("pykeops") is not None
+if not PYKEOPS_AVAILABLE:
     logger.trace("PyKeOps not available. Install with: pip install pykeops")
 
 # cuVS for fast approximate k-NN at scale (optional RAPIDS dependency)
@@ -646,6 +643,8 @@ class DiRePyTorch(TransformerMixin):
 
             if use_pykeops:
                 # Use PyKeOps for LOW dimensional data
+                LazyTensor = import_pykeops_lazy_tensor()
+
                 # Ensure contiguity for PyKeOps
                 X_i = LazyTensor(X_chunk[:, None, :].contiguous())  # (chunk_size, 1, D)
                 X_j = LazyTensor(X_torch[None, :, :].contiguous())   # (1, N, D)
