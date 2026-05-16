@@ -11,20 +11,19 @@ This implementation inherits from DiRePyTorch and overrides specific methods for
 """
 
 import gc
+import importlib.util
 
 import numpy as np
 import torch
 from loguru import logger
 
 # Import base class and compiled kernels
+from ._compat import import_pykeops_lazy_tensor
 from .dire_pytorch import DiRePyTorch, _attraction_forces_compiled  # pylint: disable=cyclic-import
 
-# PyKeOps for efficient force computations
-try:
-    from pykeops.torch import LazyTensor
-    PYKEOPS_AVAILABLE = True
-except ImportError:
-    PYKEOPS_AVAILABLE = False
+# PyKeOps is imported lazily to avoid import-time CUDA probing warnings.
+PYKEOPS_AVAILABLE = importlib.util.find_spec("pykeops") is not None
+if not PYKEOPS_AVAILABLE:
     logger.trace("PyKeOps not available. Install with: pip install pykeops")
 
 
@@ -374,6 +373,7 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         if use_pykeops:
             self.logger.debug("Using PyKeOps LazyTensors for repulsion")
 
+            LazyTensor = import_pykeops_lazy_tensor()
             X_i = LazyTensor(positions[:, None, :].contiguous())  # (N, 1, D)
             X_j = LazyTensor(positions[None, :, :].contiguous())  # (1, N, D)
 

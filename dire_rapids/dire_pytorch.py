@@ -17,6 +17,7 @@ Performance characteristics:
 """
 
 import gc
+import importlib.util
 
 import numpy as np
 import torch
@@ -25,13 +26,11 @@ from scipy.optimize import curve_fit
 from sklearn.base import TransformerMixin
 from sklearn.decomposition import PCA
 
-# PyKeOps for efficient force computations
-try:
-    from pykeops.torch import LazyTensor
+from ._compat import import_pykeops_lazy_tensor, torch_tensor_to_numpy
 
-    PYKEOPS_AVAILABLE = True
-except ImportError:
-    PYKEOPS_AVAILABLE = False
+# PyKeOps is imported lazily to avoid import-time CUDA probing warnings.
+PYKEOPS_AVAILABLE = importlib.util.find_spec("pykeops") is not None
+if not PYKEOPS_AVAILABLE:
     logger.trace("PyKeOps not available. Install with: pip install pykeops")
 
 # cuVS for fast approximate k-NN at scale (optional RAPIDS dependency)
@@ -644,6 +643,8 @@ class DiRePyTorch(TransformerMixin):
 
             if use_pykeops:
                 # Use PyKeOps for LOW dimensional data
+                LazyTensor = import_pykeops_lazy_tensor()
+
                 # Ensure contiguity for PyKeOps
                 X_i = LazyTensor(X_chunk[:, None, :].contiguous())  # (chunk_size, 1, D)
                 X_j = LazyTensor(X_torch[None, :, :].contiguous())   # (1, N, D)
@@ -662,11 +663,11 @@ class DiRePyTorch(TransformerMixin):
                 # For custom metrics, distances are already in metric space
                 # For Euclidean, convert from squared to actual distances
                 if self._metric_fn is None:
-                    knn_dists_np = torch.sqrt(knn_dists).cpu().numpy()
+                    knn_dists_np = torch_tensor_to_numpy(torch.sqrt(knn_dists))
                 else:
-                    knn_dists_np = knn_dists.cpu().numpy()
+                    knn_dists_np = torch_tensor_to_numpy(knn_dists)
                 chunk_indices, chunk_distances = _remove_self_from_knn(
-                    knn_indices.cpu().numpy(),
+                    torch_tensor_to_numpy(knn_indices),
                     knn_dists_np,
                     start_idx,
                     self.n_neighbors,
@@ -687,8 +688,8 @@ class DiRePyTorch(TransformerMixin):
                                                    dim=1, largest=False)
 
                 chunk_indices, chunk_distances = _remove_self_from_knn(
-                    knn_indices.cpu().numpy(),
-                    knn_dists.cpu().numpy(),
+                    torch_tensor_to_numpy(knn_indices),
+                    torch_tensor_to_numpy(knn_dists),
                     start_idx,
                     self.n_neighbors,
                 )
@@ -878,7 +879,7 @@ class DiRePyTorch(TransformerMixin):
                 # Use randomized SVD (pca_lowrank) — O(N*D*q) instead of full SVD,
                 # and avoids cusolver limits on very wide matrices (D >> N).
                 U, S, _ = torch.pca_lowrank(X_t, q=self.n_components)
-                embedding = (U * S).cpu().numpy()
+                embedding = torch_tensor_to_numpy(U * S)
                 del X_t, U, S
                 if self.device.type == 'cuda':
                     torch.cuda.empty_cache()
@@ -1146,7 +1147,7 @@ class DiRePyTorch(TransformerMixin):
         final_embedding = self._optimize_layout(initial_embedding)
 
         # Convert back to numpy and store
-        self._layout = final_embedding.cpu().numpy()
+        self._layout = torch_tensor_to_numpy(final_embedding)
 
         # Clear GPU memory
         if self.device.type == 'cuda':
