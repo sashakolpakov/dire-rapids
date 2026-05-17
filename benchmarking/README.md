@@ -240,6 +240,8 @@ Comprehensive benchmarking notebook:
   - Context: SVM/kNN classification accuracy
   - Topology: DTW distances between Betti curves
 
+For financial market data, see `../examples/finance_analysis_notebook.ipynb`.
+
 ### ReducerRunner (in dire_rapids.utils)
 General-purpose framework for dimensionality reduction:
 - **ReducerRunner** class for running any sklearn-compatible reducer

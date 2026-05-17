@@ -158,12 +158,12 @@ X_embedded = reducer.fit_transform(X)
 
 ## Betti Curves / Topology
 
-The `betti_curve` module computes **filtered Betti curves** that track topological features across filtration thresholds. It builds an atlas complex from the kNN graph and computes Betti numbers (beta\_0 for connected components, beta\_1 for loops) via Hodge Laplacian eigenvalues.
+The `betti_curve` module computes **filtered Betti curves** that track topological features across filtration thresholds. It prefers `ripser` when available; otherwise it builds a kNN atlas complex and updates Betti numbers incrementally with union-find for beta\_0 and GF(2) bitset elimination for beta\_1.
 
 ```python
 from dire_rapids.betti_curve import compute_betti_curve
 
-# Automatic backend selection (GPU if CuPy available, else CPU/SciPy)
+# Automatic backend selection: ripser, then GPU atlas, then CPU atlas
 result = compute_betti_curve(X, k_neighbors=20, n_steps=50)
 
 print(result['filtration_values'])  # filtration thresholds
@@ -171,7 +171,7 @@ print(result['beta_0'])             # connected components at each step
 print(result['beta_1'])             # 1-cycles (loops) at each step
 ```
 
-Both CPU (SciPy sparse + ARPACK) and GPU (CuPy sparse + cuSOLVER) backends are available, with automatic fallback.
+The atlas fallback uses GPU kNN when cuVS/cuML is available, then performs the set-heavy atlas merge and incremental rank update on CPU.
 
 ## ReducerRunner Framework
 
@@ -208,7 +208,11 @@ print(f"Stress: {results['local']['stress']:.4f}")
 print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
 print(f"DTW beta_0: {results['topology']['metrics']['dtw_beta0']:.6f}")
 print(f"DTW beta_1: {results['topology']['metrics']['dtw_beta1']:.6f}")
+print(results['topology']['protocol'])
 ```
+
+Topology protocol parameters are exposed as `topology_n_steps`, `topology_k_neighbors`,
+`topology_density_threshold`, `topology_overlap_factor`, and `topology_metrics_only`.
 
 **Metrics:** distortion (stress, neighborhood preservation), context (SVM/kNN accuracy), topology (DTW distances between Betti curves). See [METRICS_README.md](METRICS_README.md) for details.
 

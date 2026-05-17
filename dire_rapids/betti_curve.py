@@ -3,9 +3,9 @@ Betti curve computation using filtered edge addition.
 
 Computes Betti numbers (β₀, β₁) at multiple filtration thresholds by:
 1. Building full atlas complex once with kNN graph
-2. Recording all edge distances
-3. Progressively adding edges by distance threshold
-4. Recomputing Laplacians and Betti numbers at each step
+2. Recording edge and triangle filtration values
+3. Progressively adding edges and triangles by threshold
+4. Updating β₀ with union-find and rank(B₂) over GF(2) incrementally
 
 Contains both CPU and GPU implementations with automatic backend selection.
 """
@@ -161,8 +161,98 @@ def _filter_at_threshold(filt_val, global_edges, edge_distances, triangle_edges)
     return active_edges, active_triangles, edge_to_idx
 
 
+class IncrementalF2Rank:
+    """Incremental sparse rank over GF(2), represented as Python integer bitsets."""
+
+    def __init__(self):
+        self.pivots = {}
+        self.rank = 0
+
+    def add(self, column):
+        """Add one boundary column. Return True if it increases rank."""
+        while column:
+            pivot = column.bit_length() - 1
+            existing = self.pivots.get(pivot)
+            if existing is None:
+                self.pivots[pivot] = column
+                self.rank += 1
+                return True
+            column ^= existing
+        return False
+
+
+def _compute_betti_curve_incremental(n, global_edges, edge_distances, triangle_edges,
+                                     filtration_values):
+    """
+    Compute atlas Betti curves in one monotone filtration pass.
+
+    Each simplex is added once. The pass uses union-find for beta_0 and maintains
+    rank(B2) over GF(2) with sparse bitsets.
+    Persistent homology is normally computed over a field; GF(2) avoids orientation
+    bookkeeping and is the standard choice for fast Vietoris-Rips computations.
+    """
+    edge_list = sorted(global_edges, key=lambda e: (edge_distances[e], e))
+    edge_to_idx = {edge: idx for idx, edge in enumerate(edge_list)}
+
+    triangle_events = []
+    for tri, e1, e2, e3 in triangle_edges:
+        if e1 in edge_to_idx and e2 in edge_to_idx and e3 in edge_to_idx:
+            filt_val = max(edge_distances[e1], edge_distances[e2], edge_distances[e3])
+            col = (
+                (1 << edge_to_idx[e1]) |
+                (1 << edge_to_idx[e2]) |
+                (1 << edge_to_idx[e3])
+            )
+            triangle_events.append((filt_val, tri, col))
+    triangle_events.sort(key=lambda item: (item[0], item[1]))
+
+    order = np.argsort(filtration_values)
+    beta_0_curve = np.empty(len(filtration_values), dtype=np.int64)
+    beta_1_curve = np.empty(len(filtration_values), dtype=np.int64)
+    n_edges_curve = np.empty(len(filtration_values), dtype=np.int64)
+    n_triangles_curve = np.empty(len(filtration_values), dtype=np.int64)
+
+    uf = UnionFind(n)
+    rank_b2 = IncrementalF2Rank()
+    edge_pos = 0
+    triangle_pos = 0
+    n_edges_active = 0
+    n_triangles_active = 0
+
+    for out_idx in order:
+        filt_val = filtration_values[out_idx]
+
+        while edge_pos < len(edge_list) and edge_distances[edge_list[edge_pos]] <= filt_val:
+            v0, v1 = edge_list[edge_pos]
+            uf.union(v0, v1)
+            edge_pos += 1
+            n_edges_active += 1
+
+        while triangle_pos < len(triangle_events) and triangle_events[triangle_pos][0] <= filt_val:
+            rank_b2.add(triangle_events[triangle_pos][2])
+            triangle_pos += 1
+            n_triangles_active += 1
+
+        beta_0 = uf.n_components
+        rank_b1 = n - beta_0
+        beta_1 = n_edges_active - rank_b1 - rank_b2.rank
+
+        beta_0_curve[out_idx] = beta_0
+        beta_1_curve[out_idx] = max(0, beta_1)
+        n_edges_curve[out_idx] = n_edges_active
+        n_triangles_curve[out_idx] = n_triangles_active
+
+    return {
+        'filtration_values': filtration_values,
+        'beta_0': beta_0_curve,
+        'beta_1': beta_1_curve,
+        'n_edges_active': n_edges_curve,
+        'n_triangles_active': n_triangles_curve
+    }
+
+
 # ---------------------------------------------------------------------------
-# Fast Betti computation via union-find (β₀) and matrix rank (β₁)
+# Betti computation helpers
 # ---------------------------------------------------------------------------
 
 class UnionFind:
@@ -457,20 +547,19 @@ def compute_betti_curve_cpu(data, k_neighbors=20, density_threshold=0.8,
 
 
 # ---------------------------------------------------------------------------
-# Fast implementation (union-find + rank, replaces eigsh)
+# Fast implementation (incremental atlas)
 # ---------------------------------------------------------------------------
 
 def compute_betti_curve_fast(data, k_neighbors=20, density_threshold=0.8,
                               overlap_factor=1.5, n_steps=50):
     """
-    Fast Betti curve computation using union-find (β₀) and matrix rank (β₁).
+    Fast Betti curve computation using an incremental atlas filtration.
 
-    Instead of computing eigenvalues of Hodge Laplacians via eigsh (the bottleneck
-    in compute_betti_curve_cpu), this uses algebraic topology identities:
+    Adds each edge and triangle once in filtration order:
       β₀ = connected components via union-find, O(E·α(E))
-      β₁ = E - rank(B1) - rank(B2) via Hodge decomposition
-      rank(B1) = V - β₀ (graph theory, free)
-      rank(B2) via GPU-accelerated SVD (torch.linalg.matrix_rank)
+      β₁ = E - rank(B1) - rank(B2)
+      rank(B1) = V - β₀
+      rank(B2) is maintained incrementally over GF(2) using sparse bitsets
 
     Parameters
     ----------
@@ -516,42 +605,13 @@ def compute_betti_curve_fast(data, k_neighbors=20, density_threshold=0.8,
     all_distances = np.array(list(edge_distances.values()))
     filtration_values = np.percentile(all_distances, np.linspace(100, 0, n_steps))
 
-    beta_0_curve = []
-    beta_1_curve = []
-    n_edges_curve = []
-    n_triangles_curve = []
-
-    for filt_val in filtration_values:
-        active_edges, active_triangles, edge_to_idx = _filter_at_threshold(
-            filt_val, global_edges, edge_distances, triangle_edges
-        )
-
-        n_edges_active = len(active_edges)
-        n_triangles_active = len(active_triangles)
-
-        if n_edges_active == 0:
-            beta_0, beta_1 = n, 0
-        else:
-            beta_0, beta_1 = _compute_betti_rank(
-                n, active_edges, active_triangles, edge_to_idx
-            )
-
-        beta_0_curve.append(beta_0)
-        beta_1_curve.append(beta_1)
-        n_edges_curve.append(n_edges_active)
-        n_triangles_curve.append(n_triangles_active)
-
-    return {
-        'filtration_values': filtration_values,
-        'beta_0': np.array(beta_0_curve),
-        'beta_1': np.array(beta_1_curve),
-        'n_edges_active': np.array(n_edges_curve),
-        'n_triangles_active': np.array(n_triangles_curve)
-    }
+    return _compute_betti_curve_incremental(
+        n, global_edges, edge_distances, triangle_edges, filtration_values
+    )
 
 
 # ---------------------------------------------------------------------------
-# GPU implementation (GPU kNN + rank-based Betti)
+# GPU implementation (GPU kNN + incremental atlas Betti)
 # ---------------------------------------------------------------------------
 
 def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
@@ -559,9 +619,10 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
     """
     GPU implementation of filtered Betti curve computation.
 
-    Uses GPU kNN (cuVS/cuML) for graph construction and rank-based Betti
-    computation (union-find for β₀, GPU SVD for β₁). Atlas building runs
-    on CPU (set operations are faster there).
+    Uses GPU kNN (cuVS/cuML) for graph construction, then the shared
+    incremental atlas computation (union-find for β₀ and GF(2) bitset
+    elimination for rank(B₂)). Atlas building runs on CPU because the set-heavy
+    merge step is faster and simpler there.
 
     Parameters
     ----------
@@ -631,38 +692,9 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
     all_distances = np.array(list(edge_distances.values()))
     filtration_values = np.percentile(all_distances, np.linspace(100, 0, n_steps))
 
-    beta_0_curve = []
-    beta_1_curve = []
-    n_edges_curve = []
-    n_triangles_curve = []
-
-    for filt_val in filtration_values:
-        active_edges, active_triangles, edge_to_idx = _filter_at_threshold(
-            filt_val, global_edges, edge_distances, triangle_edges
-        )
-
-        n_edges_active = len(active_edges)
-        n_triangles_active = len(active_triangles)
-
-        if n_edges_active == 0:
-            beta_0, beta_1 = n, 0
-        else:
-            beta_0, beta_1 = _compute_betti_rank(
-                n, active_edges, active_triangles, edge_to_idx
-            )
-
-        beta_0_curve.append(beta_0)
-        beta_1_curve.append(beta_1)
-        n_edges_curve.append(n_edges_active)
-        n_triangles_curve.append(n_triangles_active)
-
-    return {
-        'filtration_values': filtration_values,
-        'beta_0': np.array(beta_0_curve),
-        'beta_1': np.array(beta_1_curve),
-        'n_edges_active': np.array(n_edges_curve),
-        'n_triangles_active': np.array(n_triangles_curve)
-    }
+    return _compute_betti_curve_incremental(
+        n, global_edges, edge_distances, triangle_edges, filtration_values
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -782,12 +814,13 @@ def compute_betti_curve(data, k_neighbors=20, density_threshold=0.8, overlap_fac
 
     Preference order (if available):
       ripser (if ``prefer_ripser`` and ``ripser`` is installed)
-      → GPU rank-based path (``compute_betti_curve_gpu``) if ``use_gpu``
-      → fast CPU rank-based path (``compute_betti_curve_fast``) as fallback.
+      → GPU kNN + incremental atlas path (``compute_betti_curve_gpu``) if
+        ``use_gpu``
+      → fast CPU incremental atlas path (``compute_betti_curve_fast``) as
+        fallback.
 
-    Ripser is the correct default: ~4000× faster than the eigsh path on
-    MNIST n=3000, and well-suited to large N; the older paths remain for
-    correctness cross-checks and for environments without ripser.
+    Ripser is the preferred default when available; the atlas paths provide a
+    dependency-light fallback for environments without ripser.
 
     Parameters
     ----------
@@ -803,10 +836,10 @@ def compute_betti_curve(data, k_neighbors=20, density_threshold=0.8, overlap_fac
     n_steps : int
         Number of filtration steps.
     use_gpu : bool
-        Whether to try the GPU rank-based path if ripser is not picked.
+        Whether to try the GPU kNN atlas path if ripser is not picked.
     prefer_ripser : bool
         Prefer ripser when available. Set to False to skip ripser and use
-        the rank-based backends only (e.g. for correctness comparison).
+        the atlas backends only (e.g. for correctness comparison).
 
     Returns
     -------
