@@ -161,12 +161,17 @@ Evaluation metrics for dimensionality reduction quality:
    print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
    print(f"DTW β₀: {results['topology']['metrics']['dtw_beta0']:.6f}")
    print(f"DTW β₁: {results['topology']['metrics']['dtw_beta1']:.6f}")
+   print(results['topology']['protocol'])
+
+Topology protocol parameters are exposed as ``topology_n_steps``,
+``topology_k_neighbors``, ``topology_density_threshold``,
+``topology_overlap_factor``, and ``topology_metrics_only``.
 
 **Metrics:**
 
 * **Distortion**: stress, neighborhood preservation
 * **Context**: SVM/kNN classification accuracy
-* **Topology**: DTW distances between Betti curves (β₀, β₁) via kNN-atlas approach and Hodge Laplacians
+* **Topology**: DTW distances between Betti curves (β₀, β₁) via ripser when available, otherwise a kNN-atlas fallback with union-find and GF(2) bitset elimination
 
 See :doc:`api/dire_rapids.metrics` for full API reference.
 

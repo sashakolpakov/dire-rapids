@@ -74,9 +74,9 @@
 
 <span class="sd">Computes Betti numbers (β₀, β₁) at multiple filtration thresholds by:</span>
 <span class="sd">1. Building full atlas complex once with kNN graph</span>
-<span class="sd">2. Recording all edge distances</span>
-<span class="sd">3. Progressively adding edges by distance threshold</span>
-<span class="sd">4. Recomputing Laplacians and Betti numbers at each step</span>
+<span class="sd">2. Recording edge and triangle filtration values</span>
+<span class="sd">3. Progressively adding edges and triangles by threshold</span>
+<span class="sd">4. Updating β₀ with union-find and rank(B₂) over GF(2) incrementally</span>
 
 <span class="sd">Contains both CPU and GPU implementations with automatic backend selection.</span>
 <span class="sd">&quot;&quot;&quot;</span>
@@ -232,8 +232,107 @@
     <span class="k">return</span> <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span>
 
 
+<div class="viewcode-block" id="IncrementalF2Rank">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.IncrementalF2Rank">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">IncrementalF2Rank</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Incremental sparse rank over GF(2), represented as Python integer bitsets.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="IncrementalF2Rank.__init__">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.IncrementalF2Rank.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pivots</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+<div class="viewcode-block" id="IncrementalF2Rank.add">
+<a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.IncrementalF2Rank.add">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">column</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add one boundary column. Return True if it increases rank.&quot;&quot;&quot;</span>
+        <span class="k">while</span> <span class="n">column</span><span class="p">:</span>
+            <span class="n">pivot</span> <span class="o">=</span> <span class="n">column</span><span class="o">.</span><span class="n">bit_length</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">existing</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pivots</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">pivot</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">existing</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pivots</span><span class="p">[</span><span class="n">pivot</span><span class="p">]</span> <span class="o">=</span> <span class="n">column</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rank</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">return</span> <span class="kc">True</span>
+            <span class="n">column</span> <span class="o">^=</span> <span class="n">existing</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compute_betti_curve_incremental</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">global_edges</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span><span class="p">,</span>
+                                     <span class="n">filtration_values</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute atlas Betti curves in one monotone filtration pass.</span>
+
+<span class="sd">    Each simplex is added once. The pass uses union-find for beta_0 and maintains</span>
+<span class="sd">    rank(B2) over GF(2) with sparse bitsets.</span>
+<span class="sd">    Persistent homology is normally computed over a field; GF(2) avoids orientation</span>
+<span class="sd">    bookkeeping and is the standard choice for fast Vietoris-Rips computations.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">edge_list</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">global_edges</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">e</span><span class="p">:</span> <span class="p">(</span><span class="n">edge_distances</span><span class="p">[</span><span class="n">e</span><span class="p">],</span> <span class="n">e</span><span class="p">))</span>
+    <span class="n">edge_to_idx</span> <span class="o">=</span> <span class="p">{</span><span class="n">edge</span><span class="p">:</span> <span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">edge</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">edge_list</span><span class="p">)}</span>
+
+    <span class="n">triangle_events</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">tri</span><span class="p">,</span> <span class="n">e1</span><span class="p">,</span> <span class="n">e2</span><span class="p">,</span> <span class="n">e3</span> <span class="ow">in</span> <span class="n">triangle_edges</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">e1</span> <span class="ow">in</span> <span class="n">edge_to_idx</span> <span class="ow">and</span> <span class="n">e2</span> <span class="ow">in</span> <span class="n">edge_to_idx</span> <span class="ow">and</span> <span class="n">e3</span> <span class="ow">in</span> <span class="n">edge_to_idx</span><span class="p">:</span>
+            <span class="n">filt_val</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">edge_distances</span><span class="p">[</span><span class="n">e1</span><span class="p">],</span> <span class="n">edge_distances</span><span class="p">[</span><span class="n">e2</span><span class="p">],</span> <span class="n">edge_distances</span><span class="p">[</span><span class="n">e3</span><span class="p">])</span>
+            <span class="n">col</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">edge_to_idx</span><span class="p">[</span><span class="n">e1</span><span class="p">])</span> <span class="o">|</span>
+                <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">edge_to_idx</span><span class="p">[</span><span class="n">e2</span><span class="p">])</span> <span class="o">|</span>
+                <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">edge_to_idx</span><span class="p">[</span><span class="n">e3</span><span class="p">])</span>
+            <span class="p">)</span>
+            <span class="n">triangle_events</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">filt_val</span><span class="p">,</span> <span class="n">tri</span><span class="p">,</span> <span class="n">col</span><span class="p">))</span>
+    <span class="n">triangle_events</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+
+    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">filtration_values</span><span class="p">)</span>
+    <span class="n">beta_0_curve</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">filtration_values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">beta_1_curve</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">filtration_values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">n_edges_curve</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">filtration_values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">n_triangles_curve</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">filtration_values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+    <span class="n">uf</span> <span class="o">=</span> <span class="n">UnionFind</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">rank_b2</span> <span class="o">=</span> <span class="n">IncrementalF2Rank</span><span class="p">()</span>
+    <span class="n">edge_pos</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">triangle_pos</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">n_edges_active</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">n_triangles_active</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">out_idx</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
+        <span class="n">filt_val</span> <span class="o">=</span> <span class="n">filtration_values</span><span class="p">[</span><span class="n">out_idx</span><span class="p">]</span>
+
+        <span class="k">while</span> <span class="n">edge_pos</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">edge_list</span><span class="p">)</span> <span class="ow">and</span> <span class="n">edge_distances</span><span class="p">[</span><span class="n">edge_list</span><span class="p">[</span><span class="n">edge_pos</span><span class="p">]]</span> <span class="o">&lt;=</span> <span class="n">filt_val</span><span class="p">:</span>
+            <span class="n">v0</span><span class="p">,</span> <span class="n">v1</span> <span class="o">=</span> <span class="n">edge_list</span><span class="p">[</span><span class="n">edge_pos</span><span class="p">]</span>
+            <span class="n">uf</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="n">v0</span><span class="p">,</span> <span class="n">v1</span><span class="p">)</span>
+            <span class="n">edge_pos</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">n_edges_active</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">while</span> <span class="n">triangle_pos</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">triangle_events</span><span class="p">)</span> <span class="ow">and</span> <span class="n">triangle_events</span><span class="p">[</span><span class="n">triangle_pos</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">filt_val</span><span class="p">:</span>
+            <span class="n">rank_b2</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">triangle_events</span><span class="p">[</span><span class="n">triangle_pos</span><span class="p">][</span><span class="mi">2</span><span class="p">])</span>
+            <span class="n">triangle_pos</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">n_triangles_active</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="n">beta_0</span> <span class="o">=</span> <span class="n">uf</span><span class="o">.</span><span class="n">n_components</span>
+        <span class="n">rank_b1</span> <span class="o">=</span> <span class="n">n</span> <span class="o">-</span> <span class="n">beta_0</span>
+        <span class="n">beta_1</span> <span class="o">=</span> <span class="n">n_edges_active</span> <span class="o">-</span> <span class="n">rank_b1</span> <span class="o">-</span> <span class="n">rank_b2</span><span class="o">.</span><span class="n">rank</span>
+
+        <span class="n">beta_0_curve</span><span class="p">[</span><span class="n">out_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">beta_0</span>
+        <span class="n">beta_1_curve</span><span class="p">[</span><span class="n">out_idx</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">beta_1</span><span class="p">)</span>
+        <span class="n">n_edges_curve</span><span class="p">[</span><span class="n">out_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_edges_active</span>
+        <span class="n">n_triangles_curve</span><span class="p">[</span><span class="n">out_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_triangles_active</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;filtration_values&#39;</span><span class="p">:</span> <span class="n">filtration_values</span><span class="p">,</span>
+        <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">beta_0_curve</span><span class="p">,</span>
+        <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">beta_1_curve</span><span class="p">,</span>
+        <span class="s1">&#39;n_edges_active&#39;</span><span class="p">:</span> <span class="n">n_edges_curve</span><span class="p">,</span>
+        <span class="s1">&#39;n_triangles_active&#39;</span><span class="p">:</span> <span class="n">n_triangles_curve</span>
+    <span class="p">}</span>
+
+
 <span class="c1"># ---------------------------------------------------------------------------</span>
-<span class="c1"># Fast Betti computation via union-find (β₀) and matrix rank (β₁)</span>
+<span class="c1"># Betti computation helpers</span>
 <span class="c1"># ---------------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="UnionFind">
@@ -543,7 +642,7 @@
 
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
-<span class="c1"># Fast implementation (union-find + rank, replaces eigsh)</span>
+<span class="c1"># Fast implementation (incremental atlas)</span>
 <span class="c1"># ---------------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="compute_betti_curve_fast">
@@ -551,14 +650,13 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">compute_betti_curve_fast</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
                               <span class="n">overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Fast Betti curve computation using union-find (β₀) and matrix rank (β₁).</span>
+<span class="sd">    Fast Betti curve computation using an incremental atlas filtration.</span>
 
-<span class="sd">    Instead of computing eigenvalues of Hodge Laplacians via eigsh (the bottleneck</span>
-<span class="sd">    in compute_betti_curve_cpu), this uses algebraic topology identities:</span>
+<span class="sd">    Adds each edge and triangle once in filtration order:</span>
 <span class="sd">      β₀ = connected components via union-find, O(E·α(E))</span>
-<span class="sd">      β₁ = E - rank(B1) - rank(B2) via Hodge decomposition</span>
-<span class="sd">      rank(B1) = V - β₀ (graph theory, free)</span>
-<span class="sd">      rank(B2) via GPU-accelerated SVD (torch.linalg.matrix_rank)</span>
+<span class="sd">      β₁ = E - rank(B1) - rank(B2)</span>
+<span class="sd">      rank(B1) = V - β₀</span>
+<span class="sd">      rank(B2) is maintained incrementally over GF(2) using sparse bitsets</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -604,43 +702,14 @@
     <span class="n">all_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">edge_distances</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
     <span class="n">filtration_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">all_distances</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">))</span>
 
-    <span class="n">beta_0_curve</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">beta_1_curve</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">n_edges_curve</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">n_triangles_curve</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="k">for</span> <span class="n">filt_val</span> <span class="ow">in</span> <span class="n">filtration_values</span><span class="p">:</span>
-        <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span> <span class="o">=</span> <span class="n">_filter_at_threshold</span><span class="p">(</span>
-            <span class="n">filt_val</span><span class="p">,</span> <span class="n">global_edges</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span>
-        <span class="p">)</span>
-
-        <span class="n">n_edges_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_edges</span><span class="p">)</span>
-        <span class="n">n_triangles_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">n_edges_active</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">n</span><span class="p">,</span> <span class="mi">0</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">_compute_betti_rank</span><span class="p">(</span>
-                <span class="n">n</span><span class="p">,</span> <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span>
-            <span class="p">)</span>
-
-        <span class="n">beta_0_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_0</span><span class="p">)</span>
-        <span class="n">beta_1_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_1</span><span class="p">)</span>
-        <span class="n">n_edges_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_edges_active</span><span class="p">)</span>
-        <span class="n">n_triangles_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_triangles_active</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s1">&#39;filtration_values&#39;</span><span class="p">:</span> <span class="n">filtration_values</span><span class="p">,</span>
-        <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beta_0_curve</span><span class="p">),</span>
-        <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beta_1_curve</span><span class="p">),</span>
-        <span class="s1">&#39;n_edges_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">n_edges_curve</span><span class="p">),</span>
-        <span class="s1">&#39;n_triangles_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">n_triangles_curve</span><span class="p">)</span>
-    <span class="p">}</span></div>
+    <span class="k">return</span> <span class="n">_compute_betti_curve_incremental</span><span class="p">(</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">global_edges</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span><span class="p">,</span> <span class="n">filtration_values</span>
+    <span class="p">)</span></div>
 
 
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
-<span class="c1"># GPU implementation (GPU kNN + rank-based Betti)</span>
+<span class="c1"># GPU implementation (GPU kNN + incremental atlas Betti)</span>
 <span class="c1"># ---------------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="compute_betti_curve_gpu">
@@ -650,9 +719,10 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    GPU implementation of filtered Betti curve computation.</span>
 
-<span class="sd">    Uses GPU kNN (cuVS/cuML) for graph construction and rank-based Betti</span>
-<span class="sd">    computation (union-find for β₀, GPU SVD for β₁). Atlas building runs</span>
-<span class="sd">    on CPU (set operations are faster there).</span>
+<span class="sd">    Uses GPU kNN (cuVS/cuML) for graph construction, then the shared</span>
+<span class="sd">    incremental atlas computation (union-find for β₀ and GF(2) bitset</span>
+<span class="sd">    elimination for rank(B₂)). Atlas building runs on CPU because the set-heavy</span>
+<span class="sd">    merge step is faster and simpler there.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -722,38 +792,9 @@
     <span class="n">all_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">edge_distances</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
     <span class="n">filtration_values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">all_distances</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">))</span>
 
-    <span class="n">beta_0_curve</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">beta_1_curve</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">n_edges_curve</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">n_triangles_curve</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="k">for</span> <span class="n">filt_val</span> <span class="ow">in</span> <span class="n">filtration_values</span><span class="p">:</span>
-        <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span> <span class="o">=</span> <span class="n">_filter_at_threshold</span><span class="p">(</span>
-            <span class="n">filt_val</span><span class="p">,</span> <span class="n">global_edges</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span>
-        <span class="p">)</span>
-
-        <span class="n">n_edges_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_edges</span><span class="p">)</span>
-        <span class="n">n_triangles_active</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_triangles</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">n_edges_active</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">n</span><span class="p">,</span> <span class="mi">0</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">beta_0</span><span class="p">,</span> <span class="n">beta_1</span> <span class="o">=</span> <span class="n">_compute_betti_rank</span><span class="p">(</span>
-                <span class="n">n</span><span class="p">,</span> <span class="n">active_edges</span><span class="p">,</span> <span class="n">active_triangles</span><span class="p">,</span> <span class="n">edge_to_idx</span>
-            <span class="p">)</span>
-
-        <span class="n">beta_0_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_0</span><span class="p">)</span>
-        <span class="n">beta_1_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_1</span><span class="p">)</span>
-        <span class="n">n_edges_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_edges_active</span><span class="p">)</span>
-        <span class="n">n_triangles_curve</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n_triangles_active</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="p">{</span>
-        <span class="s1">&#39;filtration_values&#39;</span><span class="p">:</span> <span class="n">filtration_values</span><span class="p">,</span>
-        <span class="s1">&#39;beta_0&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beta_0_curve</span><span class="p">),</span>
-        <span class="s1">&#39;beta_1&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beta_1_curve</span><span class="p">),</span>
-        <span class="s1">&#39;n_edges_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">n_edges_curve</span><span class="p">),</span>
-        <span class="s1">&#39;n_triangles_active&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">n_triangles_curve</span><span class="p">)</span>
-    <span class="p">}</span></div>
+    <span class="k">return</span> <span class="n">_compute_betti_curve_incremental</span><span class="p">(</span>
+        <span class="n">n</span><span class="p">,</span> <span class="n">global_edges</span><span class="p">,</span> <span class="n">edge_distances</span><span class="p">,</span> <span class="n">triangle_edges</span><span class="p">,</span> <span class="n">filtration_values</span>
+    <span class="p">)</span></div>
 
 
 
@@ -879,12 +920,13 @@
 
 <span class="sd">    Preference order (if available):</span>
 <span class="sd">      ripser (if ``prefer_ripser`` and ``ripser`` is installed)</span>
-<span class="sd">      → GPU rank-based path (``compute_betti_curve_gpu``) if ``use_gpu``</span>
-<span class="sd">      → fast CPU rank-based path (``compute_betti_curve_fast``) as fallback.</span>
+<span class="sd">      → GPU kNN + incremental atlas path (``compute_betti_curve_gpu``) if</span>
+<span class="sd">        ``use_gpu``</span>
+<span class="sd">      → fast CPU incremental atlas path (``compute_betti_curve_fast``) as</span>
+<span class="sd">        fallback.</span>
 
-<span class="sd">    Ripser is the correct default: ~4000× faster than the eigsh path on</span>
-<span class="sd">    MNIST n=3000, and well-suited to large N; the older paths remain for</span>
-<span class="sd">    correctness cross-checks and for environments without ripser.</span>
+<span class="sd">    Ripser is the preferred default when available; the atlas paths provide a</span>
+<span class="sd">    dependency-light fallback for environments without ripser.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -900,10 +942,10 @@
 <span class="sd">    n_steps : int</span>
 <span class="sd">        Number of filtration steps.</span>
 <span class="sd">    use_gpu : bool</span>
-<span class="sd">        Whether to try the GPU rank-based path if ripser is not picked.</span>
+<span class="sd">        Whether to try the GPU kNN atlas path if ripser is not picked.</span>
 <span class="sd">    prefer_ripser : bool</span>
 <span class="sd">        Prefer ripser when available. Set to False to skip ripser and use</span>
-<span class="sd">        the rank-based backends only (e.g. for correctness comparison).</span>
+<span class="sd">        the atlas backends only (e.g. for correctness comparison).</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>

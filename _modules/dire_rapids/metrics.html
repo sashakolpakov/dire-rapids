@@ -1155,8 +1155,19 @@
         <span class="s1">&#39;dtw_beta1&#39;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">dtw_beta1</span><span class="p">)</span>
     <span class="p">}</span>
 
+    <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;subsample_threshold&#39;</span><span class="p">:</span> <span class="n">subsample_threshold</span><span class="p">,</span>
+        <span class="s1">&#39;random_state&#39;</span><span class="p">:</span> <span class="n">random_state</span><span class="p">,</span>
+        <span class="s1">&#39;n_steps&#39;</span><span class="p">:</span> <span class="n">n_steps</span><span class="p">,</span>
+        <span class="s1">&#39;k_neighbors&#39;</span><span class="p">:</span> <span class="n">k_neighbors</span><span class="p">,</span>
+        <span class="s1">&#39;density_threshold&#39;</span><span class="p">:</span> <span class="n">density_threshold</span><span class="p">,</span>
+        <span class="s1">&#39;overlap_factor&#39;</span><span class="p">:</span> <span class="n">overlap_factor</span><span class="p">,</span>
+        <span class="s1">&#39;use_gpu&#39;</span><span class="p">:</span> <span class="n">use_gpu</span><span class="p">,</span>
+        <span class="s1">&#39;metrics_only&#39;</span><span class="p">:</span> <span class="n">metrics_only</span><span class="p">,</span>
+    <span class="p">}</span>
+
     <span class="k">if</span> <span class="n">metrics_only</span><span class="p">:</span>
-        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;atlas&#39;</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;atlas&#39;</span><span class="p">,</span> <span class="s1">&#39;protocol&#39;</span><span class="p">:</span> <span class="n">protocol</span><span class="p">}</span>
 
     <span class="c1"># Include Betti curves if requested</span>
     <span class="n">betti_curves</span> <span class="o">=</span> <span class="p">{</span>
@@ -1172,7 +1183,12 @@
         <span class="p">}</span>
     <span class="p">}</span>
 
-    <span class="k">return</span> <span class="p">{</span><span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span> <span class="s1">&#39;bettis&#39;</span><span class="p">:</span> <span class="n">betti_curves</span><span class="p">,</span> <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;atlas&#39;</span><span class="p">}</span></div>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s1">&#39;metrics&#39;</span><span class="p">:</span> <span class="n">metrics</span><span class="p">,</span>
+        <span class="s1">&#39;bettis&#39;</span><span class="p">:</span> <span class="n">betti_curves</span><span class="p">,</span>
+        <span class="s1">&#39;backend&#39;</span><span class="p">:</span> <span class="s1">&#39;atlas&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;protocol&#39;</span><span class="p">:</span> <span class="n">protocol</span><span class="p">,</span>
+    <span class="p">}</span></div>
 
 
 
@@ -1185,7 +1201,10 @@
 <a class="viewcode-back" href="../../api/dire_rapids.metrics.html#dire_rapids.metrics.evaluate_embedding">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">evaluate_embedding</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
                       <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_distortion</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                      <span class="n">compute_context</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_topology</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+                      <span class="n">compute_context</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">compute_topology</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                      <span class="n">topology_n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">topology_k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                      <span class="n">topology_density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">topology_overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
+                      <span class="n">topology_metrics_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Comprehensive evaluation of a dimensionality reduction embedding.</span>
 
@@ -1213,6 +1232,17 @@
 <span class="sd">        Whether to compute context metrics (default True)</span>
 <span class="sd">    compute_topology : bool</span>
 <span class="sd">        Whether to compute topological metrics (default True)</span>
+<span class="sd">    topology_n_steps : int</span>
+<span class="sd">        Number of filtration points for topology Betti curves (default 100)</span>
+<span class="sd">    topology_k_neighbors : int</span>
+<span class="sd">        Size of local neighborhood for topology atlas construction (default 20)</span>
+<span class="sd">    topology_density_threshold : float</span>
+<span class="sd">        Percentile threshold for topology edge inclusion (0-1, default 0.8)</span>
+<span class="sd">    topology_overlap_factor : float</span>
+<span class="sd">        Factor for expanding topology local neighborhoods (default 1.5)</span>
+<span class="sd">    topology_metrics_only : bool</span>
+<span class="sd">        If True, topology results include only metrics and protocol metadata.</span>
+<span class="sd">        If False, topology results also include Betti curves.</span>
 <span class="sd">    **kwargs : dict</span>
 <span class="sd">        Additional parameters for specific metrics</span>
 
@@ -1251,7 +1281,13 @@
         <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Computing topological metrics using Betti curve comparison...&quot;</span><span class="p">)</span>
         <span class="n">results</span><span class="p">[</span><span class="s1">&#39;topology&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">compute_global_metrics</span><span class="p">(</span>
             <span class="n">data</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">subsample_threshold</span><span class="p">,</span>
-            <span class="n">random_state</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span>
+            <span class="n">random_state</span><span class="p">,</span>
+            <span class="n">n_steps</span><span class="o">=</span><span class="n">topology_n_steps</span><span class="p">,</span>
+            <span class="n">k_neighbors</span><span class="o">=</span><span class="n">topology_k_neighbors</span><span class="p">,</span>
+            <span class="n">density_threshold</span><span class="o">=</span><span class="n">topology_density_threshold</span><span class="p">,</span>
+            <span class="n">overlap_factor</span><span class="o">=</span><span class="n">topology_overlap_factor</span><span class="p">,</span>
+            <span class="n">use_gpu</span><span class="o">=</span><span class="n">use_gpu</span><span class="p">,</span>
+            <span class="n">metrics_only</span><span class="o">=</span><span class="n">topology_metrics_only</span><span class="p">,</span>
         <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">results</span></div>

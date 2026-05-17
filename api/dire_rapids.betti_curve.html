@@ -57,6 +57,7 @@
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.dire_cuvs.html">dire_rapids.dire_cuvs module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="dire_rapids.metrics.html">dire_rapids.metrics module</a></li>
 <li class="toctree-l3 current"><a class="current reference internal" href="#">dire_rapids.betti_curve module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.IncrementalF2Rank"><code class="docutils literal notranslate"><span class="pre">IncrementalF2Rank</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.UnionFind"><code class="docutils literal notranslate"><span class="pre">UnionFind</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_cpu"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_cpu()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#dire_rapids.betti_curve.compute_betti_curve_fast"><code class="docutils literal notranslate"><span class="pre">compute_betti_curve_fast()</span></code></a></li>
@@ -102,10 +103,28 @@
 <p>Betti curve computation using filtered edge addition.</p>
 <p>Computes Betti numbers (β₀, β₁) at multiple filtration thresholds by:
 1. Building full atlas complex once with kNN graph
-2. Recording all edge distances
-3. Progressively adding edges by distance threshold
-4. Recomputing Laplacians and Betti numbers at each step</p>
+2. Recording edge and triangle filtration values
+3. Progressively adding edges and triangles by threshold
+4. Updating β₀ with union-find and rank(B₂) over GF(2) incrementally</p>
 <p>Contains both CPU and GPU implementations with automatic backend selection.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.IncrementalF2Rank">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">IncrementalF2Rank</span></span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#IncrementalF2Rank"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.IncrementalF2Rank" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Incremental sparse rank over GF(2), represented as Python integer bitsets.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.IncrementalF2Rank.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#IncrementalF2Rank.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.IncrementalF2Rank.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.betti_curve.IncrementalF2Rank.add">
+<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">column</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#IncrementalF2Rank.add"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.IncrementalF2Rank.add" title="Link to this definition"></a></dt>
+<dd><p>Add one boundary column. Return True if it increases rank.</p>
+</dd></dl>
+
+</dd></dl>
+
 <dl class="py class">
 <dt class="sig sig-object py" id="dire_rapids.betti_curve.UnionFind">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">UnionFind</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#UnionFind"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.UnionFind" title="Link to this definition"></a></dt>
@@ -159,15 +178,14 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve_fast">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve_fast</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve_fast"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve_fast" title="Link to this definition"></a></dt>
-<dd><p>Fast Betti curve computation using union-find (β₀) and matrix rank (β₁).</p>
-<p>Instead of computing eigenvalues of Hodge Laplacians via eigsh (the bottleneck
-in compute_betti_curve_cpu), this uses algebraic topology identities:</p>
-<blockquote>
-<div><p>β₀ = connected components via union-find, O(E·α(E))
-β₁ = E - rank(B1) - rank(B2) via Hodge decomposition
-rank(B1) = V - β₀ (graph theory, free)
-rank(B2) via GPU-accelerated SVD (torch.linalg.matrix_rank)</p>
-</div></blockquote>
+<dd><p>Fast Betti curve computation using an incremental atlas filtration.</p>
+<dl class="simple">
+<dt>Adds each edge and triangle once in filtration order:</dt><dd><p>β₀ = connected components via union-find, O(E·α(E))
+β₁ = E - rank(B1) - rank(B2)
+rank(B1) = V - β₀
+rank(B2) is maintained incrementally over GF(2) using sparse bitsets</p>
+</dd>
+</dl>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -191,9 +209,10 @@ rank(B2) via GPU-accelerated SVD (torch.linalg.matrix_rank)</p>
 <dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve_gpu">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve_gpu" title="Link to this definition"></a></dt>
 <dd><p>GPU implementation of filtered Betti curve computation.</p>
-<p>Uses GPU kNN (cuVS/cuML) for graph construction and rank-based Betti
-computation (union-find for β₀, GPU SVD for β₁). Atlas building runs
-on CPU (set operations are faster there).</p>
+<p>Uses GPU kNN (cuVS/cuML) for graph construction, then the shared
+incremental atlas computation (union-find for β₀ and GF(2) bitset
+elimination for rank(B₂)). Atlas building runs on CPU because the set-heavy
+merge step is faster and simpler there.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -263,15 +282,20 @@ use compute_betti_curve_fast instead.</p>
 <dt class="sig sig-object py" id="dire_rapids.betti_curve.compute_betti_curve">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.betti_curve.</span></span><span class="sig-name descname"><span class="pre">compute_betti_curve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_neighbors</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">density_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_gpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefer_ripser</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/betti_curve.html#compute_betti_curve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.betti_curve.compute_betti_curve" title="Link to this definition"></a></dt>
 <dd><p>Compute filtered Betti curve (backend selector).</p>
-<dl class="simple">
+<dl>
 <dt>Preference order (if available):</dt><dd><p>ripser (if <code class="docutils literal notranslate"><span class="pre">prefer_ripser</span></code> and <code class="docutils literal notranslate"><span class="pre">ripser</span></code> is installed)
-→ GPU rank-based path (<code class="docutils literal notranslate"><span class="pre">compute_betti_curve_gpu</span></code>) if <code class="docutils literal notranslate"><span class="pre">use_gpu</span></code>
-→ fast CPU rank-based path (<code class="docutils literal notranslate"><span class="pre">compute_betti_curve_fast</span></code>) as fallback.</p>
+→ GPU kNN + incremental atlas path (<code class="docutils literal notranslate"><span class="pre">compute_betti_curve_gpu</span></code>) if</p>
+<blockquote>
+<div><p><code class="docutils literal notranslate"><span class="pre">use_gpu</span></code></p>
+</div></blockquote>
+<dl class="simple">
+<dt>→ fast CPU incremental atlas path (<code class="docutils literal notranslate"><span class="pre">compute_betti_curve_fast</span></code>) as</dt><dd><p>fallback.</p>
 </dd>
 </dl>
-<p>Ripser is the correct default: ~4000× faster than the eigsh path on
-MNIST n=3000, and well-suited to large N; the older paths remain for
-correctness cross-checks and for environments without ripser.</p>
+</dd>
+</dl>
+<p>Ripser is the preferred default when available; the atlas paths provide a
+dependency-light fallback for environments without ripser.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -281,9 +305,9 @@ Vietoris-Rips filtration on the full distance matrix up to <code class="docutils
 <li><p><strong>density_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Percentile threshold for edge inclusion, 0-1 (ignored by ripser).</p></li>
 <li><p><strong>overlap_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Factor for expanding local neighborhoods (ignored by ripser).</p></li>
 <li><p><strong>n_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of filtration steps.</p></li>
-<li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to try the GPU rank-based path if ripser is not picked.</p></li>
+<li><p><strong>use_gpu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to try the GPU kNN atlas path if ripser is not picked.</p></li>
 <li><p><strong>prefer_ripser</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Prefer ripser when available. Set to False to skip ripser and use
-the rank-based backends only (e.g. for correctness comparison).</p></li>
+the atlas backends only (e.g. for correctness comparison).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
