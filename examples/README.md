@@ -59,11 +59,12 @@ print(f"DTW β₀: {results['topology']['metrics']['dtw_beta0']:.6f}")
 print(f"DTW β₁: {results['topology']['metrics']['dtw_beta1']:.6f}")
 ```
 
-### 3. Financial Market Microstructure Analysis
+### 3. Financial Market Microstructure Analysis [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sashakolpakov/dire-rapids/blob/main/examples/finance_analysis_notebook.ipynb)
 
 A comprehensive demonstration of using DiRe's PyTorch backend for analyzing financial tick data and revealing market microstructure patterns through dimensionality reduction.
 
 **Files:**
+- `finance_analysis_notebook.ipynb` - Minimal Jupyter notebook for running the finance workflow
 - `finance_tick_embedding.py` - Simple minute-bar data analysis
 - `finance_tick_hierarchical.py` - Advanced tick-level data with hierarchical embedding  
 - `finance_analysis_notebook.py` - Interactive notebook-ready analysis tools
@@ -110,6 +111,8 @@ python finance_tick_embedding.py
 # Access the results
 embedding.head()
 ```
+
+For a ready-to-run notebook, open `finance_analysis_notebook.ipynb`.
 
 ### Interactive Analysis
 ```python

@@ -1037,8 +1037,19 @@ def compute_global_metrics(data, layout, subsample_threshold=0.5, random_state=4
         'dtw_beta1': float(dtw_beta1)
     }
 
+    protocol = {
+        'subsample_threshold': subsample_threshold,
+        'random_state': random_state,
+        'n_steps': n_steps,
+        'k_neighbors': k_neighbors,
+        'density_threshold': density_threshold,
+        'overlap_factor': overlap_factor,
+        'use_gpu': use_gpu,
+        'metrics_only': metrics_only,
+    }
+
     if metrics_only:
-        return {'metrics': metrics, 'backend': 'atlas'}
+        return {'metrics': metrics, 'backend': 'atlas', 'protocol': protocol}
 
     # Include Betti curves if requested
     betti_curves = {
@@ -1054,7 +1065,12 @@ def compute_global_metrics(data, layout, subsample_threshold=0.5, random_state=4
         }
     }
 
-    return {'metrics': metrics, 'bettis': betti_curves, 'backend': 'atlas'}
+    return {
+        'metrics': metrics,
+        'bettis': betti_curves,
+        'backend': 'atlas',
+        'protocol': protocol,
+    }
 
 
 #
@@ -1064,7 +1080,10 @@ def compute_global_metrics(data, layout, subsample_threshold=0.5, random_state=4
 
 def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_threshold=0.5,
                       random_state=42, use_gpu=True, compute_distortion=True,
-                      compute_context=True, compute_topology=True, **kwargs):
+                      compute_context=True, compute_topology=True,
+                      topology_n_steps=100, topology_k_neighbors=20,
+                      topology_density_threshold=0.8, topology_overlap_factor=1.5,
+                      topology_metrics_only=True, **kwargs):
     """
     Comprehensive evaluation of a dimensionality reduction embedding.
 
@@ -1092,6 +1111,17 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
         Whether to compute context metrics (default True)
     compute_topology : bool
         Whether to compute topological metrics (default True)
+    topology_n_steps : int
+        Number of filtration points for topology Betti curves (default 100)
+    topology_k_neighbors : int
+        Size of local neighborhood for topology atlas construction (default 20)
+    topology_density_threshold : float
+        Percentile threshold for topology edge inclusion (0-1, default 0.8)
+    topology_overlap_factor : float
+        Factor for expanding topology local neighborhoods (default 1.5)
+    topology_metrics_only : bool
+        If True, topology results include only metrics and protocol metadata.
+        If False, topology results also include Betti curves.
     **kwargs : dict
         Additional parameters for specific metrics
 
@@ -1130,7 +1160,13 @@ def evaluate_embedding(data, layout, labels=None, n_neighbors=16, subsample_thre
         print("Computing topological metrics using Betti curve comparison...")
         results['topology'] = compute_global_metrics(
             data, layout, subsample_threshold,
-            random_state, n_steps=100, use_gpu=use_gpu
+            random_state,
+            n_steps=topology_n_steps,
+            k_neighbors=topology_k_neighbors,
+            density_threshold=topology_density_threshold,
+            overlap_factor=topology_overlap_factor,
+            use_gpu=use_gpu,
+            metrics_only=topology_metrics_only,
         )
 
     return results

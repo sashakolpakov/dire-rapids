@@ -1,19 +1,20 @@
-# Fast Betti Curve Computation via Rank
+# Fast Betti Curve Computation via Incremental Atlas Filtration
 
 ## Overview
 
-The `betti_curve.py` module computes filtered Betti curves (beta_0, beta_1) for
-point cloud data using a kNN-based atlas complex. The key innovation is replacing
-expensive eigenvalue computation (scipy `eigsh`) with exact algebraic topology
-identities that reduce the problem to connected components and matrix rank.
+The `betti_curve.py` module computes filtered Betti curves (`beta_0`, `beta_1`)
+for point cloud data using a kNN-based atlas complex. The non-ripser fallback
+builds the atlas once, sorts simplex insertion events by filtration value, and
+updates Betti numbers incrementally.
 
 ## Mathematical Foundation
 
 For a simplicial complex with V vertices, E edges, T triangles, and boundary
 operators B1 (V x E) and B2 (E x T):
 
-**beta_0** (connected components) is computed via union-find in O(E * alpha(E)),
-essentially linear time.
+**beta_0** (connected components) is computed via union-find. As edges enter the
+filtration, each edge performs one `union(u, v)`. Path compression and union by
+rank make this effectively linear: O(E * alpha(V)).
 
 **beta_1** (independent loops) uses the Hodge decomposition identity:
 
@@ -23,32 +24,54 @@ where:
 - **rank(B1) = V - beta_0** (standard graph theory: the rank of the incidence
   matrix of a graph equals the number of vertices minus the number of connected
   components)
-- **rank(B2)** is computed via GPU-accelerated SVD (`torch.linalg.matrix_rank`)
+- **rank(B2)** is maintained incrementally over the field GF(2)
 
-This completely eliminates the need for eigenvalue computation of the Hodge
-Laplacian L1 = B1^T B1 + B2 B2^T, which was the performance bottleneck.
+This gives a field-valued Betti computation without floating-point rank
+thresholds.
 
 ## Implementation Details
 
-### Rank of B2
+### Incremental rank of B2 over GF(2)
 
 B2 is the boundary operator from 2-simplices (triangles) to 1-simplices (edges),
-an integer matrix with entries in {-1, 0, +1} and exactly 3 nonzero entries per
-column.
+with one column per triangle and one row per edge. Over GF(2), orientation signs
+disappear, so each triangle boundary is just a sparse bit vector with exactly
+three 1-bits: its three boundary edges.
 
-**Precision requirement: float64.** In float32, genuine zero singular values of
-B2 can be perturbed to ~1e-6, which may cross the data-dependent threshold used
-by `matrix_rank`. In float64, the perturbation is ~1e-15, safely below any
-reasonable threshold. This was discovered empirically: dense kNN complexes from
-Gaussian point clouds produce B2 matrices with genuine nonzero singular values as
-low as 0.24 (the initial assumption that all nonzero SVs >= 1 is false for
-general simplicial complexes).
+The implementation stores each column as a Python integer bitset. Adding a
+triangle means reducing that bitset against existing pivot columns:
 
-**Gram matrix optimization.** For large complexes (E * T > 5M elements), we
-compute the Gram matrix G = B2 * B2^T (size E x E) instead of materializing the
-full dense B2 (size E x T). The eigenvalues of G are the squared singular values
-of B2, and in float64 the default threshold (~1e-10) is far below the smallest
-genuine nonzero eigenvalue of G (~0.05), so this is safe.
+1. Take the highest set bit as the pivot row.
+2. If no pivot exists at that row, store this column and increment `rank(B2)`.
+3. If a pivot exists, XOR the column with the pivot and continue.
+4. If the column reduces to zero, it was dependent and does not change rank.
+
+Each triangle is processed once, when all three of its edges are active. This is
+the same sparse Gaussian-elimination idea used by persistent-homology reductions,
+but specialized to H1 of the atlas complex.
+
+Concretely, if the active edge list assigns indices `e0 -> 0`, `e1 -> 1`,
+`e2 -> 2`, ..., then a triangle with boundary edges `(e2, e5, e9)` is encoded as:
+
+    column = (1 << 2) | (1 << 5) | (1 << 9)
+
+The pivot table maps `highest_set_bit -> reduced_column`. For example, if
+`column.bit_length() - 1 == 9` and there is already a stored pivot at row 9, the
+new column is replaced by:
+
+    column ^= pivots[9]
+
+This is row cancellation over GF(2): `1 + 1 = 0`, so XOR clears the pivot bit and
+may toggle lower bits. The process repeats until either a new pivot row is found
+or the column becomes zero. Python integers make this compact: XOR and
+`bit_length()` operate on whole machine-word chunks internally rather than on
+Python lists of edge indices.
+
+Computing over GF(2) is deliberate: persistent homology is field-valued, GF(2) is
+the usual fast default, and it avoids expensive floating-point rank thresholds.
+For complexes with torsion, Betti numbers can depend on the chosen field; this
+fallback reports field-valued Betti numbers over GF(2). The
+`compute_betti_curve_cpu` path remains available as an eigsh-based reference.
 
 ### Backend Architecture
 
@@ -57,39 +80,36 @@ edge filtering):
 
 | Backend | kNN | Betti computation | Use case |
 |---------|-----|-------------------|----------|
-| `compute_betti_curve_fast` | sklearn (CPU) | union-find + GPU SVD rank | Default for CPU-only |
-| `compute_betti_curve_gpu` | cuVS/cuML (GPU) | union-find + GPU SVD rank | Default when GPU available |
+| `compute_betti_curve_fast` | sklearn (CPU) | incremental union-find + GF(2) bitset rank | Default for CPU-only |
+| `compute_betti_curve_gpu` | cuVS/cuML (GPU) | GPU kNN + incremental union-find/GF(2) bitset rank | Default when GPU available |
 | `compute_betti_curve_cpu` | sklearn (CPU) | scipy eigsh (shift-invert) | Reference implementation |
 
-The `compute_betti_curve` selector tries GPU first, then falls back to fast.
+The `compute_betti_curve` selector prefers ripser when installed, then tries the
+GPU atlas path, then falls back to the CPU atlas path.
 
 ### Performance
 
-The rank-based method is **not faster** than eigsh at typical sizes. Dense SVD
-for rank(B2) via the Gram matrix G = B2·B2ᵀ scales as O(E³) per filtration
-step, while eigsh exploits sparsity and only computes a handful of eigenvalues.
+The main operations are:
 
-On GH200 (480GB), with k=15, 10 filtration steps:
+- kNN construction;
+- atlas construction, roughly O(N * k^2) local neighbor-neighbor checks;
+- one pass over edge events and triangle events;
+- sparse GF(2) elimination on triangle boundary bitsets.
 
-| N   | CPU (eigsh) | Fast (rank) | Ratio    |
-|-----|-------------|-------------|----------|
-| 100 | ~0.2s       | ~1.7s       | eigsh 8x faster |
-| 200 | ~0.4s       | ~6.0s       | eigsh 15x faster |
-| 500 | ~2.5s       | ~31s        | eigsh 12x faster |
-
-The advantage of the rank-based method is **correctness**, not speed (see below).
+On a local Apple Silicon CPU, a noisy 3D circle with `k=15`, `n_steps=50` took
+about 0.34s at N=1000 and 1.40s at N=3000. Exact times vary by hardware and
+dataset geometry.
 
 ### Correctness
 
-The fast method is actually **more correct** than the eigsh reference at sparse
-filtration steps:
+The incremental atlas method is exact over GF(2):
 
 - **beta_0**: Union-find counts all connected components exactly, including
   isolated vertices. The eigsh method is capped at k=50 eigenvalues and cannot
   detect more than 50 components.
-- **beta_1**: The rank formula is exact (given sufficient numerical precision).
-  The eigsh method is iterative and can miss near-zero eigenvalues in
-  ill-conditioned Laplacians.
+- **beta_1**: The rank formula is exact over GF(2), and bitset elimination has
+  no floating-point tolerance.
 
-Small discrepancies (max 1-2) at transitional filtration steps are due to eigsh
-approximation errors, not the rank method.
+Small discrepancies with the eigsh reference can occur because eigsh is
+approximate and because eigsh over real coefficients and the atlas fallback over
+GF(2) are different coefficient-field protocols.
