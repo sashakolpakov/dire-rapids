@@ -40,7 +40,7 @@ try:
         print(f"  CUDA version: {torch.version.cuda}")
 except ImportError:
     print("✗ PyTorch not available")
-    sys.exit(1)
+    torch = None
 
 try:
     import cupy as cp
@@ -75,7 +75,8 @@ try:
     print(f"  Number of classes: {len(np.unique(y_full))}")
 except Exception as e:  # pylint: disable=broad-exception-caught
     print(f"✗ Failed to load MNIST: {e}")
-    sys.exit(1)
+    X_full = None
+    y_full = None
 
 print()
 
