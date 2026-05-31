@@ -20,7 +20,7 @@ python -m pip install --upgrade pip
 python -m pip install \
   --extra-index-url https://pypi.nvidia.com \
   --extra-index-url https://download.pytorch.org/whl/cu128 \
-  "dire-rapids[rapids,bench,viz,keops]"
+  "dire-rapids[rapids,bench,viz,keops]==0.3.1"
 ```
 
 For development from a clone:

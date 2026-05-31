@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dire-rapids &mdash; dire-rapids 0.3.0 documentation</title>
+  <title>dire-rapids &mdash; dire-rapids 0.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=e259d695"></script>
+      <script src="_static/documentation_options.js?v=4621528c"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -76,8 +76,8 @@
 <section id="features">
 <h2>Features<a class="headerlink" href="#features" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>Multiple backends: PyTorch, memory-efficient, RAPIDS cuVS</p></li>
-<li><p>Automatic backend selection</p></li>
+<li><p>Multiple reducer implementations: PyTorch, memory-efficient, RAPIDS cuVS</p></li>
+<li><p>Automatic backend selection with explicit k-NN engine overrides</p></li>
 <li><p>Custom distance metrics for k-NN</p></li>
 <li><p>GPU acceleration with CUDA</p></li>
 <li><p>Memory-efficient processing (&gt;100K points)</p></li>
@@ -92,15 +92,38 @@
 <li><p><strong>DiRePyTorchMemoryEfficient</strong>: Memory-optimized for large datasets</p></li>
 <li><p><strong>DiReCuVS</strong>: RAPIDS cuVS/cuML accelerated for massive datasets</p></li>
 </ul>
+<p><code class="docutils literal notranslate"><span class="pre">backend</span></code> controls which reducer implementation is constructed.
+<code class="docutils literal notranslate"><span class="pre">knn_backend</span></code> controls the k-NN engine used inside that reducer:
+<code class="docutils literal notranslate"><span class="pre">'auto'</span></code>, <code class="docutils literal notranslate"><span class="pre">'pytorch'</span></code>, <code class="docutils literal notranslate"><span class="pre">'pykeops'</span></code>, or <code class="docutils literal notranslate"><span class="pre">'cuvs'</span></code>. Manual k-NN engine
+requests are strict and raise if the requested engine cannot run.</p>
 </section>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
 <p>Install the base package:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>dire-rapids
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids==0.3.1&quot;</span>
+</pre></div>
+</div>
+<p>Install optional k-NN engines:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># PyKeOps k-NN engine</span>
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids[keops]==0.3.1&quot;</span>
+
+<span class="c1"># CUDA CuPy support</span>
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids[cuda]==0.3.1&quot;</span>
 </pre></div>
 </div>
 <p>For GPU acceleration with RAPIDS:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Follow the installation instructions at https://docs.rapids.ai/install/</span>
+<p>Use a clean virtual environment. The <code class="docutils literal notranslate"><span class="pre">rapids</span></code> extra installs cuML/cuVS/cuDF
+from the NVIDIA index and PyTorch from the matching CUDA wheel index.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">&quot;dire-rapids[rapids,keops]==0.3.1&quot;</span>
+</pre></div>
+</div>
+<p>For development from a clone:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sashakolpakov/dire-rapids.git
+<span class="nb">cd</span><span class="w"> </span>dire-rapids
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev,keops]&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -112,8 +135,11 @@
 <span class="c1"># Create sample data</span>
 <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">10000</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
 
-<span class="c1"># Create reducer with automatic backend selection</span>
+<span class="c1"># Create reducer with automatic implementation and k-NN engine selection</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+
+<span class="c1"># Or force the k-NN engine independently</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s1">&#39;pytorch_cpu&#39;</span><span class="p">,</span> <span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;pytorch&#39;</span><span class="p">)</span>
 
 <span class="c1"># Fit and transform data</span>
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
@@ -194,18 +220,31 @@
 </pre></div>
 </div>
 </section>
-<section id="automatic-backend-selection">
-<h3>Automatic Backend Selection<a class="headerlink" href="#automatic-backend-selection" title="Link to this heading"></a></h3>
+<section id="automatic-backend-and-k-nn-selection">
+<h3>Automatic Backend and k-NN Selection<a class="headerlink" href="#automatic-backend-and-k-nn-selection" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
 
-<span class="c1"># Automatic selection based on hardware</span>
-<span class="c1"># Priority: cuVS &gt; PyTorchMemoryEfficient &gt; PyTorch &gt; CPU</span>
+<span class="c1"># Automatic reducer selection based on hardware</span>
+<span class="c1"># Implementation priority: cuVS &gt; PyTorchMemoryEfficient &gt; PyTorch &gt; CPU</span>
 <span class="c1"># When cuVS is not available, automatically uses memory-efficient backend</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span>
     <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
     <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># Use memory-efficient variant if needed</span>
 <span class="p">)</span>
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">backend</span></code> selects the DiRe implementation. <code class="docutils literal notranslate"><span class="pre">knn_backend</span></code> selects the
+k-nearest-neighbor engine used inside that implementation. Keep
+<code class="docutils literal notranslate"><span class="pre">knn_backend='auto'</span></code> for the default heuristics, or force <code class="docutils literal notranslate"><span class="pre">'pytorch'</span></code>,
+<code class="docutils literal notranslate"><span class="pre">'pykeops'</span></code>, or <code class="docutils literal notranslate"><span class="pre">'cuvs'</span></code>. Explicit k-NN backend requests raise if the
+requested engine is unavailable or unsupported for the current data.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># CPU implementation with forced PyTorch k-NN</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s1">&#39;pytorch_cpu&#39;</span><span class="p">,</span> <span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;pytorch&#39;</span><span class="p">)</span>
+
+<span class="c1"># Optional engines, strict if unavailable</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;pykeops&#39;</span><span class="p">)</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;cuvs&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 <p><strong>Backend Selection Priority:</strong></p>
@@ -245,20 +284,23 @@
 <section id="custom-distance-metrics">
 <h3>Custom Distance Metrics<a class="headerlink" href="#custom-distance-metrics" title="Link to this heading"></a></h3>
 <p>Custom metrics for k-nearest neighbor computation:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># L1 distance</span>
-<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">metric</span><span class="o">=</span><span class="s1">&#39;(x - y).abs().sum(-1)&#39;</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># L1 distance on the PyTorch k-NN path</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">metric</span><span class="o">=</span><span class="s1">&#39;(x - y).abs().sum(-1)&#39;</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;pytorch&#39;</span><span class="p">)</span>
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 
 <span class="c1"># Cosine distance</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">cosine_distance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
     <span class="k">return</span> <span class="mi">1</span> <span class="o">-</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">*</span> <span class="n">y</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
 
-<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">metric</span><span class="o">=</span><span class="n">cosine_distance</span><span class="p">)</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">metric</span><span class="o">=</span><span class="n">cosine_distance</span><span class="p">,</span> <span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;pytorch&#39;</span><span class="p">)</span>
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 </pre></div>
 </div>
 <p><strong>Metric types:</strong> <code class="docutils literal notranslate"><span class="pre">None</span></code>/<code class="docutils literal notranslate"><span class="pre">'euclidean'</span></code>/<code class="docutils literal notranslate"><span class="pre">'l2'</span></code> (default), string expressions, callable functions</p>
-<p>Note: Layout forces use Euclidean distance regardless of k-NN metric.</p>
+<p>Note: Layout forces use Euclidean distance regardless of k-NN metric. Custom
+metric expressions and callables run on the PyTorch/PyKeOps k-NN paths. cuVS
+supports named native metrics only; forced <code class="docutils literal notranslate"><span class="pre">knn_backend='cuvs'</span></code> raises for
+custom expressions/callables.</p>
 </section>
 <section id="reducerrunner-framework">
 <h3>ReducerRunner Framework<a class="headerlink" href="#reducerrunner-framework" title="Link to this heading"></a></h3>
@@ -307,7 +349,7 @@
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
+    <p>&#169; Copyright 2025-2026, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

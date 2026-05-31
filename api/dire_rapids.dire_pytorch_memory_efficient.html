@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dire_rapids.dire_pytorch_memory_efficient module &mdash; dire-rapids 0.3.0 documentation</title>
+  <title>dire_rapids.dire_pytorch_memory_efficient module &mdash; dire-rapids 0.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=e259d695"></script>
+      <script src="../_static/documentation_options.js?v=4621528c"></script>
       <script src="../_static/doctools.js?v=9bcbadda"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/js/theme.js"></script>
@@ -163,7 +163,7 @@ Lower values are more conservative but may be slower.</p>
 <dd class="field-even"><p>Additional keyword arguments passed to DiRePyTorch parent class.
 Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
 spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
-metric (custom distance function for k-NN computation).</p>
+metric (custom distance function for k-NN computation), knn_backend.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -226,6 +226,7 @@ See DiRePyTorch documentation for available parameters including:</p>
 <li><p>n_components, n_neighbors, init, max_iter_layout, min_dist, spread</p></li>
 <li><p>cutoff, neg_ratio, verbose, random_state, use_exact_repulsion</p></li>
 <li><p>metric: Custom distance metric for k-NN (str, callable, or None)</p></li>
+<li><p>knn_backend: k-NN engine selection (‘auto’, ‘pytorch’, ‘pykeops’, ‘cuvs’)</p></li>
 </ul>
 </p></li>
 </ul>
@@ -294,7 +295,7 @@ handling, enhanced logging, and aggressive cleanup procedures.</p>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
+    <p>&#169; Copyright 2025-2026, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

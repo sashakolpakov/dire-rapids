@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dire_rapids.dire_pytorch &mdash; dire-rapids 0.3.0 documentation</title>
+  <title>dire_rapids.dire_pytorch &mdash; dire-rapids 0.3.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=e259d695"></script>
+      <script src="../../_static/documentation_options.js?v=4621528c"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -111,6 +111,34 @@
     <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
 <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
     <span class="n">CUVS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="n">_KNN_BACKEND_ALIASES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="kc">None</span><span class="p">:</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;auto&quot;</span><span class="p">:</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;torch&quot;</span><span class="p">:</span> <span class="s2">&quot;pytorch&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;pytorch&quot;</span><span class="p">:</span> <span class="s2">&quot;pytorch&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;keops&quot;</span><span class="p">:</span> <span class="s2">&quot;pykeops&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;pykeops&quot;</span><span class="p">:</span> <span class="s2">&quot;pykeops&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;rapids&quot;</span><span class="p">:</span> <span class="s2">&quot;cuvs&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;cuvs&quot;</span><span class="p">:</span> <span class="s2">&quot;cuvs&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_knn_backend</span><span class="p">(</span><span class="n">knn_backend</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize public k-NN backend names to internal identifiers.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">knn_backend</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;auto&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">knn_backend</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;knn_backend must be one of: &#39;auto&#39;, &#39;pytorch&#39;, &#39;pykeops&#39;, &#39;cuvs&#39;&quot;</span><span class="p">)</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">knn_backend</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_KNN_BACKEND_ALIASES</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Unknown knn_backend: </span><span class="si">{</span><span class="n">knn_backend</span><span class="si">}</span><span class="s2">. &quot;</span>
+            <span class="s2">&quot;Choose from: &#39;auto&#39;, &#39;pytorch&#39;, &#39;pykeops&#39;, &#39;cuvs&#39;&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_compute_forces_kernel</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices</span><span class="p">,</span> <span class="n">neg_indices</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
@@ -384,6 +412,13 @@
 <span class="sd">        - callable: Custom function taking (x, y) tensors and returning distance matrix</span>
 
 <span class="sd">        Examples: &#39;(x - y).abs().sum(-1)&#39; (L1), &#39;1 - (x*y).sum(-1)/(x.norm()*y.norm() + 1e-8)&#39; (cosine).</span>
+<span class="sd">    knn_backend : {&#39;auto&#39;, &#39;pytorch&#39;, &#39;pykeops&#39;, &#39;cuvs&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">        k-NN engine selection independent of the DiRe implementation:</span>
+
+<span class="sd">        - &#39;auto&#39;: Preserve built-in heuristics for cuVS/PyKeOps/PyTorch</span>
+<span class="sd">        - &#39;pytorch&#39;: Force chunked PyTorch distance computation</span>
+<span class="sd">        - &#39;pykeops&#39;: Force PyKeOps LazyTensor k-NN when PyKeOps is installed</span>
+<span class="sd">        - &#39;cuvs&#39;: Force RAPIDS cuVS k-NN when RAPIDS and CUDA are available</span>
 <span class="sd">        </span>
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -456,6 +491,7 @@
             <span class="n">random_state</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">use_exact_repulsion</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># If True, use all-pairs repulsion (for testing)</span>
             <span class="n">metric</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">knn_backend</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span>
             <span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -496,6 +532,10 @@
 <span class="sd">            If True, use exact all-pairs repulsion (memory intensive, testing only).</span>
 <span class="sd">        metric : str, callable, or None, default=None</span>
 <span class="sd">            Custom distance metric for k-NN computation. See class docstring for details.</span>
+<span class="sd">        knn_backend : {&#39;auto&#39;, &#39;pytorch&#39;, &#39;pykeops&#39;, &#39;cuvs&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">            k-NN engine selection. ``&#39;auto&#39;`` keeps the built-in selector;</span>
+<span class="sd">            explicit values bypass heuristic choices and either use the</span>
+<span class="sd">            requested engine or raise if the engine cannot run.</span>
 <span class="sd">        normalize : bool, default=True</span>
 <span class="sd">            If True, mean-center and scale inputs to fit in [-1, 1] (global scalar</span>
 <span class="sd">            rescale) before kNN and PCA. This preserves neighbor rankings exactly</span>
@@ -519,6 +559,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">random_state</span> <span class="o">=</span> <span class="n">random_state</span> <span class="k">if</span> <span class="n">random_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">**</span> <span class="mi">32</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_exact_repulsion</span> <span class="o">=</span> <span class="n">use_exact_repulsion</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">normalize</span> <span class="o">=</span> <span class="n">normalize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">=</span> <span class="n">_normalize_knn_backend</span><span class="p">(</span><span class="n">knn_backend</span><span class="p">)</span>
 
         <span class="c1"># Store RNG state -- defer torch/cuda seeding to fit_transform</span>
         <span class="c1"># to avoid mutating global state from a library constructor.</span>
@@ -540,6 +581,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_b</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_backend</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="c1"># Device management</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cuda&#39;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s1">&#39;cpu&#39;</span><span class="p">)</span>
@@ -580,6 +622,66 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found kernel params: a=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_a</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">, b=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_b</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cuvs_knn_unavailable_reason</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a reason cuVS k-NN cannot run for this reducer, or None.&quot;&quot;&quot;</span>
+        <span class="k">del</span> <span class="n">n_samples</span>  <span class="c1"># Kept for symmetry with selectors in subclasses.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;RAPIDS cuVS is not installed&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;cuVS k-NN requires a CUDA device&quot;</span>
+        <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&gt;</span> <span class="mi">2048</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;cuVS k-NN supports up to 2048 dimensions in this path (got </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;cuVS k-NN in DiRePyTorch only supports backend-native euclidean/l2 metrics&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pykeops_knn_unavailable_reason</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a reason PyKeOps k-NN cannot run, or None.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">PYKEOPS_AVAILABLE</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;PyKeOps is not installed&quot;</span>
+        <span class="k">if</span> <span class="n">use_fp16</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;PyKeOps k-NN does not run on the active FP16 path&quot;</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select_knn_backend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">,</span> <span class="n">allow_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the k-NN backend from the user policy and auto heuristics.&quot;&quot;&quot;</span>
+        <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;pytorch&#39;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;pykeops&#39;</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pykeops_knn_unavailable_reason</span><span class="p">(</span><span class="n">use_fp16</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;knn_backend=&#39;pykeops&#39; requested but unavailable: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;pykeops&#39;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cuvs_knn_unavailable_reason</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;knn_backend=&#39;cuvs&#39; requested but unavailable: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="s1">&#39;cuvs&#39;</span>
+
+        <span class="c1"># Auto policy: preserve the historical hard-coded choices unless the</span>
+        <span class="c1"># caller explicitly requested an engine through knn_backend.</span>
+        <span class="k">if</span> <span class="n">allow_cuvs</span><span class="p">:</span>
+            <span class="n">cuvs_threshold</span> <span class="o">=</span> <span class="mi">200000</span> <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&gt;=</span> <span class="mi">200</span> <span class="k">else</span> <span class="mi">100000</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">n_samples</span> <span class="o">&gt;=</span> <span class="n">cuvs_threshold</span>
+                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cuvs_knn_unavailable_reason</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="p">):</span>
+                <span class="k">return</span> <span class="s1">&#39;cuvs&#39;</span>
+
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">PYKEOPS_AVAILABLE</span>
+            <span class="ow">and</span> <span class="n">n_dims</span> <span class="o">&lt;</span> <span class="mi">200</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_fp16</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="s1">&#39;pykeops&#39;</span>
+
+        <span class="k">return</span> <span class="s1">&#39;pytorch&#39;</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_compute_knn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># pylint: disable=too-many-branches</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Compute k-nearest neighbors with memory-efficient chunking.</span>
@@ -616,29 +718,18 @@
         <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">-NN graph for </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> points in </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D...&quot;</span><span class="p">)</span>
 
-        <span class="c1"># ── cuVS fast path: use GPU-accelerated kNN for large datasets ──</span>
-        <span class="c1"># cuVS IVF-Flat is much faster than brute-force when N is large</span>
-        <span class="c1"># relative to D.  For high-D data (D&gt;200) the index build cost is</span>
-        <span class="c1"># higher, so we raise the threshold.  Empirically:</span>
-        <span class="c1">#   D&lt;200:  cuVS wins at N &gt;= 100K  (covertype 54D: 7s→2.5s at 200K)</span>
-        <span class="c1">#   D&gt;=200: cuVS wins at N &gt;= 200K  (mnist 784D: slower at 50K)</span>
-        <span class="n">cuvs_threshold</span> <span class="o">=</span> <span class="mi">200000</span> <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&gt;=</span> <span class="mi">200</span> <span class="k">else</span> <span class="mi">100000</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">CUVS_AVAILABLE</span>
-                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span>
-                <span class="ow">and</span> <span class="n">n_samples</span> <span class="o">&gt;=</span> <span class="n">cuvs_threshold</span>
-                <span class="ow">and</span> <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">2048</span>
-                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>  <span class="c1"># cuVS only supports built-in metrics</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_knn_cuvs</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuVS kNN failed (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to PyTorch&quot;</span><span class="p">)</span>
-
         <span class="c1"># Auto-detect FP16 usage based on data size and GPU</span>
         <span class="k">if</span> <span class="n">use_fp16</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
             <span class="c1"># Use FP16 for high-dimensional data or large datasets</span>
             <span class="n">use_fp16</span> <span class="o">=</span> <span class="n">n_dims</span> <span class="o">&gt;=</span> <span class="mi">500</span> <span class="ow">or</span> <span class="n">n_samples</span> <span class="o">&gt;=</span> <span class="mi">100000</span>
         <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cpu&#39;</span><span class="p">:</span>
             <span class="n">use_fp16</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># CPU doesn&#39;t benefit from FP16</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;pykeops&#39;</span> <span class="ow">and</span> <span class="n">use_fp16</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Disabling FP16 k-NN because knn_backend=&#39;pykeops&#39; was requested&quot;</span>
+            <span class="p">)</span>
+            <span class="n">use_fp16</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="c1"># Safety guard: fp16 has a finite range (|x|²-sums must stay below ~65504).</span>
         <span class="c1"># If the data scale would push squared distances near overflow, fall back</span>
@@ -657,6 +748,18 @@
                 <span class="p">)</span>
                 <span class="n">use_fp16</span> <span class="o">=</span> <span class="kc">False</span>
 
+        <span class="n">selected_knn_backend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_knn_backend</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">,</span> <span class="n">allow_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">selected_knn_backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_backend</span> <span class="o">=</span> <span class="s1">&#39;cuvs&#39;</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_knn_cuvs</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Forced cuVS k-NN failed&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;cuVS kNN failed (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">), falling back to another k-NN backend&quot;</span><span class="p">)</span>
+                <span class="n">selected_knn_backend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_knn_backend</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">,</span> <span class="n">allow_cuvs</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
         <span class="c1"># Choose precision</span>
         <span class="k">if</span> <span class="n">use_fp16</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
             <span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float16</span>
@@ -667,16 +770,21 @@
         
         <span class="n">X_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
 
-        <span class="c1"># CRITICAL: PyKeOps is slower than PyTorch for high dimensions!</span>
-        <span class="c1"># Use PyTorch for high-D, PyKeOps for low-D</span>
-        <span class="n">use_pykeops</span> <span class="o">=</span> <span class="n">PYKEOPS_AVAILABLE</span> <span class="ow">and</span> <span class="n">n_dims</span> <span class="o">&lt;</span> <span class="mi">200</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_fp16</span>
+        <span class="n">use_pykeops</span> <span class="o">=</span> <span class="n">selected_knn_backend</span> <span class="o">==</span> <span class="s1">&#39;pykeops&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_backend</span> <span class="o">=</span> <span class="n">selected_knn_backend</span>
 
-        <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&gt;=</span> <span class="mi">200</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch for k-NN (high dimension: </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D)&quot;</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">use_pykeops</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyKeOps for k-NN (low dimension, GPU available)&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">use_pykeops</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;pykeops&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyKeOps for k-NN (forced by knn_backend)&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyKeOps for k-NN (low dimension, GPU available)&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch for k-NN&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch for k-NN (forced by knn_backend)&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">n_dims</span> <span class="o">&gt;=</span> <span class="mi">200</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch for k-NN (high dimension: </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D)&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch for k-NN&quot;</span><span class="p">)</span>
 
         <span class="c1"># Set default chunk size if not provided</span>
         <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1373,7 +1481,7 @@
 
 <div class="viewcode-block" id="create_dire">
 <a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.create_dire">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">create_dire</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_dire</span><span class="p">(</span><span class="n">backend</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="n">memory_efficient</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Create DiRe instance with automatic backend selection.</span>
 
@@ -1400,6 +1508,11 @@
 <span class="sd">        - FP16 support for additional memory savings</span>
 <span class="sd">        - Enhanced chunking strategies</span>
 <span class="sd">        - More aggressive memory cleanup</span>
+
+<span class="sd">    knn_backend : {&#39;auto&#39;, &#39;pytorch&#39;, &#39;pykeops&#39;, &#39;cuvs&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">        k-NN engine selection, independent of the DiRe implementation selected</span>
+<span class="sd">        by ``backend``. ``&#39;auto&#39;`` preserves the built-in selector; explicit</span>
+<span class="sd">        values force the requested k-NN engine or raise if it cannot run.</span>
 
 <span class="sd">    **kwargs : dict</span>
 <span class="sd">        Additional keyword arguments passed to the DiRe constructor.</span>
@@ -1441,8 +1554,11 @@
 <span class="sd">        # CPU-only processing</span>
 <span class="sd">        reducer = create_dire(backend=&#39;pytorch_cpu&#39;)</span>
 
-<span class="sd">        # GPU processing with cuVS acceleration</span>
-<span class="sd">        reducer = create_dire(backend=&#39;cuvs&#39;, use_cuvs=True)</span>
+<span class="sd">        # CPU implementation with an explicit k-NN engine</span>
+<span class="sd">        reducer = create_dire(backend=&#39;pytorch_cpu&#39;, knn_backend=&#39;pytorch&#39;)</span>
+
+<span class="sd">        # GPU processing with cuVS k-NN acceleration</span>
+<span class="sd">        reducer = create_dire(backend=&#39;cuvs&#39;, knn_backend=&#39;cuvs&#39;)</span>
 
 <span class="sd">        # With custom distance metric</span>
 <span class="sd">        reducer = create_dire(</span>
@@ -1465,8 +1581,11 @@
 <span class="sd">    The function automatically handles import errors and missing dependencies,</span>
 <span class="sd">    falling back to available alternatives when possible.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">knn_backend</span> <span class="o">=</span> <span class="n">_normalize_knn_backend</span><span class="p">(</span><span class="n">knn_backend</span><span class="p">)</span>
+
     <span class="c1"># Handle verbose parameter early to disable logging if needed</span>
     <span class="n">verbose</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;verbose&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">use_cuvs_override</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;use_cuvs&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
 
     <span class="c1"># Import here to avoid circular imports</span>
     <span class="k">try</span><span class="p">:</span>
@@ -1476,22 +1595,38 @@
 
     <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch_memory_efficient</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorchMemoryEfficient</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
 
+    <span class="k">if</span> <span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;pykeops&#39;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">PYKEOPS_AVAILABLE</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;knn_backend=&#39;pykeops&#39; requested but PyKeOps is not installed&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;knn_backend=&#39;cuvs&#39; requested but RAPIDS cuVS is not installed. &quot;</span>
+                <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch_cpu&#39;</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;knn_backend=&#39;cuvs&#39; requested but CUDA GPU is not available&quot;</span><span class="p">)</span>
+
     <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;auto&#39;</span><span class="p">:</span>
         <span class="c1"># Auto-select best backend based on availability</span>
-        <span class="k">if</span> <span class="n">CUVS_AVAILABLE</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">CUVS_AVAILABLE</span> <span class="ow">and</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="ow">and</span> <span class="n">use_cuvs_override</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">False</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Auto-selected RAPIDS cuVS backend (GPU acceleration)&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">DiReCuVS</span><span class="p">(</span><span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DiReCuVS</span><span class="p">(</span>
+                <span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span> <span class="k">if</span> <span class="n">use_cuvs_override</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">use_cuvs_override</span><span class="p">,</span>
+                <span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
             <span class="c1"># When cuVS is not available, prefer memory-efficient backend for better GPU memory management</span>
             <span class="k">if</span> <span class="n">memory_efficient</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Auto-selected memory-efficient PyTorch backend (GPU)&quot;</span><span class="p">)</span>
-                <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Auto-selected PyTorch backend (GPU)&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
         <span class="c1"># CPU fallback</span>
         <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
@@ -1499,8 +1634,8 @@
         <span class="k">if</span> <span class="n">memory_efficient</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Memory-efficient mode has limited benefits on CPU&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">CUVS_AVAILABLE</span><span class="p">:</span>
@@ -1512,17 +1647,21 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cuVS backend requires CUDA GPU&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using RAPIDS cuVS backend&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">DiReCuVS</span><span class="p">(</span><span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DiReCuVS</span><span class="p">(</span>
+            <span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span> <span class="k">if</span> <span class="n">use_cuvs_override</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">use_cuvs_override</span><span class="p">,</span>
+            <span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch&#39;</span><span class="p">:</span>
         <span class="c1"># Use PyTorch with auto device selection</span>
         <span class="k">if</span> <span class="n">memory_efficient</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using memory-efficient PyTorch backend&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch_gpu&#39;</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
@@ -1530,10 +1669,10 @@
         <span class="k">if</span> <span class="n">memory_efficient</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using memory-efficient PyTorch backend (GPU)&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend (GPU)&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s1">&#39;pytorch_cpu&#39;</span><span class="p">:</span>
         <span class="c1"># Force CPU even if GPU is available</span>
@@ -1543,9 +1682,9 @@
             <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Memory-efficient mode has limited benefits on CPU&quot;</span><span class="p">)</span>
             <span class="c1"># Create instance and force CPU</span>
-            <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiRePyTorch</span><span class="p">(</span><span class="n">knn_backend</span><span class="o">=</span><span class="n">knn_backend</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">reducer</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">reducer</span>
 
@@ -1563,7 +1702,7 @@
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
+    <p>&#169; Copyright 2025-2026, Alexander Kolpakov (UATX), Igor Rivin (Temple University).</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

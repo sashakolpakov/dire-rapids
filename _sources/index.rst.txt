@@ -6,8 +6,8 @@ PyTorch and RAPIDS accelerated dimensionality reduction.
 Features
 --------
 
-* Multiple backends: PyTorch, memory-efficient, RAPIDS cuVS
-* Automatic backend selection
+* Multiple reducer implementations: PyTorch, memory-efficient, RAPIDS cuVS
+* Automatic backend selection with explicit k-NN engine overrides
 * Custom distance metrics for k-NN
 * GPU acceleration with CUDA
 * Memory-efficient processing (>100K points)
@@ -21,6 +21,11 @@ Backends
 - **DiRePyTorchMemoryEfficient**: Memory-optimized for large datasets
 - **DiReCuVS**: RAPIDS cuVS/cuML accelerated for massive datasets
 
+``backend`` controls which reducer implementation is constructed.
+``knn_backend`` controls the k-NN engine used inside that reducer:
+``'auto'``, ``'pytorch'``, ``'pykeops'``, or ``'cuvs'``. Manual k-NN engine
+requests are strict and raise if the requested engine cannot run.
+
 Installation
 ------------
 
@@ -28,13 +33,37 @@ Install the base package:
 
 .. code-block:: bash
 
-   pip install dire-rapids
+   python -m pip install "dire-rapids==0.3.1"
 
-For GPU acceleration with RAPIDS:
+Install optional k-NN engines:
 
 .. code-block:: bash
 
-   # Follow the installation instructions at https://docs.rapids.ai/install/
+   # PyKeOps k-NN engine
+   python -m pip install "dire-rapids[keops]==0.3.1"
+
+   # CUDA CuPy support
+   python -m pip install "dire-rapids[cuda]==0.3.1"
+
+For GPU acceleration with RAPIDS:
+
+Use a clean virtual environment. The ``rapids`` extra installs cuML/cuVS/cuDF
+from the NVIDIA index and PyTorch from the matching CUDA wheel index.
+
+.. code-block:: bash
+
+   python -m pip install \
+     --extra-index-url https://pypi.nvidia.com \
+     --extra-index-url https://download.pytorch.org/whl/cu128 \
+     "dire-rapids[rapids,keops]==0.3.1"
+
+For development from a clone:
+
+.. code-block:: bash
+
+   git clone https://github.com/sashakolpakov/dire-rapids.git
+   cd dire-rapids
+   python -m pip install -e ".[dev,keops]"
 
 Quick Start
 -----------
@@ -47,8 +76,11 @@ Quick Start
    # Create sample data
    X = np.random.randn(10000, 100)
    
-   # Create reducer with automatic backend selection
+   # Create reducer with automatic implementation and k-NN engine selection
    reducer = create_dire(n_neighbors=32)
+
+   # Or force the k-NN engine independently
+   reducer = create_dire(backend='pytorch_cpu', knn_backend='pytorch')
 
    # Fit and transform data
    embedding = reducer.fit_transform(X)
@@ -122,21 +154,36 @@ GPU Acceleration with RAPIDS
    )
    embedding = reducer.fit_transform(X)
 
-Automatic Backend Selection
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Automatic Backend and k-NN Selection
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
    from dire_rapids import create_dire
 
-   # Automatic selection based on hardware
-   # Priority: cuVS > PyTorchMemoryEfficient > PyTorch > CPU
+   # Automatic reducer selection based on hardware
+   # Implementation priority: cuVS > PyTorchMemoryEfficient > PyTorch > CPU
    # When cuVS is not available, automatically uses memory-efficient backend
    reducer = create_dire(
        n_neighbors=32,
        memory_efficient=True  # Use memory-efficient variant if needed
    )
    embedding = reducer.fit_transform(X)
+
+``backend`` selects the DiRe implementation. ``knn_backend`` selects the
+k-nearest-neighbor engine used inside that implementation. Keep
+``knn_backend='auto'`` for the default heuristics, or force ``'pytorch'``,
+``'pykeops'``, or ``'cuvs'``. Explicit k-NN backend requests raise if the
+requested engine is unavailable or unsupported for the current data.
+
+.. code-block:: python
+
+   # CPU implementation with forced PyTorch k-NN
+   reducer = create_dire(backend='pytorch_cpu', knn_backend='pytorch')
+
+   # Optional engines, strict if unavailable
+   reducer = create_dire(knn_backend='pykeops')
+   reducer = create_dire(knn_backend='cuvs')
 
 **Backend Selection Priority:**
 
@@ -182,20 +229,23 @@ Custom metrics for k-nearest neighbor computation:
 
 .. code-block:: python
 
-   # L1 distance
-   reducer = DiRePyTorch(metric='(x - y).abs().sum(-1)', n_neighbors=32)
+   # L1 distance on the PyTorch k-NN path
+   reducer = DiRePyTorch(metric='(x - y).abs().sum(-1)', n_neighbors=32, knn_backend='pytorch')
    embedding = reducer.fit_transform(X)
 
    # Cosine distance
    def cosine_distance(x, y):
        return 1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)
 
-   reducer = DiRePyTorch(metric=cosine_distance)
+   reducer = DiRePyTorch(metric=cosine_distance, knn_backend='pytorch')
    embedding = reducer.fit_transform(X)
 
 **Metric types:** ``None``/``'euclidean'``/``'l2'`` (default), string expressions, callable functions
 
-Note: Layout forces use Euclidean distance regardless of k-NN metric.
+Note: Layout forces use Euclidean distance regardless of k-NN metric. Custom
+metric expressions and callables run on the PyTorch/PyKeOps k-NN paths. cuVS
+supports named native metrics only; forced ``knn_backend='cuvs'`` raises for
+custom expressions/callables.
 
 ReducerRunner Framework
 ~~~~~~~~~~~~~~~~~~~~~~~~
