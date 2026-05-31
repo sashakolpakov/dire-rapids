@@ -2,21 +2,23 @@
 
 ## Overview
 
-This directory contains comprehensive benchmarking results and performance analysis for the DiRe-Rapids implementation, focusing on scalability with high-dimensional data. The benchmarks compare different backend implementations (PyTorch, cuVS) and document optimization strategies that enable processing of datasets with millions of points in up to 1000 dimensions.
+This directory contains comprehensive benchmarking results and performance analysis for DiRe-Rapids, focusing on scalability with high-dimensional data. The benchmarks compare reducer implementations (PyTorch, memory-efficient PyTorch, RAPIDS cuVS/cuML) and k-NN engines (`pytorch`, `pykeops`, `cuvs`) that enable processing datasets with millions of points in up to 1000 dimensions.
 
 ## Key Achievements
 
 **High throughput for large datasets:**
 - Optimized PyTorch: 500,000 points in <30 seconds (1000D)
-- cuVS Backend: 1,500,000+ points with <500MB GPU memory (1000D)
+- cuVS k-NN engine: 1,500,000+ points with <500MB GPU memory (1000D)
 
-## Backend Comparison
+## Reducer and k-NN Engine Comparison
 
-### PyTorch Backend
+`backend` selects the reducer implementation created by `create_dire`. `knn_backend` selects the internal k-nearest-neighbor engine. Leave `knn_backend='auto'` to preserve the built-in heuristics, or set it explicitly to force an engine. Explicit requests are strict: unavailable or unsupported engines raise instead of silently falling back.
+
+### PyTorch Implementation with PyTorch k-NN
 
 **Strengths:**
 - Excellent for small to medium datasets (<100K points)
-- Exact k-NN computation (with optional PyKeOps acceleration)
+- Exact k-NN computation via `knn_backend='pytorch'`
 - Efficient tensor operations using GPU tensor cores
 
 **Limitations:**
@@ -32,7 +34,7 @@ This directory contains comprehensive benchmarking results and performance analy
 | 500K | 28s | 31K pts/s | 53GB | Acceptable |
 | 1M+ | >60s | <15K pts/s | >70GB | Impractical |
 
-### cuVS Backend (GPU-Accelerated Approximate k-NN)
+### cuVS k-NN Engine (GPU-Accelerated Approximate k-NN)
 
 **Strengths:**
 - Handles millions of points with O(N) memory complexity
@@ -53,19 +55,19 @@ This directory contains comprehensive benchmarking results and performance analy
 | 1M | 63s | 450MB | 16K pts/s | IVF-Flat |
 | 1.5M | 118s | 500MB | 13K pts/s | IVF-Flat |
 
-### Backend Selection Strategy
+### Selection Strategy
 
 ```python
-def select_backend(n_samples, n_dims):
+def select_dire_config(n_samples, n_dims):
     if n_samples < 100000:
-        return 'pytorch'  # Fast exact k-NN for small data
+        return {'backend': 'pytorch', 'knn_backend': 'pytorch'}
     elif n_samples < 250000 and n_dims < 500:
-        return 'pytorch_memory_efficient'  # Memory-efficient with exact k-NN
+        return {'backend': 'pytorch', 'memory_efficient': True, 'knn_backend': 'pytorch'}
     else:
-        return 'cuvs'  # Switch to approximate for scale
+        return {'backend': 'auto', 'knn_backend': 'cuvs'}
 ```
 
-**Note:** The `create_dire()` function automatically selects the memory-efficient backend when cuVS is not available, providing better GPU memory management for large datasets.
+**Note:** `create_dire()` automatically selects a reducer implementation based on hardware. The k-NN engine can be left on `knn_backend='auto'` or forced independently, for example `create_dire(backend='pytorch', knn_backend='pytorch')` for exact PyTorch k-NN or `create_dire(knn_backend='cuvs')` for strict RAPIDS cuVS k-NN.
 
 ## Optimization Techniques
 
@@ -82,7 +84,7 @@ def select_backend(n_samples, n_dims):
 ### 3. Backend-Specific Optimizations
 
 **PyTorch Optimizations:**
-- Switch from PyKeOps to PyTorch for dimensions ≥ 200 (10-200x speedup)
+- Auto k-NN selection switches from PyKeOps to PyTorch for dimensions ≥ 200 (10-200x speedup)
 - Fixed force computation bug (attraction only between k-NN neighbors)
 - Efficient use of tensor cores for matrix operations
 
@@ -97,17 +99,17 @@ def select_backend(n_samples, n_dims):
 ### Use Case Guidelines
 
 **For datasets <100K points:**
-- Use PyTorch backend for exact k-NN
+- Use `knn_backend='pytorch'` for exact k-NN
 - Excellent performance across all dimensions
 - Real-time/interactive applications possible
 
 **For datasets 100K-500K points:**
 - PyTorch for dimensions <500
-- cuVS for dimensions ≥500 or when memory is limited
+- cuVS k-NN for dimensions ≥500 or when memory is limited
 - Consider FP16 for additional speedup
 
 **For datasets >500K points:**
-- cuVS backend required
+- cuVS k-NN is strongly recommended
 - Accept ~5% accuracy tradeoff for massive scalability
 - Consider dimension reduction as preprocessing step
 
@@ -140,19 +142,20 @@ embedding_sample = dire.fit_transform(X[sample_idx])
 
 **4. Custom Distance Metrics:**
 ```python
-# Use custom metrics for domain-specific similarity
-# L1 metric often performs better for high-dimensional sparse data
-reducer = DiRePyTorch(metric='(x - y).abs().sum(-1)')
+# Use custom metrics for domain-specific similarity.
+# Custom tensor expressions/callables run on the PyTorch/PyKeOps paths.
+reducer = DiRePyTorch(metric='(x - y).abs().sum(-1)', knn_backend='pytorch')
 
 # Cosine similarity for normalized features
 def cosine_distance(x, y):
     return 1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)
-reducer = DiReCuVS(metric=cosine_distance)
+reducer = DiRePyTorch(metric=cosine_distance, knn_backend='pytorch')
 ```
 
 **Performance Impact of Custom Metrics:**
 - String expressions: ~5-10% overhead vs Euclidean
 - Callable functions: ~10-15% overhead vs Euclidean
+- cuVS supports named native metrics only; forced `knn_backend='cuvs'` raises for custom expressions/callables
 - Layout forces remain Euclidean (optimized) regardless of k-NN metric
 
 ## Computational Complexity Analysis
@@ -266,7 +269,7 @@ Framework for comparing reducers:
 
 ### benchmark_mnist.py
 Tests DIRE performance on MNIST dataset with various configurations:
-- Compares backends (PyTorch, cuVS)
+- Compares reducer/k-NN configurations (PyTorch, cuVS)
 - Tests different precision levels (FP32, FP16)
 - Measures memory usage and throughput
 
@@ -280,9 +283,9 @@ Profiles the complete DIRE pipeline:
 ## Summary
 
 The benchmarking results demonstrate that DiRe-Rapids can efficiently handle high-dimensional data at scale through:
-- Intelligent backend selection (PyTorch + cuVS + memory efficient)
+- Separate reducer implementation and k-NN engine selection
 - Memory-aware processing with automatic fallbacks
 - FP16 optimization for modern GPUs
 - Approximate k-NN for massive datasets
 
-For typical use cases (up to 500K points), the PyTorch backend with optimizations provides excellent performance. For larger datasets or memory-constrained environments, the cuVS backend enables processing of millions of points with acceptable accuracy tradeoffs.
+For typical use cases (up to 500K points), the PyTorch implementation with exact PyTorch k-NN provides excellent performance. For larger datasets or memory-constrained environments, the cuVS k-NN engine enables processing millions of points with acceptable accuracy tradeoffs.

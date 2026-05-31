@@ -11,7 +11,8 @@ import torch
 from sklearn.datasets import make_blobs, make_swiss_roll
 
 # Import dire-rapids
-from dire_rapids import DiRePyTorch
+import dire_rapids.dire_pytorch as dire_pytorch_module
+from dire_rapids import DiRePyTorch, create_dire
 
 
 class TestDiRePyTorchBasic:
@@ -46,7 +47,7 @@ class TestDiRePyTorchBasic:
         assert model.n_components == 3
         assert model.n_neighbors == 10
         assert model.max_iter_layout == 50
-        
+
     def test_fit_transform_small_data(self):
         """Test fit_transform on a small dataset."""
         # Create small test data
@@ -390,6 +391,54 @@ class TestDiRePyTorchNormalization:
         model.fit_transform(X)
         # With normalize=False, _data is the float32 copy of X (mean ~7, not 0).
         assert abs(model._data.mean() - X.mean()) < 1e-5
+
+
+class TestKnnBackendSelection:
+    """CPU-safe coverage for explicit k-NN backend selection."""
+
+    def test_create_dire_passes_knn_backend_alias(self):
+        """Factory backend selection and k-NN backend selection are separate."""
+        X = np.random.default_rng(0).standard_normal((12, 4)).astype(np.float32)
+        model = create_dire(
+            backend='pytorch_cpu',
+            knn_backend='torch',
+            n_neighbors=2,
+            verbose=False,
+        )
+
+        assert model.knn_backend == 'pytorch'
+        model._compute_knn(X)
+        assert model._last_knn_backend == 'pytorch'
+        assert model._knn_indices.shape == (12, 2)
+
+    def test_invalid_knn_backend_raises(self):
+        """Unknown k-NN engine names fail at construction/factory time."""
+        with pytest.raises(ValueError, match="Unknown knn_backend"):
+            DiRePyTorch(knn_backend='not-a-backend', verbose=False)
+
+        with pytest.raises(ValueError, match="Unknown knn_backend"):
+            create_dire(knn_backend='not-a-backend', verbose=False)
+
+    def test_forced_cuvs_is_strict_on_cpu(self):
+        """Manual cuVS selection raises instead of silently falling back."""
+        X = np.random.default_rng(1).standard_normal((12, 4)).astype(np.float32)
+        model = DiRePyTorch(knn_backend='cuvs', n_neighbors=2, verbose=False)
+        model.device = torch.device('cpu')
+
+        with pytest.raises(RuntimeError, match="knn_backend='cuvs' requested"):
+            model._compute_knn(X)
+
+        with pytest.raises(RuntimeError, match="knn_backend='cuvs' requested"):
+            create_dire(backend='pytorch_cpu', knn_backend='cuvs', verbose=False)
+
+    def test_forced_pykeops_requires_pykeops(self, monkeypatch):
+        """Manual PyKeOps selection raises clearly when PyKeOps is unavailable."""
+        X = np.random.default_rng(2).standard_normal((12, 4)).astype(np.float32)
+        monkeypatch.setattr(dire_pytorch_module, "PYKEOPS_AVAILABLE", False)
+        model = DiRePyTorch(knn_backend='pykeops', n_neighbors=2, verbose=False)
+
+        with pytest.raises(RuntimeError, match="PyKeOps is not installed"):
+            model._compute_knn(X)
 
 
 class TestDiRePyTorchErrors:

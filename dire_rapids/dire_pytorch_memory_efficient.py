@@ -71,7 +71,7 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         Additional keyword arguments passed to DiRePyTorch parent class.
         Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
         spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
-        metric (custom distance function for k-NN computation).
+        metric (custom distance function for k-NN computation), knn_backend.
         
     Examples
     --------
@@ -148,6 +148,7 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             - n_components, n_neighbors, init, max_iter_layout, min_dist, spread
             - cutoff, neg_ratio, verbose, random_state, use_exact_repulsion
             - metric: Custom distance metric for k-NN (str, callable, or None)
+            - knn_backend: k-NN engine selection ('auto', 'pytorch', 'pykeops', 'cuvs')
         """
         
         # Call parent constructor

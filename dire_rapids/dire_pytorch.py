@@ -42,6 +42,34 @@ except ImportError:
     CUVS_AVAILABLE = False
 
 
+_KNN_BACKEND_ALIASES = {
+    None: "auto",
+    "auto": "auto",
+    "torch": "pytorch",
+    "pytorch": "pytorch",
+    "keops": "pykeops",
+    "pykeops": "pykeops",
+    "rapids": "cuvs",
+    "cuvs": "cuvs",
+}
+
+
+def _normalize_knn_backend(knn_backend):
+    """Normalize public k-NN backend names to internal identifiers."""
+    if knn_backend is None:
+        return "auto"
+    if not isinstance(knn_backend, str):
+        raise ValueError("knn_backend must be one of: 'auto', 'pytorch', 'pykeops', 'cuvs'")
+    key = knn_backend.strip().lower()
+    try:
+        return _KNN_BACKEND_ALIASES[key]
+    except KeyError as exc:
+        raise ValueError(
+            f"Unknown knn_backend: {knn_backend}. "
+            "Choose from: 'auto', 'pytorch', 'pykeops', 'cuvs'"
+        ) from exc
+
+
 def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_val, cutoff):
     """Compute attraction + repulsion forces for all points in one shot.
 
@@ -311,6 +339,13 @@ class DiRePyTorch(TransformerMixin):
         - callable: Custom function taking (x, y) tensors and returning distance matrix
 
         Examples: '(x - y).abs().sum(-1)' (L1), '1 - (x*y).sum(-1)/(x.norm()*y.norm() + 1e-8)' (cosine).
+    knn_backend : {'auto', 'pytorch', 'pykeops', 'cuvs'}, default='auto'
+        k-NN engine selection independent of the DiRe implementation:
+
+        - 'auto': Preserve built-in heuristics for cuVS/PyKeOps/PyTorch
+        - 'pytorch': Force chunked PyTorch distance computation
+        - 'pykeops': Force PyKeOps LazyTensor k-NN when PyKeOps is installed
+        - 'cuvs': Force RAPIDS cuVS k-NN when RAPIDS and CUDA are available
         
     Attributes
     ----------
@@ -381,6 +416,7 @@ class DiRePyTorch(TransformerMixin):
             random_state=None,
             use_exact_repulsion=False,  # If True, use all-pairs repulsion (for testing)
             metric=None,
+            knn_backend="auto",
             normalize=True,
     ):
         """
@@ -421,6 +457,10 @@ class DiRePyTorch(TransformerMixin):
             If True, use exact all-pairs repulsion (memory intensive, testing only).
         metric : str, callable, or None, default=None
             Custom distance metric for k-NN computation. See class docstring for details.
+        knn_backend : {'auto', 'pytorch', 'pykeops', 'cuvs'}, default='auto'
+            k-NN engine selection. ``'auto'`` keeps the built-in selector;
+            explicit values bypass heuristic choices and either use the
+            requested engine or raise if the engine cannot run.
         normalize : bool, default=True
             If True, mean-center and scale inputs to fit in [-1, 1] (global scalar
             rescale) before kNN and PCA. This preserves neighbor rankings exactly
@@ -444,6 +484,7 @@ class DiRePyTorch(TransformerMixin):
         self.random_state = random_state if random_state is not None else np.random.randint(0, 2 ** 32)
         self.use_exact_repulsion = use_exact_repulsion
         self.normalize = normalize
+        self.knn_backend = _normalize_knn_backend(knn_backend)
 
         # Store RNG state -- defer torch/cuda seeding to fit_transform
         # to avoid mutating global state from a library constructor.
@@ -465,6 +506,7 @@ class DiRePyTorch(TransformerMixin):
         self._b = None
         self._knn_indices = None
         self._knn_distances = None
+        self._last_knn_backend = None
 
         # Device management
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -504,6 +546,66 @@ class DiRePyTorch(TransformerMixin):
 
         self.logger.info(f"Found kernel params: a={self._a:.4f}, b={self._b:.4f}")
 
+    def _cuvs_knn_unavailable_reason(self, n_samples, n_dims):
+        """Return a reason cuVS k-NN cannot run for this reducer, or None."""
+        del n_samples  # Kept for symmetry with selectors in subclasses.
+        if not CUVS_AVAILABLE:
+            return "RAPIDS cuVS is not installed"
+        if self.device.type != 'cuda':
+            return "cuVS k-NN requires a CUDA device"
+        if n_dims > 2048:
+            return f"cuVS k-NN supports up to 2048 dimensions in this path (got {n_dims})"
+        if self._metric_fn is not None:
+            return "cuVS k-NN in DiRePyTorch only supports backend-native euclidean/l2 metrics"
+        return None
+
+    def _pykeops_knn_unavailable_reason(self, use_fp16):
+        """Return a reason PyKeOps k-NN cannot run, or None."""
+        if not PYKEOPS_AVAILABLE:
+            return "PyKeOps is not installed"
+        if use_fp16:
+            return "PyKeOps k-NN does not run on the active FP16 path"
+        return None
+
+    def _select_knn_backend(self, X, use_fp16, allow_cuvs=True):
+        """Resolve the k-NN backend from the user policy and auto heuristics."""
+        n_samples, n_dims = X.shape
+
+        if self.knn_backend == 'pytorch':
+            return 'pytorch'
+
+        if self.knn_backend == 'pykeops':
+            reason = self._pykeops_knn_unavailable_reason(use_fp16)
+            if reason is not None:
+                raise RuntimeError(f"knn_backend='pykeops' requested but unavailable: {reason}")
+            return 'pykeops'
+
+        if self.knn_backend == 'cuvs':
+            reason = self._cuvs_knn_unavailable_reason(n_samples, n_dims)
+            if reason is not None:
+                raise RuntimeError(f"knn_backend='cuvs' requested but unavailable: {reason}")
+            return 'cuvs'
+
+        # Auto policy: preserve the historical hard-coded choices unless the
+        # caller explicitly requested an engine through knn_backend.
+        if allow_cuvs:
+            cuvs_threshold = 200000 if n_dims >= 200 else 100000
+            if (
+                n_samples >= cuvs_threshold
+                and self._cuvs_knn_unavailable_reason(n_samples, n_dims) is None
+            ):
+                return 'cuvs'
+
+        if (
+            PYKEOPS_AVAILABLE
+            and n_dims < 200
+            and self.device.type == 'cuda'
+            and not use_fp16
+        ):
+            return 'pykeops'
+
+        return 'pytorch'
+
     def _compute_knn(self, X, chunk_size=None, use_fp16=None):  # pylint: disable=too-many-branches
         """
         Compute k-nearest neighbors with memory-efficient chunking.
@@ -540,29 +642,18 @@ class DiRePyTorch(TransformerMixin):
         n_dims = X.shape[1]
         self.logger.info(f"Computing {self.n_neighbors}-NN graph for {n_samples} points in {n_dims}D...")
 
-        # ── cuVS fast path: use GPU-accelerated kNN for large datasets ──
-        # cuVS IVF-Flat is much faster than brute-force when N is large
-        # relative to D.  For high-D data (D>200) the index build cost is
-        # higher, so we raise the threshold.  Empirically:
-        #   D<200:  cuVS wins at N >= 100K  (covertype 54D: 7s→2.5s at 200K)
-        #   D>=200: cuVS wins at N >= 200K  (mnist 784D: slower at 50K)
-        cuvs_threshold = 200000 if n_dims >= 200 else 100000
-        if (CUVS_AVAILABLE
-                and self.device.type == 'cuda'
-                and n_samples >= cuvs_threshold
-                and n_dims <= 2048
-                and self._metric_fn is None):  # cuVS only supports built-in metrics
-            try:
-                return self._compute_knn_cuvs(X)
-            except Exception as e:
-                self.logger.warning(f"cuVS kNN failed ({e}), falling back to PyTorch")
-
         # Auto-detect FP16 usage based on data size and GPU
         if use_fp16 is None and self.device.type == 'cuda':
             # Use FP16 for high-dimensional data or large datasets
             use_fp16 = n_dims >= 500 or n_samples >= 100000
         elif self.device.type == 'cpu':
             use_fp16 = False  # CPU doesn't benefit from FP16
+
+        if self.knn_backend == 'pykeops' and use_fp16:
+            self.logger.warning(
+                "Disabling FP16 k-NN because knn_backend='pykeops' was requested"
+            )
+            use_fp16 = False
 
         # Safety guard: fp16 has a finite range (|x|²-sums must stay below ~65504).
         # If the data scale would push squared distances near overflow, fall back
@@ -581,6 +672,18 @@ class DiRePyTorch(TransformerMixin):
                 )
                 use_fp16 = False
 
+        selected_knn_backend = self._select_knn_backend(X, use_fp16, allow_cuvs=True)
+
+        if selected_knn_backend == 'cuvs':
+            self._last_knn_backend = 'cuvs'
+            try:
+                return self._compute_knn_cuvs(X)
+            except Exception as e:
+                if self.knn_backend == 'cuvs':
+                    raise RuntimeError("Forced cuVS k-NN failed") from e
+                self.logger.warning(f"cuVS kNN failed ({e}), falling back to another k-NN backend")
+                selected_knn_backend = self._select_knn_backend(X, use_fp16, allow_cuvs=False)
+
         # Choose precision
         if use_fp16 and self.device.type == 'cuda':
             dtype = torch.float16
@@ -591,16 +694,21 @@ class DiRePyTorch(TransformerMixin):
         
         X_torch = torch.tensor(X, dtype=dtype, device=self.device)
 
-        # CRITICAL: PyKeOps is slower than PyTorch for high dimensions!
-        # Use PyTorch for high-D, PyKeOps for low-D
-        use_pykeops = PYKEOPS_AVAILABLE and n_dims < 200 and self.device.type == 'cuda' and not use_fp16
+        use_pykeops = selected_knn_backend == 'pykeops'
+        self._last_knn_backend = selected_knn_backend
 
-        if n_dims >= 200:
-            self.logger.info(f"Using PyTorch for k-NN (high dimension: {n_dims}D)")
-        elif use_pykeops:
-            self.logger.info("Using PyKeOps for k-NN (low dimension, GPU available)")
+        if use_pykeops:
+            if self.knn_backend == 'pykeops':
+                self.logger.info("Using PyKeOps for k-NN (forced by knn_backend)")
+            else:
+                self.logger.info("Using PyKeOps for k-NN (low dimension, GPU available)")
         else:
-            self.logger.info("Using PyTorch for k-NN")
+            if self.knn_backend == 'pytorch':
+                self.logger.info("Using PyTorch for k-NN (forced by knn_backend)")
+            elif n_dims >= 200:
+                self.logger.info(f"Using PyTorch for k-NN (high dimension: {n_dims}D)")
+            else:
+                self.logger.info("Using PyTorch for k-NN")
 
         # Set default chunk size if not provided
         if chunk_size is None:
@@ -1285,7 +1393,7 @@ class DiRePyTorch(TransformerMixin):
         return fig
 
 
-def create_dire(backend='auto', memory_efficient=False, **kwargs):
+def create_dire(backend='auto', memory_efficient=False, knn_backend='auto', **kwargs):
     """
     Create DiRe instance with automatic backend selection.
 
@@ -1312,6 +1420,11 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         - FP16 support for additional memory savings
         - Enhanced chunking strategies
         - More aggressive memory cleanup
+
+    knn_backend : {'auto', 'pytorch', 'pykeops', 'cuvs'}, default='auto'
+        k-NN engine selection, independent of the DiRe implementation selected
+        by ``backend``. ``'auto'`` preserves the built-in selector; explicit
+        values force the requested k-NN engine or raise if it cannot run.
 
     **kwargs : dict
         Additional keyword arguments passed to the DiRe constructor.
@@ -1353,8 +1466,11 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         # CPU-only processing
         reducer = create_dire(backend='pytorch_cpu')
 
-        # GPU processing with cuVS acceleration
-        reducer = create_dire(backend='cuvs', use_cuvs=True)
+        # CPU implementation with an explicit k-NN engine
+        reducer = create_dire(backend='pytorch_cpu', knn_backend='pytorch')
+
+        # GPU processing with cuVS k-NN acceleration
+        reducer = create_dire(backend='cuvs', knn_backend='cuvs')
 
         # With custom distance metric
         reducer = create_dire(
@@ -1377,8 +1493,11 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
     The function automatically handles import errors and missing dependencies,
     falling back to available alternatives when possible.
     """
+    knn_backend = _normalize_knn_backend(knn_backend)
+
     # Handle verbose parameter early to disable logging if needed
     verbose = kwargs.get('verbose', True)
+    use_cuvs_override = kwargs.pop('use_cuvs', None)
 
     # Import here to avoid circular imports
     try:
@@ -1388,22 +1507,38 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
 
     from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient  # pylint: disable=import-outside-toplevel
 
+    if knn_backend == 'pykeops' and not PYKEOPS_AVAILABLE:
+        raise RuntimeError("knn_backend='pykeops' requested but PyKeOps is not installed")
+
+    if knn_backend == 'cuvs':
+        if not CUVS_AVAILABLE:
+            raise RuntimeError(
+                "knn_backend='cuvs' requested but RAPIDS cuVS is not installed. "
+                "Follow the installation instructions at https://docs.rapids.ai/install/"
+            )
+        if backend == 'pytorch_cpu' or not torch.cuda.is_available():
+            raise RuntimeError("knn_backend='cuvs' requested but CUDA GPU is not available")
+
     if backend == 'auto':
         # Auto-select best backend based on availability
-        if CUVS_AVAILABLE and torch.cuda.is_available():
+        if CUVS_AVAILABLE and torch.cuda.is_available() and use_cuvs_override is not False:
             if verbose:
                 logger.info("Auto-selected RAPIDS cuVS backend (GPU acceleration)")
-            return DiReCuVS(use_cuvs=True, **kwargs)
+            return DiReCuVS(
+                use_cuvs=True if use_cuvs_override is None else use_cuvs_override,
+                knn_backend=knn_backend,
+                **kwargs,
+            )
 
         if torch.cuda.is_available():
             # When cuVS is not available, prefer memory-efficient backend for better GPU memory management
             if memory_efficient or not CUVS_AVAILABLE:
                 if verbose:
                     logger.info("Auto-selected memory-efficient PyTorch backend (GPU)")
-                return DiRePyTorchMemoryEfficient(**kwargs)
+                return DiRePyTorchMemoryEfficient(knn_backend=knn_backend, **kwargs)
             if verbose:
                 logger.info("Auto-selected PyTorch backend (GPU)")
-            return DiRePyTorch(**kwargs)
+            return DiRePyTorch(knn_backend=knn_backend, **kwargs)
 
         # CPU fallback
         if verbose:
@@ -1411,8 +1546,8 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         if memory_efficient:
             if verbose:
                 logger.warning("Memory-efficient mode has limited benefits on CPU")
-            return DiRePyTorchMemoryEfficient(**kwargs)
-        return DiRePyTorch(**kwargs)
+            return DiRePyTorchMemoryEfficient(knn_backend=knn_backend, **kwargs)
+        return DiRePyTorch(knn_backend=knn_backend, **kwargs)
 
     if backend == 'cuvs':
         if not CUVS_AVAILABLE:
@@ -1424,17 +1559,21 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
             raise RuntimeError("cuVS backend requires CUDA GPU")
         if verbose:
             logger.info("Using RAPIDS cuVS backend")
-        return DiReCuVS(use_cuvs=True, **kwargs)
+        return DiReCuVS(
+            use_cuvs=True if use_cuvs_override is None else use_cuvs_override,
+            knn_backend=knn_backend,
+            **kwargs,
+        )
 
     if backend == 'pytorch':
         # Use PyTorch with auto device selection
         if memory_efficient:
             if verbose:
                 logger.info("Using memory-efficient PyTorch backend")
-            return DiRePyTorchMemoryEfficient(**kwargs)
+            return DiRePyTorchMemoryEfficient(knn_backend=knn_backend, **kwargs)
         if verbose:
             logger.info("Using PyTorch backend")
-        return DiRePyTorch(**kwargs)
+        return DiRePyTorch(knn_backend=knn_backend, **kwargs)
 
     if backend == 'pytorch_gpu':
         if not torch.cuda.is_available():
@@ -1442,10 +1581,10 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
         if memory_efficient:
             if verbose:
                 logger.info("Using memory-efficient PyTorch backend (GPU)")
-            return DiRePyTorchMemoryEfficient(**kwargs)
+            return DiRePyTorchMemoryEfficient(knn_backend=knn_backend, **kwargs)
         if verbose:
             logger.info("Using PyTorch backend (GPU)")
-        return DiRePyTorch(**kwargs)
+        return DiRePyTorch(knn_backend=knn_backend, **kwargs)
 
     if backend == 'pytorch_cpu':
         # Force CPU even if GPU is available
@@ -1455,9 +1594,9 @@ def create_dire(backend='auto', memory_efficient=False, **kwargs):
             if verbose:
                 logger.warning("Memory-efficient mode has limited benefits on CPU")
             # Create instance and force CPU
-            reducer = DiRePyTorchMemoryEfficient(**kwargs)
+            reducer = DiRePyTorchMemoryEfficient(knn_backend=knn_backend, **kwargs)
         else:
-            reducer = DiRePyTorch(**kwargs)
+            reducer = DiRePyTorch(knn_backend=knn_backend, **kwargs)
         reducer.device = torch.device('cpu')
         return reducer
 

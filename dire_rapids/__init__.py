@@ -14,6 +14,11 @@ The package automatically selects the best available backend based on system cap
 and dataset characteristics. When cuVS is not available, the memory-efficient PyTorch backend
 is automatically selected for better GPU memory management.
 
+The factory separates reducer implementation selection from k-NN engine selection:
+``backend`` chooses the DiRe implementation, while ``knn_backend`` chooses the
+neighbor-search engine (``'auto'``, ``'pytorch'``, ``'pykeops'``, or ``'cuvs'``).
+Explicit k-NN backend requests are strict and raise if the engine cannot run.
+
 **Backend Selection Priority:**
 1. RAPIDS cuVS (if available and GPU present)
 2. PyTorch Memory-Efficient (if GPU present but cuVS unavailable, or memory_efficient=True)
@@ -52,6 +57,17 @@ Force a specific backend::
     # Use RAPIDS backend (requires RAPIDS installation)
     reducer = DiReCuVS(use_cuvs=True)
 
+Force a specific k-NN engine::
+
+    from dire_rapids import create_dire
+
+    # CPU implementation with forced PyTorch k-NN
+    reducer = create_dire(backend='pytorch_cpu', knn_backend='pytorch')
+
+    # Optional engines raise if unavailable
+    reducer = create_dire(knn_backend='pykeops')
+    reducer = create_dire(knn_backend='cuvs')
+
 Evaluate embedding quality::
 
     from dire_rapids.metrics import evaluate_embedding
@@ -62,7 +78,7 @@ Evaluate embedding quality::
     print(f"SVM accuracy: {results['context']['svm'][1]:.4f}")
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 # Import cuML-using submodule first: cuML (and cuVS) pull shared libraries
 # that must be loaded before torch on some rapids-26.04+ setups, because

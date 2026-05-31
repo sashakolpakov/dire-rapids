@@ -2,14 +2,15 @@
 
 ## Overview
 
-Test suite for DiRe-Rapids covering CPU/GPU backends, memory efficiency, scaling, and topological metrics.
+Test suite for DiRe-Rapids covering CPU/GPU reducer implementations, k-NN engine selection, memory efficiency, scaling, and topological metrics.
 
 ## Test Files
 
 ### Core Functionality
 - `test_cpu_basic.py` - Basic CPU functionality (used in CI)
 - `test_reducer_runner.py` - ReducerRunner framework tests (used in CI)
-- `test_create_dire.py` - Backend selection and factory function
+- `test_create_dire.py` - Factory smoke test for reducer backend selection
+- `test_cpu_basic.py::TestKnnBackendSelection` - CPU-safe coverage for `knn_backend` aliases, invalid values, and strict manual engine requests
 - `test_comprehensive.py` - Comprehensive test suite for all components (MNIST 70k)
 
 ### Scaling and Performance

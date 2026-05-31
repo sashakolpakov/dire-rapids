@@ -71,10 +71,13 @@ DiRe wins 6 out of 8 comparisons, preserving both connected components (β₀) a
 
 ```bash
 # Basic installation (CPU + PyTorch)
-pip install dire-rapids
+python -m pip install "dire-rapids==0.3.1"
 
-# With CUDA support
-pip install dire-rapids[cuda]
+# With PyKeOps support for the optional PyKeOps k-NN engine
+python -m pip install "dire-rapids[keops]==0.3.1"
+
+# With CUDA CuPy support
+python -m pip install "dire-rapids[cuda]==0.3.1"
 ```
 
 ### From Repository (development)
@@ -83,17 +86,27 @@ pip install dire-rapids[cuda]
 git clone https://github.com/sashakolpakov/dire-rapids.git
 cd dire-rapids
 
-pip install -e .          # CPU + PyTorch
-pip install -e .[cuda]    # With CUDA support
-pip install -e .[keops]   # With PyKeOps support
-pip install -e .[dev]     # Development (testing + dev tools)
+python -m pip install -e .            # CPU + PyTorch
+python -m pip install -e ".[cuda]"    # With CUDA CuPy support
+python -m pip install -e ".[keops]"   # With PyKeOps support
+python -m pip install -e ".[dev]"     # Development (testing + dev tools)
 ```
 
 #### With RAPIDS Support (Optional, GPU only)
 
-First, install RAPIDS following the [official instructions](https://docs.rapids.ai/install/).
+Use a clean virtual environment. The `rapids` extra installs cuML/cuVS/cuDF from
+the NVIDIA index and PyTorch from the matching CUDA wheel index.
 ```bash
-pip install -e .[rapids]
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  --extra-index-url https://download.pytorch.org/whl/cu128 \
+  "dire-rapids[rapids,keops]==0.3.1"
+
+# From a clone:
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  --extra-index-url https://download.pytorch.org/whl/cu128 \
+  -e ".[rapids,keops]"
 ```
 
 ## Quick Start [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sashakolpakov/dire-rapids/blob/main/benchmarking/dire_rapids_benchmarks.ipynb)
@@ -122,18 +135,20 @@ DiRe Rapids supports custom distance metrics for k-nearest neighbor computation 
 
 ```python
 # L1 (Manhattan) distance for k-NN
-reducer = DiRePyTorch(metric='(x - y).abs().sum(-1)', n_neighbors=32)
+reducer = DiRePyTorch(metric='(x - y).abs().sum(-1)', n_neighbors=32, knn_backend='pytorch')
 X_embedded = reducer.fit_transform(X)
 
 # Cosine distance via callable
 def cosine_distance(x, y):
     return 1 - (x * y).sum(-1) / (x.norm(dim=-1, keepdim=True) * y.norm(dim=-1, keepdim=True) + 1e-8)
 
-reducer = DiRePyTorch(metric=cosine_distance, n_neighbors=32)
+reducer = DiRePyTorch(metric=cosine_distance, n_neighbors=32, knn_backend='pytorch')
 X_embedded = reducer.fit_transform(X)
 ```
 
 **Supported metric types:** `None` / `'euclidean'` / `'l2'` (default), string tensor expressions, or callable functions taking `(x, y)` tensors.
+
+Custom metric expressions and callables run on the PyTorch/PyKeOps k-NN paths. cuVS supports named native metrics only; forcing `knn_backend='cuvs'` with a custom expression/callable raises.
 
 ### Available Backends
 
@@ -141,19 +156,28 @@ X_embedded = reducer.fit_transform(X)
 - **DiRePyTorchMemoryEfficient** -- FP16 support, point-by-point force computation, optional PyKeOps lazy tensors for repulsion
 - **DiReCuVS** -- RAPIDS cuVS backend for massive-scale datasets
 
-### Auto Backend Selection
+`backend` selects the DiRe implementation. `knn_backend` selects the k-nearest-neighbor engine used inside that implementation. Leave `knn_backend='auto'` to use the built-in heuristics, or set it explicitly to `'pytorch'`, `'pykeops'`, or `'cuvs'`. Explicit k-NN backend requests are strict: unsupported engines raise instead of silently falling back.
+
+### Backend and k-NN Engine Selection
 
 ```python
 from dire_rapids import create_dire
 
-# Auto-select optimal backend
-# Priority: cuVS > PyTorchMemoryEfficient > PyTorch > CPU
+# Auto-select reducer implementation and k-NN engine
+# Implementation priority: cuVS > PyTorchMemoryEfficient > PyTorch > CPU
 reducer = create_dire(n_neighbors=32, verbose=True)
 X_embedded = reducer.fit_transform(X)
 
 # Force memory-efficient backend with FP16
 reducer = create_dire(memory_efficient=True, use_fp16=True)
 X_embedded = reducer.fit_transform(X)
+
+# Force the k-NN engine independently of the reducer implementation
+reducer = create_dire(backend='pytorch_cpu', knn_backend='pytorch')
+
+# Force PyKeOps or cuVS for k-NN when those optional dependencies are available
+reducer = create_dire(knn_backend='pykeops')
+reducer = create_dire(knn_backend='cuvs')
 ```
 
 ## Betti Curves / Topology
@@ -247,9 +271,9 @@ If you use this work, please cite:
 - Python 3.10+
 - PyTorch 2.0+
 - NumPy, SciPy, scikit-learn
-- (Optional) PyKeOps 2.1+ (`pip install dire-rapids[keops]`)
+- (Optional) PyKeOps 2.1+ (`python -m pip install "dire-rapids[keops]==0.3.1"`)
 - (Optional) CUDA 12.x+ for GPU acceleration
-- (Optional) RAPIDS 23.08+ for cuVS backend
+- (Optional) RAPIDS 26.2+ for the cuVS k-NN engine
 - (Optional) CuPy for GPU-accelerated Betti curves
 
 <p align="center">

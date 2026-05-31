@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.1] - 2026-05-31
+
+### Added
+- **k-NN backend selector**: Added `knn_backend` to separate reducer implementation selection from internal k-NN engine selection. `knn_backend='auto'` preserves existing heuristics, while explicit `pytorch`, `pykeops`, and `cuvs` requests are strict.
+
+### Changed
+- **Documentation**: Clarified the distinction between `backend` and `knn_backend` across README, Sphinx docs, benchmark docs, and test docs.
+
 ## [0.3.0] - 2026-04-25
 
 ### Added
@@ -84,5 +94,7 @@ Initial release with core functionality:
 - Basic metrics for distortion and context preservation
 - Examples and benchmarking utilities
 
+[Unreleased]: https://github.com/sashakolpakov/dire-rapids/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/sashakolpakov/dire-rapids/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sashakolpakov/dire-rapids/compare/v0.2.0...v0.3.0
 [0.1.0]: https://github.com/sashakolpakov/dire-rapids/releases/tag/v0.1.0

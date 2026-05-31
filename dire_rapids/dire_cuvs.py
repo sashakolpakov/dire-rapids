@@ -59,8 +59,10 @@ class DiReCuVS(DiRePyTorch):
     
     Automatic Fallback
     ------------------
-    Falls back to PyTorch backend if cuVS is not available, ensuring
-    compatibility across different environments.
+    With ``knn_backend='auto'``, falls back to PyTorch backend if cuVS is not
+    available or is not beneficial for the current data. With
+    ``knn_backend='cuvs'``, cuVS is required and unavailable/unsupported
+    configurations raise instead of falling back.
     
     Parameters
     ----------
@@ -85,7 +87,7 @@ class DiReCuVS(DiRePyTorch):
         Additional arguments passed to DiRePyTorch parent class.
         Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
         spread, cutoff, neg_ratio, verbose, random_state, use_exact_repulsion,
-        metric (custom distance function for k-NN computation).
+        metric (custom distance function for k-NN computation), knn_backend.
         
     Attributes
     ----------
@@ -555,6 +557,32 @@ class DiReCuVS(DiRePyTorch):
         
         return distances, indices
     
+    def _native_cuvs_metric(self):
+        """Return whether the configured metric can run in cuVS."""
+        return (
+            self.metric_spec is None or
+            (
+                isinstance(self.metric_spec, str) and
+                self.metric_spec.strip().lower() in
+                ('euclidean', 'l2', 'sqeuclidean', 'inner_product', 'cosine')
+            )
+        )
+
+    def _cuvs_knn_unavailable_reason(self, n_samples, n_dims):
+        """Return a reason cuVS k-NN cannot run for this reducer, or None."""
+        del n_samples
+        if not CUVS_AVAILABLE:
+            return "RAPIDS cuVS is not installed"
+        if self.device.type != 'cuda':
+            return "cuVS k-NN requires a CUDA device"
+        if not self.use_cuvs:
+            return "cuVS k-NN is disabled on this reducer"
+        if n_dims > 2048:
+            return f"cuVS k-NN supports up to 2048 dimensions in this path (got {n_dims})"
+        if not self._native_cuvs_metric():
+            return "cuVS k-NN only supports named metrics, not custom expressions/callables"
+        return None
+
     def _compute_knn(self, X, chunk_size=50000, use_fp16=None):
         """
         Compute k-NN using cuVS acceleration when available and beneficial.
@@ -592,26 +620,29 @@ class DiReCuVS(DiRePyTorch):
         """
         n_samples, n_dims = X.shape
 
-        native_cuvs_metric = (
-            isinstance(self.metric_spec, str) and
-            self.metric_spec.strip().lower() in
-            ('euclidean', 'l2', 'sqeuclidean', 'inner_product', 'cosine')
-        )
+        if self.knn_backend in ('pytorch', 'pykeops'):
+            return super()._compute_knn(X, chunk_size, use_fp16)
 
         # Check if custom metric expression/callable is specified.
         # cuVS only supports named metrics, not arbitrary tensor expressions.
-        if self._metric_fn is not None and not native_cuvs_metric:
-            self.logger.warning(
-                "Custom metric expressions/callables not supported by cuVS. "
-                "Falling back to PyTorch backend for k-NN."
-            )
+        unavailable_reason = self._cuvs_knn_unavailable_reason(n_samples, n_dims)
+        if self.knn_backend == 'cuvs':
+            if unavailable_reason is not None:
+                raise RuntimeError(f"knn_backend='cuvs' requested but unavailable: {unavailable_reason}")
+        elif unavailable_reason is not None:
+            if not self._native_cuvs_metric():
+                self.logger.warning(
+                    "Custom metric expressions/callables not supported by cuVS. "
+                    "Falling back to PyTorch backend for k-NN."
+                )
+            else:
+                self.logger.info(f"Using PyTorch backend for k-NN ({unavailable_reason})")
             return super()._compute_knn(X, chunk_size, use_fp16)
 
         # Decide whether to use cuVS
         use_cuvs_for_this = (
-            self.use_cuvs and
-            n_samples >= 10000 and  # cuVS overhead not worth it for small datasets
-            n_dims <= 2048  # cuVS works best for moderate dimensions
+            self.knn_backend == 'cuvs' or
+            n_samples >= 10000  # cuVS overhead not worth it for small datasets
         )
 
         if not use_cuvs_for_this:
@@ -620,6 +651,7 @@ class DiReCuVS(DiRePyTorch):
             return super()._compute_knn(X, chunk_size, use_fp16)
         
         # Use cuVS for k-NN
+        self._last_knn_backend = 'cuvs'
         self.logger.info(f"Computing {self.n_neighbors}-NN graph using cuVS...")
 
         # Determine which metric to use for cuVS
