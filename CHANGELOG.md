@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-03
+
+### Fixed
+- **High-dimensional k-NN fallback safety**: Avoided unsafe cuVS-to-standard-PyTorch fallback chunks for datasets above the cuVS dimensional limit.
+- **Named metric memory use**: Switched PyTorch `cosine`, `inner_product`, and `sqeuclidean` k-NN paths to matrix-multiply implementations instead of broadcast tensor materialization.
+- **Chunk sizing**: Accounted for arbitrary custom metric broadcast tensors in automatic k-NN chunk estimation.
+
+### Changed
+- **Auto backend selection**: Prefer memory-efficient PyTorch for large/high-dimensional or cuVS-unsupported metric cases.
+- **k-NN controls**: Documented package-level version references for the `0.3.2` release.
+
 ## [0.3.1] - 2026-05-31
 
 ### Added
@@ -94,7 +105,8 @@ Initial release with core functionality:
 - Basic metrics for distortion and context preservation
 - Examples and benchmarking utilities
 
-[Unreleased]: https://github.com/sashakolpakov/dire-rapids/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/sashakolpakov/dire-rapids/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/sashakolpakov/dire-rapids/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/sashakolpakov/dire-rapids/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sashakolpakov/dire-rapids/compare/v0.2.0...v0.3.0
 [0.1.0]: https://github.com/sashakolpakov/dire-rapids/releases/tag/v0.1.0

@@ -53,6 +53,11 @@ _KNN_BACKEND_ALIASES = {
     "cuvs": "cuvs",
 }
 
+_MATRIX_MULTIPLY_METRICS = {"euclidean", "sqeuclidean", "inner_product", "cosine"}
+_CUVS_NATIVE_METRICS = {"euclidean", "l2", "sqeuclidean", "inner_product", "cosine"}
+_AUTO_MEMORY_EFFICIENT_MIN_SAMPLES = 20_000
+_AUTO_MEMORY_EFFICIENT_MIN_DIMS = 2_048
+
 
 def _normalize_knn_backend(knn_backend):
     """Normalize public k-NN backend names to internal identifiers."""
@@ -68,6 +73,39 @@ def _normalize_knn_backend(knn_backend):
             f"Unknown knn_backend: {knn_backend}. "
             "Choose from: 'auto', 'pytorch', 'pykeops', 'cuvs'"
         ) from exc
+
+
+def _normalize_named_metric(metric_spec):
+    """Return the normalized name for built-in metrics, or None for custom metrics."""
+    if metric_spec is None:
+        return "euclidean"
+    if not isinstance(metric_spec, str):
+        return None
+
+    metric_name = metric_spec.strip().lower()
+    if metric_name == "l2":
+        return "euclidean"
+    if metric_name in _MATRIX_MULTIPLY_METRICS:
+        return metric_name
+    return None
+
+
+def _is_cuvs_native_metric(metric_spec):
+    """Return True when a metric spec can be represented by cuVS directly."""
+    if metric_spec is None:
+        return True
+    if not isinstance(metric_spec, str):
+        return False
+    return metric_spec.strip().lower() in _CUVS_NATIVE_METRICS
+
+
+def _prefer_memory_efficient_for_shape(n_samples=None, n_dims=None, metric_spec=None):
+    """Heuristic for auto fallback paths where standard PyTorch is too optimistic."""
+    if n_samples is not None and n_samples >= _AUTO_MEMORY_EFFICIENT_MIN_SAMPLES:
+        return True
+    if n_dims is not None and n_dims > _AUTO_MEMORY_EFFICIENT_MIN_DIMS:
+        return True
+    return metric_spec is not None and not _is_cuvs_native_metric(metric_spec)
 
 
 def _compute_forces_kernel(positions, knn_indices, neg_indices, a_val, b_val, cutoff):
@@ -196,7 +234,8 @@ def _compile_metric(spec):
 
     If spec is None or 'euclidean'/'l2', return None (fast-path Euclidean stays in backend).
     Other named metrics such as 'sqeuclidean', 'inner_product', and 'cosine'
-    are compiled to explicit tensor callables for the PyTorch path.
+    are compiled to explicit tensor callables for PyKeOps/custom-style paths;
+    the standard PyTorch path handles them with matrix multiplication.
     If spec is str expression, it's eval'ed with {'x': x, 'y': y} and no builtins.
     If spec is callable, it's returned unchanged.
 
@@ -210,13 +249,14 @@ def _compile_metric(spec):
     if isinstance(spec, str):
         expr = spec.strip().lower()
         # Euclidean/L2 can use the fastest backend-native path.
-        if expr in ("euclidean", "l2"):
+        metric_name = _normalize_named_metric(expr)
+        if metric_name == "euclidean":
             return None
-        if expr == "sqeuclidean":
+        if metric_name == "sqeuclidean":
             return lambda x, y: ((x - y) ** 2).sum(-1)
-        if expr == "inner_product":
+        if metric_name == "inner_product":
             return lambda x, y: -(x * y).sum(-1)
-        if expr == "cosine":
+        if metric_name == "cosine":
             def _cosine_metric(x, y):
                 numerator = (x * y).sum(-1)
                 x_norm = (x ** 2).sum(-1).sqrt()
@@ -417,6 +457,9 @@ class DiRePyTorch(TransformerMixin):
             use_exact_repulsion=False,  # If True, use all-pairs repulsion (for testing)
             metric=None,
             knn_backend="auto",
+            knn_chunk_size=None,
+            knn_memory_fraction=0.20,
+            knn_broadcast_memory_multiplier=3.0,
             normalize=True,
     ):
         """
@@ -461,6 +504,16 @@ class DiRePyTorch(TransformerMixin):
             k-NN engine selection. ``'auto'`` keeps the built-in selector;
             explicit values bypass heuristic choices and either use the
             requested engine or raise if the engine cannot run.
+        knn_chunk_size : int or None, default=None
+            Chunk size for k-NN distance computation. If None, estimate a safe
+            chunk from available memory and metric implementation.
+        knn_memory_fraction : float, default=0.20
+            Fraction of currently available device memory used by automatic
+            k-NN chunk sizing.
+        knn_broadcast_memory_multiplier : float, default=3.0
+            Safety multiplier for arbitrary metric callables/string expressions
+            that materialize broadcast tensors of shape ``(chunk, n_samples,
+            n_features)``.
         normalize : bool, default=True
             If True, mean-center and scale inputs to fit in [-1, 1] (global scalar
             rescale) before kNN and PCA. This preserves neighbor rankings exactly
@@ -485,6 +538,9 @@ class DiRePyTorch(TransformerMixin):
         self.use_exact_repulsion = use_exact_repulsion
         self.normalize = normalize
         self.knn_backend = _normalize_knn_backend(knn_backend)
+        self.knn_chunk_size = knn_chunk_size
+        self.knn_memory_fraction = knn_memory_fraction
+        self.knn_broadcast_memory_multiplier = knn_broadcast_memory_multiplier
 
         # Store RNG state -- defer torch/cuda seeding to fit_transform
         # to avoid mutating global state from a library constructor.
@@ -492,6 +548,7 @@ class DiRePyTorch(TransformerMixin):
 
         # Custom metric for k-NN only (layout forces remain Euclidean):
         self.metric_spec = metric
+        self._metric_name = _normalize_named_metric(self.metric_spec)
         self._metric_fn = _compile_metric(self.metric_spec)
 
         # Do not add/remove Loguru handlers from a library class. The adapter
@@ -507,6 +564,9 @@ class DiRePyTorch(TransformerMixin):
         self._knn_indices = None
         self._knn_distances = None
         self._last_knn_backend = None
+        self._last_knn_chunk_size = None
+        self._last_knn_distance_strategy = None
+        self._last_knn_reducer = type(self).__name__
 
         # Device management
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -606,6 +666,58 @@ class DiRePyTorch(TransformerMixin):
 
         return 'pytorch'
 
+    def _get_available_knn_memory(self):
+        """Return currently available memory for k-NN chunk sizing."""
+        if self.device.type == 'cuda':
+            return torch.cuda.mem_get_info()[0]
+
+        try:
+            import psutil  # pylint: disable=import-outside-toplevel
+            return psutil.virtual_memory().available
+        except ImportError:
+            # Conservative fallback when psutil is not installed. This keeps
+            # CPU custom-metric chunking from assuming it can materialize huge
+            # broadcast tensors.
+            return 1024 ** 3
+
+    def _metric_requires_broadcast_tensors(self, use_pykeops=False):
+        """Return True when the PyTorch path must materialize broadcast metric tensors."""
+        if use_pykeops:
+            return False
+        return self._metric_fn is not None and self._metric_name not in _MATRIX_MULTIPLY_METRICS
+
+    def _estimate_knn_memory_per_query(self, n_samples, n_dims, bytes_per_element, use_pykeops=False):
+        """Estimate temporary k-NN memory per query row in bytes."""
+        distance_matrix_bytes = n_samples * bytes_per_element
+        if not self._metric_requires_broadcast_tensors(use_pykeops):
+            return distance_matrix_bytes
+
+        broadcast_bytes = n_samples * n_dims * bytes_per_element
+        return distance_matrix_bytes + int(broadcast_bytes * self.knn_broadcast_memory_multiplier)
+
+    def _compute_auto_knn_chunk_size(
+        self,
+        n_samples,
+        n_dims,
+        dtype,
+        use_pykeops=False,
+        available_memory=None,
+    ):
+        """Compute a bounded chunk size from available memory and metric strategy."""
+        if available_memory is None:
+            available_memory = self._get_available_knn_memory()
+
+        bytes_per_element = 2 if dtype == torch.float16 else 4
+        memory_per_query = self._estimate_knn_memory_per_query(
+            n_samples,
+            n_dims,
+            bytes_per_element,
+            use_pykeops=use_pykeops,
+        )
+        memory_budget = max(1, int(available_memory * self.knn_memory_fraction))
+        chunk_size = max(1, int(memory_budget / max(1, memory_per_query)))
+        return max(1, min(chunk_size, n_samples, 50000))
+
     def _compute_knn(self, X, chunk_size=None, use_fp16=None):  # pylint: disable=too-many-branches
         """
         Compute k-nearest neighbors with memory-efficient chunking.
@@ -696,6 +808,7 @@ class DiRePyTorch(TransformerMixin):
 
         use_pykeops = selected_knn_backend == 'pykeops'
         self._last_knn_backend = selected_knn_backend
+        self._last_knn_reducer = type(self).__name__
 
         if use_pykeops:
             if self.knn_backend == 'pykeops':
@@ -710,29 +823,40 @@ class DiRePyTorch(TransformerMixin):
             else:
                 self.logger.info("Using PyTorch for k-NN")
 
-        # Set default chunk size if not provided
+        # Resolve chunk size. None means memory-aware sizing; explicit
+        # knn_chunk_size/argument values are respected.
         if chunk_size is None:
-            chunk_size = 50000
+            chunk_size = self.knn_chunk_size
+        if chunk_size is None:
+            available_memory = self._get_available_knn_memory()
+            chunk_size = self._compute_auto_knn_chunk_size(
+                n_samples,
+                n_dims,
+                dtype,
+                use_pykeops=use_pykeops,
+                available_memory=available_memory,
+            )
+        elif chunk_size <= 0:
+            raise ValueError(f"chunk_size must be positive, got {chunk_size}")
 
-        # Adaptive chunk sizing based on available GPU memory
-        if self.device.type == 'cuda':
-            # Check available memory AFTER allocating X_torch
-            gpu_mem_free = torch.cuda.mem_get_info()[0]
-            # Estimate memory for k-NN: chunk_size * n_samples * bytes_per_element
-            bytes_per_element = 2 if use_fp16 else 4  # FP16 uses 2 bytes, FP32 uses 4
-            memory_per_chunk = chunk_size * n_samples * bytes_per_element
+        self._last_knn_chunk_size = int(chunk_size)
+        memory_label = "GPU" if self.device.type == 'cuda' else "system"
+        available_memory = self._get_available_knn_memory()
+        self.logger.info(
+            f"Using chunk size: {chunk_size} "
+            f"({memory_label} memory: {available_memory/1024**3:.1f}GB, dtype: {dtype})"
+        )
 
-            # Only auto-adjust if using default chunk size
-            if chunk_size == 50000:
-                # Use conservative memory fraction: 20-25% of available memory
-                # This accounts for PyTorch overhead, temp buffers, and fragmentation
-                memory_fraction = 0.25 if use_fp16 else 0.20
-                max_memory = gpu_mem_free * memory_fraction
-                if memory_per_chunk > max_memory:
-                    chunk_size = int(max_memory / (n_samples * bytes_per_element))
-                    chunk_size = max(1000, chunk_size)  # Minimum chunk size
-
-            self.logger.info(f"Using chunk size: {chunk_size} (GPU memory: {gpu_mem_free/1024**3:.1f}GB, dtype: {dtype})")
+        X_torch_T = X_torch.T if not use_pykeops else None
+        X_norm_torch = None
+        X_norm_torch_T = None
+        X_sq_norms = None
+        if not use_pykeops:
+            if self._metric_name == "cosine":
+                X_norm_torch = torch.nn.functional.normalize(X_torch, p=2, dim=1, eps=1e-8)
+                X_norm_torch_T = X_norm_torch.T
+            elif self._metric_name == "sqeuclidean":
+                X_sq_norms = (X_torch * X_torch).sum(dim=1)
         
         # Initialize arrays for results
         all_knn_indices = []
@@ -767,6 +891,9 @@ class DiRePyTorch(TransformerMixin):
 
                 # Find k+1 nearest neighbors (including self)
                 knn_dists, knn_indices = D_ij.Kmin_argKmin(K=self.n_neighbors + 1, dim=1)
+                self._last_knn_distance_strategy = (
+                    f"pykeops_{self._metric_name}" if self._metric_fn is not None else "pykeops_euclidean"
+                )
 
                 # For custom metrics, distances are already in metric space
                 # For Euclidean, convert from squared to actual distances
@@ -782,15 +909,37 @@ class DiRePyTorch(TransformerMixin):
                 )
             else:
                 # Use PyTorch for HIGH dimensional data (MUCH faster!)
-                if self._metric_fn is not None:
-                    # Custom metric - compute pairwise distances manually
+                if self._metric_name == "cosine":
+                    # Matmul cosine path avoids materializing (chunk, N, D).
+                    distances = 1.0 - (X_norm_torch[start_idx:end_idx] @ X_norm_torch_T)
+                    self._last_knn_distance_strategy = "matmul_cosine"
+                elif self._metric_name == "inner_product":
+                    distances = -(X_chunk @ X_torch_T)
+                    self._last_knn_distance_strategy = "matmul_inner_product"
+                elif self._metric_name == "sqeuclidean":
+                    distances = (
+                        X_sq_norms[start_idx:end_idx, None]
+                        + X_sq_norms[None, :]
+                        - 2.0 * (X_chunk @ X_torch_T)
+                    )
+                    distances = torch.clamp(distances, min=0.0)
+                    self._last_knn_distance_strategy = "matmul_sqeuclidean"
+                elif self._metric_fn is not None:
+                    # Custom metric - compute pairwise distances manually.
+                    # This can materialize broadcast tensors, so automatic
+                    # chunk sizing accounts for the (chunk, N, D) footprint.
                     # Broadcast: X_chunk: (chunk, 1, D), X_torch: (1, N, D) -> (chunk, N)
                     X_i = X_chunk.unsqueeze(1)  # (chunk, 1, D)
                     X_j = X_torch.unsqueeze(0)  # (1, N, D)
                     distances = self._metric_fn(X_i, X_j)  # (chunk, N)
+                    self._last_knn_distance_strategy = "broadcast_custom"
                 else:
                     # Fast built-in Euclidean distance
                     distances = torch.cdist(X_chunk, X_torch, p=2)
+                    self._last_knn_distance_strategy = "torch_cdist"
+
+                local_rows = torch.arange(end_idx - start_idx, device=self.device)
+                distances[local_rows, start_idx + local_rows] = -torch.inf
 
                 knn_dists, knn_indices = torch.topk(distances, k=self.n_neighbors + 1,
                                                    dim=1, largest=False)
@@ -1246,7 +1395,7 @@ class DiRePyTorch(TransformerMixin):
         self._find_ab_params()
 
         # Compute k-NN graph
-        self._compute_knn(self._data)
+        self._compute_knn(self._data, chunk_size=self.knn_chunk_size)
 
         # Initialize embedding
         initial_embedding = self._initialize_embedding(self._data)
@@ -1408,6 +1557,8 @@ def create_dire(backend='auto', memory_efficient=False, knn_backend='auto', **kw
         Backend selection strategy:
 
         - 'auto': Automatically select best available backend based on hardware
+          and metric policy; uses memory-efficient PyTorch when cuVS cannot
+          serve the configured metric or k-NN policy on CUDA
         - 'cuvs': Force RAPIDS cuVS backend (requires RAPIDS installation)
         - 'pytorch': Force PyTorch backend with automatic device selection
         - 'pytorch_gpu': Force PyTorch backend on GPU (requires CUDA)
@@ -1430,7 +1581,9 @@ def create_dire(backend='auto', memory_efficient=False, knn_backend='auto', **kw
         Additional keyword arguments passed to the DiRe constructor.
         See individual backend documentation for available parameters.
         Common parameters include: n_components, n_neighbors, metric,
-        max_iter_layout, min_dist, spread, verbose, random_state.
+        max_iter_layout, min_dist, spread, verbose, random_state,
+        knn_chunk_size, knn_memory_fraction, and
+        knn_broadcast_memory_multiplier.
 
     Returns
     -------
@@ -1518,10 +1671,25 @@ def create_dire(backend='auto', memory_efficient=False, knn_backend='auto', **kw
             )
         if backend == 'pytorch_cpu' or not torch.cuda.is_available():
             raise RuntimeError("knn_backend='cuvs' requested but CUDA GPU is not available")
+        if not _is_cuvs_native_metric(kwargs.get('metric')):
+            raise RuntimeError(
+                "knn_backend='cuvs' requested but the configured metric is not a cuVS-native "
+                "named metric. Use metric=None/'euclidean'/'l2'/'sqeuclidean'/'inner_product'/'cosine', "
+                "or choose knn_backend='auto'/'pytorch'."
+            )
 
     if backend == 'auto':
+        metric_spec = kwargs.get('metric')
         # Auto-select best backend based on availability
-        if CUVS_AVAILABLE and torch.cuda.is_available() and use_cuvs_override is not False:
+        cuvs_allowed_by_knn_policy = knn_backend in ('auto', 'cuvs')
+        cuvs_usable_for_auto = (
+            CUVS_AVAILABLE
+            and torch.cuda.is_available()
+            and use_cuvs_override is not False
+            and cuvs_allowed_by_knn_policy
+            and _is_cuvs_native_metric(metric_spec)
+        )
+        if cuvs_usable_for_auto:
             if verbose:
                 logger.info("Auto-selected RAPIDS cuVS backend (GPU acceleration)")
             return DiReCuVS(
@@ -1531,8 +1699,16 @@ def create_dire(backend='auto', memory_efficient=False, knn_backend='auto', **kw
             )
 
         if torch.cuda.is_available():
-            # When cuVS is not available, prefer memory-efficient backend for better GPU memory management
-            if memory_efficient or not CUVS_AVAILABLE:
+            # Prefer memory-efficient PyTorch whenever auto cannot use cuVS
+            # cleanly. This covers disabled cuVS, custom metrics, and explicit
+            # PyTorch/PyKeOps k-NN requests.
+            if (
+                memory_efficient
+                or not CUVS_AVAILABLE
+                or use_cuvs_override is False
+                or not _is_cuvs_native_metric(metric_spec)
+                or knn_backend in ('pytorch', 'pykeops')
+            ):
                 if verbose:
                     logger.info("Auto-selected memory-efficient PyTorch backend (GPU)")
                 return DiRePyTorchMemoryEfficient(knn_backend=knn_backend, **kwargs)

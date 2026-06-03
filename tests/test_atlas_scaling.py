@@ -18,6 +18,21 @@ import numpy as np
 from dire_rapids.metrics import compute_h0_h1_knn
 
 
+def _to_betti_counts(h0, h1):
+    """
+    Normalize outputs from compute_h0_h1_knn.
+
+    Some versions return Betti counts directly as ints; older code expected
+    persistence diagram arrays.
+    """
+    if np.isscalar(h0) and np.isscalar(h1):
+        return int(h0), int(h1)
+
+    beta_0 = len(h0[h0[:, 1] == np.inf])
+    beta_1 = len(h1[h1[:, 1] == np.inf])
+    return beta_0, beta_1
+
+
 def test_circle_scaling():
     """Test circle with different point counts."""
     print("=" * 70)
@@ -43,8 +58,7 @@ def test_circle_scaling():
         t_total = time.time() - t0
 
         # Count Betti numbers
-        beta_0 = len(h0[h0[:, 1] == np.inf])
-        beta_1 = len(h1[h1[:, 1] == np.inf])
+        beta_0, beta_1 = _to_betti_counts(h0, h1)
 
         # Check correctness
         status = "✓" if beta_0 == 1 and beta_1 == 1 else "✗"
@@ -110,8 +124,7 @@ def test_torus_scaling():
         t_total = time.time() - t0
 
         # Count Betti numbers
-        beta_0 = len(h0[h0[:, 1] == np.inf])
-        beta_1 = len(h1[h1[:, 1] == np.inf])
+        beta_0, beta_1 = _to_betti_counts(h0, h1)
 
         # Check correctness (torus has β₀=1, β₁=2)
         status = "✓" if beta_0 == 1 and beta_1 == 2 else "✗"
@@ -170,8 +183,7 @@ def test_noise_robustness():
         t_total = time.time() - t0
 
         # Count Betti numbers
-        beta_0 = len(h0[h0[:, 1] == np.inf])
-        beta_1 = len(h1[h1[:, 1] == np.inf])
+        beta_0, beta_1 = _to_betti_counts(h0, h1)
 
         # Check correctness
         status = "✓" if beta_0 == 1 and beta_1 == 1 else "✗"

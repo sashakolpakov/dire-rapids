@@ -33,17 +33,17 @@ Install the base package:
 
 .. code-block:: bash
 
-   python -m pip install "dire-rapids==0.3.1"
+   python -m pip install "dire-rapids==0.3.2"
 
 Install optional k-NN engines:
 
 .. code-block:: bash
 
    # PyKeOps k-NN engine
-   python -m pip install "dire-rapids[keops]==0.3.1"
+   python -m pip install "dire-rapids[keops]==0.3.2"
 
    # CUDA CuPy support
-   python -m pip install "dire-rapids[cuda]==0.3.1"
+   python -m pip install "dire-rapids[cuda]==0.3.2"
 
 For GPU acceleration with RAPIDS:
 
@@ -55,7 +55,7 @@ from the NVIDIA index and PyTorch from the matching CUDA wheel index.
    python -m pip install \
      --extra-index-url https://pypi.nvidia.com \
      --extra-index-url https://download.pytorch.org/whl/cu128 \
-     "dire-rapids[rapids,keops]==0.3.1"
+     "dire-rapids[rapids,keops]==0.3.2"
 
 For development from a clone:
 

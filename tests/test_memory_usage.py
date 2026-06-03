@@ -8,11 +8,16 @@ import time
 import traceback
 
 import torch
+import pytest
 from sklearn.datasets import make_blobs
 
 # Import implementations
 from dire_rapids.dire_pytorch import DiRePyTorch  # Current implementation
 from dire_rapids.dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient  # Memory-efficient version
+
+
+pytestmark = pytest.mark.benchmark
+
 
 def get_gpu_memory():
     """Get current GPU memory usage in MB."""
@@ -127,8 +132,15 @@ def test_memory_usage(n_points=5000):
     print("\n" + "="*70)
     print("COMPARISON:")
     if current_memory != float('inf') and efficient_memory != float('inf'):
-        print(f"  Memory reduction: {current_memory/efficient_memory:.2f}x")
-        print(f"  Speed difference: {time_current/time_efficient:.2f}x")
+        if efficient_memory > 0:
+            print(f"  Memory reduction: {current_memory/efficient_memory:.2f}x")
+        else:
+            print("  Memory reduction: N/A (no GPU memory tracked in this environment)")
+
+        if time_efficient > 0:
+            print(f"  Speed difference: {time_current/time_efficient:.2f}x")
+        else:
+            print("  Speed difference: N/A")
     else:
         print("  Current implementation failed (likely OOM)")
         print("  Memory-efficient version succeeded!")

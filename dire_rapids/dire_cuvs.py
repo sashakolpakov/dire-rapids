@@ -15,7 +15,12 @@ import torch  # pylint: disable=unused-import # Used via parent class (self.devi
 from loguru import logger
 
 # Import base DIRE PyTorch implementation
-from .dire_pytorch import DiRePyTorch, _remove_self_from_knn  # pylint: disable=cyclic-import
+from .dire_pytorch import (  # pylint: disable=cyclic-import
+    DiRePyTorch,
+    _is_cuvs_native_metric,
+    _prefer_memory_efficient_for_shape,
+    _remove_self_from_knn,
+)
 
 # Try to import cuVS and CuPy
 try:
@@ -559,14 +564,7 @@ class DiReCuVS(DiRePyTorch):
     
     def _native_cuvs_metric(self):
         """Return whether the configured metric can run in cuVS."""
-        return (
-            self.metric_spec is None or
-            (
-                isinstance(self.metric_spec, str) and
-                self.metric_spec.strip().lower() in
-                ('euclidean', 'l2', 'sqeuclidean', 'inner_product', 'cosine')
-            )
-        )
+        return _is_cuvs_native_metric(self.metric_spec)
 
     def _cuvs_knn_unavailable_reason(self, n_samples, n_dims):
         """Return a reason cuVS k-NN cannot run for this reducer, or None."""
@@ -583,7 +581,59 @@ class DiReCuVS(DiRePyTorch):
             return "cuVS k-NN only supports named metrics, not custom expressions/callables"
         return None
 
-    def _compute_knn(self, X, chunk_size=50000, use_fp16=None):
+    def _fallback_to_pytorch_knn(self, X, chunk_size=None, use_fp16=None, reason=None):
+        """Fallback from cuVS to a PyTorch k-NN implementation."""
+        n_samples, n_dims = X.shape
+        if (
+            self.knn_backend in ('auto', 'pytorch')
+            and _prefer_memory_efficient_for_shape(n_samples, n_dims, self.metric_spec)
+        ):
+            from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient  # pylint: disable=import-outside-toplevel
+
+            if reason is not None:
+                self.logger.info(
+                    "Using memory-efficient PyTorch fallback for k-NN "
+                    f"because cuVS is unavailable: {reason}"
+                )
+
+            fallback = DiRePyTorchMemoryEfficient(
+                n_components=self.n_components,
+                n_neighbors=self.n_neighbors,
+                init=self.init,
+                max_iter_layout=self.max_iter_layout,
+                min_dist=self.min_dist,
+                spread=self.spread,
+                cutoff=self.cutoff,
+                n_sample_dirs=self.n_sample_dirs,
+                sample_size=self.sample_size,
+                neg_ratio=self.neg_ratio,
+                verbose=self.verbose,
+                random_state=self.random_state,
+                use_exact_repulsion=self.use_exact_repulsion,
+                metric=self.metric_spec,
+                knn_backend='pytorch' if self.knn_backend == 'auto' else self.knn_backend,
+                knn_chunk_size=chunk_size,
+                memory_fraction=self.knn_memory_fraction,
+                knn_memory_fraction=self.knn_memory_fraction,
+                knn_broadcast_memory_multiplier=self.knn_broadcast_memory_multiplier,
+                normalize=self.normalize,
+            )
+            fallback.device = self.device
+            fallback._compute_knn(X, chunk_size=chunk_size, use_fp16=use_fp16)
+
+            self._knn_indices = fallback._knn_indices
+            self._knn_distances = fallback._knn_distances
+            self._last_knn_backend = fallback._last_knn_backend
+            self._last_knn_chunk_size = fallback._last_knn_chunk_size
+            self._last_knn_distance_strategy = fallback._last_knn_distance_strategy
+            self._last_knn_reducer = type(fallback).__name__
+            return None
+
+        if reason is not None:
+            self.logger.info(f"Using PyTorch backend for k-NN ({reason})")
+        return super()._compute_knn(X, chunk_size=chunk_size, use_fp16=use_fp16)
+
+    def _compute_knn(self, X, chunk_size=None, use_fp16=None):
         """
         Compute k-NN using cuVS acceleration when available and beneficial.
 
@@ -595,8 +645,9 @@ class DiReCuVS(DiRePyTorch):
         ----------
         X : numpy.ndarray
             Input data of shape (n_samples, n_features).
-        chunk_size : int, default=50000
-            Chunk size for processing (used by fallback PyTorch method).
+        chunk_size : int, optional
+            Chunk size for processing (used by fallback PyTorch method). If
+            None, the fallback computes a memory-aware chunk size.
         use_fp16 : bool, optional
             Use FP16 precision (used by fallback PyTorch method).
             Note: cuVS requires float32, so FP16 is only used for PyTorch fallback.
@@ -609,7 +660,8 @@ class DiReCuVS(DiRePyTorch):
         - cuVS backend must be enabled and available
         - Dataset size >= 10,000 samples (cuVS overhead not worth it for smaller datasets)
         - Dimensionality <= 2,048 (cuVS works best for moderate dimensions)
-        - Only native metrics supported (euclidean, inner_product)
+        - Only native named metrics supported (euclidean/l2, sqeuclidean,
+          inner_product, cosine)
 
         If criteria aren't met, falls back to parent PyTorch implementation.
 
@@ -621,7 +673,12 @@ class DiReCuVS(DiRePyTorch):
         n_samples, n_dims = X.shape
 
         if self.knn_backend in ('pytorch', 'pykeops'):
-            return super()._compute_knn(X, chunk_size, use_fp16)
+            return self._fallback_to_pytorch_knn(
+                X,
+                chunk_size=chunk_size,
+                use_fp16=use_fp16,
+                reason=f"knn_backend='{self.knn_backend}' was requested",
+            )
 
         # Check if custom metric expression/callable is specified.
         # cuVS only supports named metrics, not arbitrary tensor expressions.
@@ -637,7 +694,12 @@ class DiReCuVS(DiRePyTorch):
                 )
             else:
                 self.logger.info(f"Using PyTorch backend for k-NN ({unavailable_reason})")
-            return super()._compute_knn(X, chunk_size, use_fp16)
+            return self._fallback_to_pytorch_knn(
+                X,
+                chunk_size=chunk_size,
+                use_fp16=use_fp16,
+                reason=unavailable_reason,
+            )
 
         # Decide whether to use cuVS
         use_cuvs_for_this = (
@@ -648,7 +710,12 @@ class DiReCuVS(DiRePyTorch):
         if not use_cuvs_for_this:
             # Fall back to PyTorch implementation
             self.logger.info("Using PyTorch backend for k-NN")
-            return super()._compute_knn(X, chunk_size, use_fp16)
+            return self._fallback_to_pytorch_knn(
+                X,
+                chunk_size=chunk_size,
+                use_fp16=use_fp16,
+                reason="dataset is below the cuVS auto threshold",
+            )
         
         # Use cuVS for k-NN
         self._last_knn_backend = 'cuvs'
@@ -831,9 +898,16 @@ class DiReCuVS(DiRePyTorch):
             # Output: "Using cuVS-accelerated backend for 500000 points"
         """
         # Log backend being used
-        if self.use_cuvs and X.shape[0] >= 10000:
+        cuvs_unavailable_reason = self._cuvs_knn_unavailable_reason(X.shape[0], X.shape[1])
+        if self.use_cuvs and X.shape[0] >= 10000 and cuvs_unavailable_reason is None:
             self.logger.info(f"Using cuVS-accelerated backend for {X.shape[0]} points")
         else:
-            self.logger.info(f"Using PyTorch backend for {X.shape[0]} points")
+            if cuvs_unavailable_reason is None:
+                self.logger.info(f"Using PyTorch backend for {X.shape[0]} points")
+            else:
+                self.logger.info(
+                    f"Using PyTorch fallback for {X.shape[0]} points "
+                    f"({cuvs_unavailable_reason})"
+                )
         
         return super().fit_transform(X, y)
