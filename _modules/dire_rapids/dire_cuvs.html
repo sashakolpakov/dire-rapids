@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dire_rapids.dire_cuvs &mdash; dire-rapids 0.3.1 documentation</title>
+  <title>dire_rapids.dire_cuvs &mdash; dire-rapids 0.3.2 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=4621528c"></script>
+      <script src="../../_static/documentation_options.js?v=71d9d8e6"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -86,7 +86,12 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
 
 <span class="c1"># Import base DIRE PyTorch implementation</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorch</span><span class="p">,</span> <span class="n">_remove_self_from_knn</span>  <span class="c1"># pylint: disable=cyclic-import</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># pylint: disable=cyclic-import</span>
+    <span class="n">DiRePyTorch</span><span class="p">,</span>
+    <span class="n">_is_cuvs_native_metric</span><span class="p">,</span>
+    <span class="n">_prefer_memory_efficient_for_shape</span><span class="p">,</span>
+    <span class="n">_remove_self_from_knn</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="c1"># Try to import cuVS and CuPy</span>
 <span class="k">try</span><span class="p">:</span>
@@ -635,14 +640,7 @@
     
     <span class="k">def</span><span class="w"> </span><span class="nf">_native_cuvs_metric</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return whether the configured metric can run in cuVS.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span>
-            <span class="p">(</span>
-                <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span>
-                <span class="p">(</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">,</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">,</span> <span class="s1">&#39;cosine&#39;</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_is_cuvs_native_metric</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_cuvs_knn_unavailable_reason</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a reason cuVS k-NN cannot run for this reducer, or None.&quot;&quot;&quot;</span>
@@ -659,7 +657,59 @@
             <span class="k">return</span> <span class="s2">&quot;cuVS k-NN only supports named metrics, not custom expressions/callables&quot;</span>
         <span class="k">return</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_knn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">50000</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fallback_to_pytorch_knn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fallback from cuVS to a PyTorch k-NN implementation.&quot;&quot;&quot;</span>
+        <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="s1">&#39;pytorch&#39;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">_prefer_memory_efficient_for_shape</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">.dire_pytorch_memory_efficient</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiRePyTorchMemoryEfficient</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
+
+            <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="s2">&quot;Using memory-efficient PyTorch fallback for k-NN &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;because cuVS is unavailable: </span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+            <span class="n">fallback</span> <span class="o">=</span> <span class="n">DiRePyTorchMemoryEfficient</span><span class="p">(</span>
+                <span class="n">n_components</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">,</span>
+                <span class="n">n_neighbors</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
+                <span class="n">init</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">init</span><span class="p">,</span>
+                <span class="n">max_iter_layout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_iter_layout</span><span class="p">,</span>
+                <span class="n">min_dist</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_dist</span><span class="p">,</span>
+                <span class="n">spread</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">spread</span><span class="p">,</span>
+                <span class="n">cutoff</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
+                <span class="n">n_sample_dirs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_sample_dirs</span><span class="p">,</span>
+                <span class="n">sample_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">sample_size</span><span class="p">,</span>
+                <span class="n">neg_ratio</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">neg_ratio</span><span class="p">,</span>
+                <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
+                <span class="n">random_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">,</span>
+                <span class="n">use_exact_repulsion</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">use_exact_repulsion</span><span class="p">,</span>
+                <span class="n">metric</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">,</span>
+                <span class="n">knn_backend</span><span class="o">=</span><span class="s1">&#39;pytorch&#39;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;auto&#39;</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span><span class="p">,</span>
+                <span class="n">knn_chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+                <span class="n">memory_fraction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">knn_memory_fraction</span><span class="p">,</span>
+                <span class="n">knn_memory_fraction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">knn_memory_fraction</span><span class="p">,</span>
+                <span class="n">knn_broadcast_memory_multiplier</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">knn_broadcast_memory_multiplier</span><span class="p">,</span>
+                <span class="n">normalize</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">normalize</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">fallback</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="n">fallback</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="n">use_fp16</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span> <span class="o">=</span> <span class="n">fallback</span><span class="o">.</span><span class="n">_knn_indices</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">fallback</span><span class="o">.</span><span class="n">_knn_distances</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_backend</span> <span class="o">=</span> <span class="n">fallback</span><span class="o">.</span><span class="n">_last_knn_backend</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_chunk_size</span> <span class="o">=</span> <span class="n">fallback</span><span class="o">.</span><span class="n">_last_knn_chunk_size</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_distance_strategy</span> <span class="o">=</span> <span class="n">fallback</span><span class="o">.</span><span class="n">_last_knn_distance_strategy</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_reducer</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">fallback</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch backend for k-NN (</span><span class="si">{</span><span class="n">reason</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="n">use_fp16</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_knn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_fp16</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Compute k-NN using cuVS acceleration when available and beneficial.</span>
 
@@ -671,8 +721,9 @@
 <span class="sd">        ----------</span>
 <span class="sd">        X : numpy.ndarray</span>
 <span class="sd">            Input data of shape (n_samples, n_features).</span>
-<span class="sd">        chunk_size : int, default=50000</span>
-<span class="sd">            Chunk size for processing (used by fallback PyTorch method).</span>
+<span class="sd">        chunk_size : int, optional</span>
+<span class="sd">            Chunk size for processing (used by fallback PyTorch method). If</span>
+<span class="sd">            None, the fallback computes a memory-aware chunk size.</span>
 <span class="sd">        use_fp16 : bool, optional</span>
 <span class="sd">            Use FP16 precision (used by fallback PyTorch method).</span>
 <span class="sd">            Note: cuVS requires float32, so FP16 is only used for PyTorch fallback.</span>
@@ -685,7 +736,8 @@
 <span class="sd">        - cuVS backend must be enabled and available</span>
 <span class="sd">        - Dataset size &gt;= 10,000 samples (cuVS overhead not worth it for smaller datasets)</span>
 <span class="sd">        - Dimensionality &lt;= 2,048 (cuVS works best for moderate dimensions)</span>
-<span class="sd">        - Only native metrics supported (euclidean, inner_product)</span>
+<span class="sd">        - Only native named metrics supported (euclidean/l2, sqeuclidean,</span>
+<span class="sd">          inner_product, cosine)</span>
 
 <span class="sd">        If criteria aren&#39;t met, falls back to parent PyTorch implementation.</span>
 
@@ -697,7 +749,12 @@
         <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;pytorch&#39;</span><span class="p">,</span> <span class="s1">&#39;pykeops&#39;</span><span class="p">):</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fallback_to_pytorch_knn</span><span class="p">(</span>
+                <span class="n">X</span><span class="p">,</span>
+                <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+                <span class="n">use_fp16</span><span class="o">=</span><span class="n">use_fp16</span><span class="p">,</span>
+                <span class="n">reason</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;knn_backend=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span><span class="si">}</span><span class="s2">&#39; was requested&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
 
         <span class="c1"># Check if custom metric expression/callable is specified.</span>
         <span class="c1"># cuVS only supports named metrics, not arbitrary tensor expressions.</span>
@@ -713,7 +770,12 @@
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch backend for k-NN (</span><span class="si">{</span><span class="n">unavailable_reason</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fallback_to_pytorch_knn</span><span class="p">(</span>
+                <span class="n">X</span><span class="p">,</span>
+                <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+                <span class="n">use_fp16</span><span class="o">=</span><span class="n">use_fp16</span><span class="p">,</span>
+                <span class="n">reason</span><span class="o">=</span><span class="n">unavailable_reason</span><span class="p">,</span>
+            <span class="p">)</span>
 
         <span class="c1"># Decide whether to use cuVS</span>
         <span class="n">use_cuvs_for_this</span> <span class="o">=</span> <span class="p">(</span>
@@ -724,7 +786,12 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">use_cuvs_for_this</span><span class="p">:</span>
             <span class="c1"># Fall back to PyTorch implementation</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using PyTorch backend for k-NN&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">,</span> <span class="n">use_fp16</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fallback_to_pytorch_knn</span><span class="p">(</span>
+                <span class="n">X</span><span class="p">,</span>
+                <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+                <span class="n">use_fp16</span><span class="o">=</span><span class="n">use_fp16</span><span class="p">,</span>
+                <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;dataset is below the cuVS auto threshold&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
         
         <span class="c1"># Use cuVS for k-NN</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_backend</span> <span class="o">=</span> <span class="s1">&#39;cuvs&#39;</span>
@@ -909,10 +976,17 @@
 <span class="sd">            # Output: &quot;Using cuVS-accelerated backend for 500000 points&quot;</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c1"># Log backend being used</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="ow">and</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">10000</span><span class="p">:</span>
+        <span class="n">cuvs_unavailable_reason</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cuvs_knn_unavailable_reason</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_cuvs</span> <span class="ow">and</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">10000</span> <span class="ow">and</span> <span class="n">cuvs_unavailable_reason</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using cuVS-accelerated backend for </span><span class="si">{</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> points&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch backend for </span><span class="si">{</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> points&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">cuvs_unavailable_reason</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Using PyTorch backend for </span><span class="si">{</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> points&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Using PyTorch fallback for </span><span class="si">{</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> points &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">cuvs_unavailable_reason</span><span class="si">}</span><span class="s2">)&quot;</span>
+                <span class="p">)</span>
         
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span></div>
 </div>

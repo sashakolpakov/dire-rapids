@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dire-rapids &mdash; dire-rapids 0.3.1 documentation</title>
+  <title>dire-rapids &mdash; dire-rapids 0.3.2 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=4621528c"></script>
+      <script src="_static/documentation_options.js?v=71d9d8e6"></script>
       <script src="_static/doctools.js?v=9bcbadda"></script>
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -100,15 +100,15 @@ requests are strict and raise if the requested engine cannot run.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
 <p>Install the base package:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids==0.3.1&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids==0.3.2&quot;</span>
 </pre></div>
 </div>
 <p>Install optional k-NN engines:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># PyKeOps k-NN engine</span>
-python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids[keops]==0.3.1&quot;</span>
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids[keops]==0.3.2&quot;</span>
 
 <span class="c1"># CUDA CuPy support</span>
-python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids[cuda]==0.3.1&quot;</span>
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids[cuda]==0.3.2&quot;</span>
 </pre></div>
 </div>
 <p>For GPU acceleration with RAPIDS:</p>
@@ -117,7 +117,7 @@ from the NVIDIA index and PyTorch from the matching CUDA wheel index.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">&quot;dire-rapids[rapids,keops]==0.3.1&quot;</span>
+<span class="w">  </span><span class="s2">&quot;dire-rapids[rapids,keops]==0.3.2&quot;</span>
 </pre></div>
 </div>
 <p>For development from a clone:</p>

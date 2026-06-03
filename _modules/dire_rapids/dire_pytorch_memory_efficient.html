@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>dire_rapids.dire_pytorch_memory_efficient &mdash; dire-rapids 0.3.1 documentation</title>
+  <title>dire_rapids.dire_pytorch_memory_efficient &mdash; dire-rapids 0.3.2 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=4621528c"></script>
+      <script src="../../_static/documentation_options.js?v=71d9d8e6"></script>
       <script src="../../_static/doctools.js?v=9bcbadda"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -226,6 +226,8 @@
 <span class="sd">            - knn_backend: k-NN engine selection (&#39;auto&#39;, &#39;pytorch&#39;, &#39;pykeops&#39;, &#39;cuvs&#39;)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         
+        <span class="n">knn_memory_fraction_explicit</span> <span class="o">=</span> <span class="s1">&#39;knn_memory_fraction&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span>
+
         <span class="c1"># Call parent constructor</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         
@@ -234,6 +236,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">use_pykeops_repulsion</span> <span class="o">=</span> <span class="n">use_pykeops_repulsion</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pykeops_threshold</span> <span class="o">=</span> <span class="n">pykeops_threshold</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span> <span class="o">=</span> <span class="n">memory_fraction</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">knn_memory_fraction_explicit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">knn_memory_fraction</span> <span class="o">=</span> <span class="n">memory_fraction</span>
         
         <span class="c1"># Log memory-efficient settings</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
@@ -263,10 +267,7 @@
 <span class="sd">        For CUDA devices, returns free GPU memory.</span>
 <span class="sd">        For CPU, returns available system RAM.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">mem_get_info</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Free memory</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">psutil</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
-        <span class="k">return</span> <span class="n">psutil</span><span class="o">.</span><span class="n">virtual_memory</span><span class="p">()</span><span class="o">.</span><span class="n">available</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_available_knn_memory</span><span class="p">()</span>
     
     <span class="k">def</span><span class="w"> </span><span class="nf">_compute_optimal_chunk_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_features</span><span class="p">,</span> <span class="n">operation_type</span><span class="o">=</span><span class="s2">&quot;knn&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -303,13 +304,22 @@
 <span class="sd">        to ensure both memory safety and computational efficiency.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">available_memory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_available_memory</span><span class="p">()</span>
-        <span class="n">usable_memory</span> <span class="o">=</span> <span class="n">available_memory</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span>
+        <span class="n">memory_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_memory_fraction</span> <span class="k">if</span> <span class="n">operation_type</span> <span class="o">==</span> <span class="s2">&quot;knn&quot;</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_fraction</span>
+        <span class="n">usable_memory</span> <span class="o">=</span> <span class="n">available_memory</span> <span class="o">*</span> <span class="n">memory_fraction</span>
         
         <span class="n">bytes_per_element</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">float16</span> <span class="k">else</span> <span class="mi">4</span>
         
         <span class="k">if</span> <span class="n">operation_type</span> <span class="o">==</span> <span class="s2">&quot;knn&quot;</span><span class="p">:</span>
-            <span class="c1"># For k-NN: chunk_size × n_samples × bytes_per_element (distance matrix chunk)</span>
-            <span class="n">max_chunk_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">usable_memory</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_samples</span> <span class="o">*</span> <span class="n">bytes_per_element</span><span class="p">))</span>
+            <span class="c1"># Native/matmul k-NN needs a distance matrix chunk. Arbitrary</span>
+            <span class="c1"># metric callables may materialize broadcast tensors, so use the</span>
+            <span class="c1"># base estimator that accounts for (chunk, n_samples, n_features).</span>
+            <span class="n">memory_per_sample</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_estimate_knn_memory_per_query</span><span class="p">(</span>
+                <span class="n">n_samples</span><span class="p">,</span>
+                <span class="n">n_features</span><span class="p">,</span>
+                <span class="n">bytes_per_element</span><span class="p">,</span>
+                <span class="n">use_pykeops</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">max_chunk_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">usable_memory</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">memory_per_sample</span><span class="p">))</span>
             
         <span class="k">elif</span> <span class="n">operation_type</span> <span class="o">==</span> <span class="s2">&quot;repulsion&quot;</span><span class="p">:</span>
             <span class="c1"># For repulsion: chunk_size × n_neg × n_components × bytes_per_element</span>
@@ -323,8 +333,11 @@
             <span class="n">max_chunk_size</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">usable_memory</span> <span class="o">/</span> <span class="n">memory_per_sample</span><span class="p">)</span>
         
         <span class="c1"># Apply reasonable bounds</span>
-        <span class="n">min_chunk_size</span> <span class="o">=</span> <span class="mi">100</span>
+        <span class="n">min_chunk_size</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="p">(</span>
+            <span class="n">operation_type</span> <span class="o">==</span> <span class="s2">&quot;knn&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_metric_requires_broadcast_tensors</span><span class="p">(</span><span class="n">use_pykeops</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="p">)</span> <span class="k">else</span> <span class="mi">100</span>
         <span class="n">max_reasonable_chunk_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mi">20000</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+        <span class="n">min_chunk_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">min_chunk_size</span><span class="p">,</span> <span class="n">max_reasonable_chunk_size</span><span class="p">)</span>
         
         <span class="n">optimal_chunk_size</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">min_chunk_size</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">max_chunk_size</span><span class="p">,</span> <span class="n">max_reasonable_chunk_size</span><span class="p">))</span>
         
@@ -378,6 +391,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Forcing FP16 for large dataset (</span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> samples, </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D)&quot;</span><span class="p">)</span>
         
         <span class="c1"># Compute optimal chunk size based on available memory</span>
+        <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_chunk_size</span>
         <span class="k">if</span> <span class="n">chunk_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_optimal_chunk_size</span><span class="p">(</span>
                 <span class="n">n_samples</span><span class="p">,</span>
