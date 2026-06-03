@@ -17,13 +17,13 @@
 # cross-building.
 #
 # --- Build ---
-#   docker build -t dire-rapids:0.3.1 -f docker/Dockerfile .
+#   docker build -t dire-rapids:0.3.2 -f docker/Dockerfile .
 # (Run from the repo root, not from inside docker/.)
 #
 # --- Run (interactive, with GPU) ---
-#   docker run --gpus=all -it --rm -v $PWD:/workspace dire-rapids:0.3.1 bash
+#   docker run --gpus=all -it --rm -v $PWD:/workspace dire-rapids:0.3.2 bash
 # --- Run the test suite ---
-#   docker run --gpus=all --rm dire-rapids:0.3.1 \
+#   docker run --gpus=all --rm dire-rapids:0.3.2 \
 #       python -m pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v
 
 ARG RAPIDS_VERSION=26.04

@@ -440,6 +440,150 @@ class TestKnnBackendSelection:
         with pytest.raises(RuntimeError, match="PyKeOps is not installed"):
             model._compute_knn(X)
 
+    @pytest.mark.parametrize(
+        ("metric", "strategy"),
+        [
+            ("cosine", "matmul_cosine"),
+            ("inner_product", "matmul_inner_product"),
+            ("sqeuclidean", "matmul_sqeuclidean"),
+        ],
+    )
+    def test_named_metrics_use_matmul_pytorch_paths(self, metric, strategy):
+        """Built-in named metrics must not use broadcast custom metric tensors."""
+        X = np.random.default_rng(3).standard_normal((16, 8)).astype(np.float32)
+        model = DiRePyTorch(
+            metric=metric,
+            knn_backend='pytorch',
+            n_neighbors=2,
+            verbose=False,
+        )
+
+        model._compute_knn(X)
+
+        assert model._last_knn_backend == 'pytorch'
+        assert model._last_knn_distance_strategy == strategy
+        assert model._knn_indices.shape == (16, 2)
+
+    def test_chunk_estimator_accounts_for_broadcast_custom_metrics(self):
+        """Mocked high-D sizing should distinguish matmul-safe and broadcast metrics."""
+        n_samples = 20_000
+        n_dims = 2_049
+        available_memory = 1024 ** 3
+
+        cosine_model = DiRePyTorch(metric='cosine', verbose=False)
+        custom_model = DiRePyTorch(metric='(x - y).abs().sum(-1)', verbose=False)
+
+        cosine_chunk = cosine_model._compute_auto_knn_chunk_size(
+            n_samples,
+            n_dims,
+            torch.float32,
+            use_pykeops=False,
+            available_memory=available_memory,
+        )
+        custom_chunk = custom_model._compute_auto_knn_chunk_size(
+            n_samples,
+            n_dims,
+            torch.float32,
+            use_pykeops=False,
+            available_memory=available_memory,
+        )
+
+        assert not cosine_model._metric_requires_broadcast_tensors(use_pykeops=False)
+        assert custom_model._metric_requires_broadcast_tensors(use_pykeops=False)
+        assert cosine_model._estimate_knn_memory_per_query(n_samples, n_dims, 4) == n_samples * 4
+        assert custom_model._estimate_knn_memory_per_query(n_samples, n_dims, 4) > n_samples * n_dims * 4
+        assert cosine_chunk > custom_chunk
+        assert custom_chunk < 1000
+
+    def test_high_dimensional_cosine_uses_safe_matmul_chunk(self):
+        """Regression smoke for d > 2048 cosine without a broadcast (chunk, n, d) tensor."""
+        X = np.random.default_rng(4).standard_normal((24, 2049)).astype(np.float32)
+        model = DiRePyTorch(
+            metric='cosine',
+            knn_backend='pytorch',
+            n_neighbors=2,
+            verbose=False,
+        )
+
+        model._compute_knn(X)
+
+        assert model._last_knn_backend == 'pytorch'
+        assert model._last_knn_distance_strategy == 'matmul_cosine'
+        assert model._last_knn_chunk_size <= X.shape[0]
+        assert model._knn_indices.shape == (24, 2)
+
+    def test_cuvs_high_dimensional_auto_fallback_uses_memory_efficient_path(self):
+        """cuVS fallback after d > 2048 should not carry a hard 50000 chunk."""
+        from dire_rapids.dire_cuvs import DiReCuVS  # pylint: disable=import-outside-toplevel
+
+        X = np.random.default_rng(5).standard_normal((24, 2049)).astype(np.float32)
+        model = DiReCuVS(
+            metric='cosine',
+            n_neighbors=2,
+            use_cuvs=False,
+            verbose=False,
+        )
+
+        model._compute_knn(X)
+
+        assert model._last_knn_reducer == 'DiRePyTorchMemoryEfficient'
+        assert model._last_knn_backend == 'pytorch'
+        assert model._last_knn_distance_strategy == 'matmul_cosine'
+        assert model._last_knn_chunk_size != 50000
+        assert model._last_knn_chunk_size <= X.shape[0]
+
+    def test_auto_factory_prefers_memory_efficient_when_cuvs_metric_unsupported(self, monkeypatch):
+        """backend='auto' should avoid cuVS wrapper when metric policy already rules cuVS out."""
+        import dire_rapids.dire_cuvs as dire_cuvs_module  # pylint: disable=import-outside-toplevel
+        from dire_rapids import DiRePyTorchMemoryEfficient  # pylint: disable=import-outside-toplevel
+
+        monkeypatch.setattr(dire_cuvs_module, "CUVS_AVAILABLE", True)
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(torch.cuda, "get_device_name", lambda *args, **kwargs: "mock cuda")
+
+        model = create_dire(
+            backend='auto',
+            metric='(x - y).abs().sum(-1)',
+            verbose=False,
+        )
+
+        assert isinstance(model, DiRePyTorchMemoryEfficient)
+
+    def test_memory_efficient_knn_fraction_uses_knn_specific_knob(self, monkeypatch):
+        """The memory-efficient reducer should honor knn_memory_fraction for k-NN chunks."""
+        from dire_rapids import DiRePyTorchMemoryEfficient  # pylint: disable=import-outside-toplevel
+
+        model = DiRePyTorchMemoryEfficient(
+            memory_fraction=0.50,
+            knn_memory_fraction=0.05,
+            verbose=False,
+        )
+        monkeypatch.setattr(model, "_get_available_memory", lambda: 1024 ** 3)
+
+        chunk_size = model._compute_optimal_chunk_size(
+            20_000,
+            2_049,
+            operation_type="knn",
+            dtype=torch.float32,
+        )
+
+        assert chunk_size < 1000
+
+    def test_forced_cuvs_rejects_custom_metric_at_factory(self, monkeypatch):
+        """A forced cuVS k-NN request should fail before it can fall back unsafely."""
+        import dire_rapids.dire_cuvs as dire_cuvs_module  # pylint: disable=import-outside-toplevel
+
+        monkeypatch.setattr(dire_cuvs_module, "CUVS_AVAILABLE", True)
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+        with pytest.raises(RuntimeError, match="metric is not a cuVS-native"):
+            create_dire(
+                backend='auto',
+                knn_backend='cuvs',
+                metric='(x - y).abs().sum(-1)',
+                verbose=False,
+            )
+
 
 class TestDiRePyTorchErrors:
     """Test error handling and edge cases."""

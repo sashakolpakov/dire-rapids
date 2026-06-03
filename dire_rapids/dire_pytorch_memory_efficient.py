@@ -151,6 +151,8 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             - knn_backend: k-NN engine selection ('auto', 'pytorch', 'pykeops', 'cuvs')
         """
         
+        knn_memory_fraction_explicit = 'knn_memory_fraction' in kwargs
+
         # Call parent constructor
         super().__init__(*args, **kwargs)
         
@@ -159,6 +161,8 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         self.use_pykeops_repulsion = use_pykeops_repulsion
         self.pykeops_threshold = pykeops_threshold
         self.memory_fraction = memory_fraction
+        if not knn_memory_fraction_explicit:
+            self.knn_memory_fraction = memory_fraction
         
         # Log memory-efficient settings
         if self.verbose:
@@ -187,10 +191,7 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         For CUDA devices, returns free GPU memory.
         For CPU, returns available system RAM.
         """
-        if self.device.type == 'cuda':
-            return torch.cuda.mem_get_info()[0]  # Free memory
-        import psutil  # pylint: disable=import-outside-toplevel
-        return psutil.virtual_memory().available
+        return self._get_available_knn_memory()
     
     def _compute_optimal_chunk_size(self, n_samples, n_features, operation_type="knn", dtype=torch.float32):
         """
@@ -227,13 +228,22 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         to ensure both memory safety and computational efficiency.
         """
         available_memory = self._get_available_memory()
-        usable_memory = available_memory * self.memory_fraction
+        memory_fraction = self.knn_memory_fraction if operation_type == "knn" else self.memory_fraction
+        usable_memory = available_memory * memory_fraction
         
         bytes_per_element = 2 if dtype == torch.float16 else 4
         
         if operation_type == "knn":
-            # For k-NN: chunk_size × n_samples × bytes_per_element (distance matrix chunk)
-            max_chunk_size = int(usable_memory / (n_samples * bytes_per_element))
+            # Native/matmul k-NN needs a distance matrix chunk. Arbitrary
+            # metric callables may materialize broadcast tensors, so use the
+            # base estimator that accounts for (chunk, n_samples, n_features).
+            memory_per_sample = self._estimate_knn_memory_per_query(
+                n_samples,
+                n_features,
+                bytes_per_element,
+                use_pykeops=False,
+            )
+            max_chunk_size = int(usable_memory / max(1, memory_per_sample))
             
         elif operation_type == "repulsion":
             # For repulsion: chunk_size × n_neg × n_components × bytes_per_element
@@ -247,8 +257,11 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             max_chunk_size = int(usable_memory / memory_per_sample)
         
         # Apply reasonable bounds
-        min_chunk_size = 100
+        min_chunk_size = 1 if (
+            operation_type == "knn" and self._metric_requires_broadcast_tensors(use_pykeops=False)
+        ) else 100
         max_reasonable_chunk_size = min(20000, n_samples)
+        min_chunk_size = min(min_chunk_size, max_reasonable_chunk_size)
         
         optimal_chunk_size = max(min_chunk_size, min(max_chunk_size, max_reasonable_chunk_size))
         
@@ -302,6 +315,8 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
             self.logger.info(f"Forcing FP16 for large dataset ({n_samples} samples, {n_dims}D)")
         
         # Compute optimal chunk size based on available memory
+        if chunk_size is None:
+            chunk_size = self.knn_chunk_size
         if chunk_size is None:
             chunk_size = self._compute_optimal_chunk_size(
                 n_samples,

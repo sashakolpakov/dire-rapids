@@ -71,13 +71,13 @@ DiRe wins 6 out of 8 comparisons, preserving both connected components (β₀) a
 
 ```bash
 # Basic installation (CPU + PyTorch)
-python -m pip install "dire-rapids==0.3.1"
+python -m pip install "dire-rapids==0.3.2"
 
 # With PyKeOps support for the optional PyKeOps k-NN engine
-python -m pip install "dire-rapids[keops]==0.3.1"
+python -m pip install "dire-rapids[keops]==0.3.2"
 
 # With CUDA CuPy support
-python -m pip install "dire-rapids[cuda]==0.3.1"
+python -m pip install "dire-rapids[cuda]==0.3.2"
 ```
 
 ### From Repository (development)
@@ -100,7 +100,7 @@ the NVIDIA index and PyTorch from the matching CUDA wheel index.
 python -m pip install \
   --extra-index-url https://pypi.nvidia.com \
   --extra-index-url https://download.pytorch.org/whl/cu128 \
-  "dire-rapids[rapids,keops]==0.3.1"
+  "dire-rapids[rapids,keops]==0.3.2"
 
 # From a clone:
 python -m pip install \
@@ -271,7 +271,7 @@ If you use this work, please cite:
 - Python 3.10+
 - PyTorch 2.0+
 - NumPy, SciPy, scikit-learn
-- (Optional) PyKeOps 2.1+ (`python -m pip install "dire-rapids[keops]==0.3.1"`)
+- (Optional) PyKeOps 2.1+ (`python -m pip install "dire-rapids[keops]==0.3.2"`)
 - (Optional) CUDA 12.x+ for GPU acceleration
 - (Optional) RAPIDS 26.2+ for the cuVS k-NN engine
 - (Optional) CuPy for GPU-accelerated Betti curves
