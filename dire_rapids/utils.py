@@ -47,6 +47,294 @@ def _safe_init_plotly_renderer():
     except ImportError:
         pass
 
+
+# --------- shared embedding figure builder (scatter + density) ---------
+#
+# For small/medium embeddings we draw one WebGL marker per point. For large 2D
+# embeddings that is both slow (the browser receives every point) and illegible
+# (overplotting collapses structure into a solid blob), so we switch to a binned
+# density: ``np.histogram2d`` reduces the points to a fixed grid server-side in
+# O(n_points), and only that grid (<= n_bins**2 cells, times the number of
+# categories) is shipped to the browser. The figure payload is therefore bounded
+# regardless of whether there are 50k or 50M points.
+
+# Bins per axis for density rendering; caps the grid (and thus the payload).
+# 200 keeps structure crisp while keeping the shipped grid small; per-category
+# overlays multiply the grid by the number of categories, so we stay modest.
+_DENSITY_BINS = 200
+# Above this many categories a per-category overlay is unreadable, so we fall
+# back to a single count heatmap.
+_MAX_DENSITY_CATEGORIES = 12
+# Qualitative palette for per-category density layers (Plotly/D3 style).
+_CATEGORY_COLORS = (
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b",
+    "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#aec7e8", "#ffbb78",
+)
+
+
+def _resolve_use_density(mode, n_dims, n_points, density_threshold):
+    """Decide whether to render a binned density rather than a scatter.
+
+    Density is only meaningful in 2D; 3D always falls back to a (subsampled)
+    scatter. In ``'auto'`` mode density kicks in once a 2D embedding exceeds
+    ``density_threshold`` points.
+    """
+    if mode not in ("auto", "scatter", "density"):
+        raise ValueError(f"mode must be 'auto', 'scatter' or 'density', got {mode!r}")
+    if mode == "scatter" or n_dims != 2:
+        return False
+    if mode == "density":
+        return True
+    return n_points > density_threshold
+
+
+def _shared_bin_edges(x, y, n_bins):
+    """Common bin edges so every per-category histogram aligns on one grid."""
+    x_min, x_max = float(x.min()), float(x.max())
+    y_min, y_max = float(y.min()), float(y.max())
+    if x_max <= x_min:  # guard degenerate (zero-width) ranges
+        x_max = x_min + 1.0
+    if y_max <= y_min:
+        y_max = y_min + 1.0
+    return (np.linspace(x_min, x_max, n_bins + 1),
+            np.linspace(y_min, y_max, n_bins + 1))
+
+
+def _density_traces_2d(embedding, labels, categorical_labels, n_bins):
+    """Build bounded-payload density traces for a 2D embedding.
+
+    Returns a single count/mean heatmap when there are no labels, continuous
+    labels, or too many categories; otherwise one filled-contour layer per
+    category (the per-category density overlay).
+    """
+    import plotly.graph_objects as go  # pylint: disable=import-outside-toplevel
+
+    x = np.asarray(embedding[:, 0], dtype=float)
+    y = np.asarray(embedding[:, 1], dtype=float)
+    x_edges, y_edges = _shared_bin_edges(x, y, n_bins)
+    x_centers = 0.5 * (x_edges[:-1] + x_edges[1:])
+    y_centers = 0.5 * (y_edges[:-1] + y_edges[1:])
+
+    def _heatmap(z, colorbar_title):
+        return go.Heatmap(
+            x=x_centers, y=y_centers, z=z,
+            colorscale="Viridis", colorbar={"title": colorbar_title},
+            hoverongaps=False,
+        )
+
+    # No labels -> single count-density heatmap. Counts are integers; cast so
+    # they serialize compactly when the figure is shipped to the browser.
+    if labels is None:
+        counts, _, _ = np.histogram2d(x, y, bins=(x_edges, y_edges))
+        return [_heatmap(counts.T.astype(np.int32), "Count")]
+
+    labels = np.asarray(labels)
+
+    # Continuous labels -> mean-label-per-bin heatmap.
+    if not categorical_labels:
+        counts, _, _ = np.histogram2d(x, y, bins=(x_edges, y_edges))
+        sums, _, _ = np.histogram2d(x, y, bins=(x_edges, y_edges),
+                                    weights=labels.astype(float))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mean = np.where(counts > 0, sums / counts, np.nan)
+        return [_heatmap(mean.T, "Mean label")]
+
+    # Categorical labels: one density layer per category (overlay), unless there
+    # are too many categories to read.
+    unique = np.unique(labels)
+    if len(unique) > _MAX_DENSITY_CATEGORIES:
+        counts, _, _ = np.histogram2d(x, y, bins=(x_edges, y_edges))
+        return [_heatmap(counts.T.astype(np.int32), "Count")]
+
+    traces = []
+    for idx, label in enumerate(unique):
+        mask = labels == label
+        counts, _, _ = np.histogram2d(x[mask], y[mask], bins=(x_edges, y_edges))
+        peak = float(counts.max())
+        if peak <= 0:
+            continue
+        color = _CATEGORY_COLORS[idx % len(_CATEGORY_COLORS)]
+        traces.append(go.Contour(
+            x=x_centers, y=y_centers, z=counts.T.astype(np.int32),
+            name=str(label), showscale=False, showlegend=True, opacity=0.55,
+            # transparent -> category color, so empty bins stay invisible
+            colorscale=[[0.0, "rgba(0,0,0,0)"], [1.0, color]],
+            contours={"coloring": "fill", "start": peak * 0.2,
+                      "end": peak, "size": max(peak / 5.0, 1.0)},
+            line={"width": 0},
+            hovertemplate=f"{label}<extra></extra>",
+        ))
+    return traces
+
+
+def _scatter_traces(embedding, labels, categorical_labels, n_dims, point_size):
+    """Build WebGL scatter traces (2D Scattergl / 3D Scatter3d)."""
+    import plotly.graph_objects as go  # pylint: disable=import-outside-toplevel
+
+    scatter = go.Scattergl if n_dims == 2 else go.Scatter3d
+
+    def coords(arr):
+        xyz = {"x": arr[:, 0], "y": arr[:, 1]}
+        if n_dims == 3:
+            xyz["z"] = arr[:, 2]
+        return xyz
+
+    if labels is None:
+        return [scatter(**coords(embedding), mode="markers",
+                        marker={"size": point_size, "opacity": 0.7})]
+
+    labels = np.asarray(labels)
+    if not categorical_labels:
+        return [scatter(**coords(embedding), mode="markers",
+                        marker={"size": point_size, "color": labels,
+                                "colorscale": "Viridis",
+                                "colorbar": {"title": "Label Value"},
+                                "showscale": True, "opacity": 0.8})]
+
+    unique = np.unique(labels)
+    if len(unique) > 20:
+        label_to_idx = {lbl: i for i, lbl in enumerate(unique)}
+        colors = np.array([label_to_idx[lbl] for lbl in labels])
+        return [scatter(**coords(embedding), mode="markers",
+                        marker={"size": point_size, "color": colors,
+                                "colorscale": "Viridis", "showscale": True,
+                                "opacity": 0.8},
+                        text=[f"Label: {lbl}" for lbl in labels],
+                        hovertemplate="%{text}<extra></extra>")]
+
+    traces = []
+    for label in unique:
+        mask = labels == label
+        traces.append(scatter(**coords(embedding[mask]), mode="markers",
+                              name=str(label),
+                              marker={"size": point_size, "opacity": 0.8}))
+    return traces
+
+
+def build_embedding_figure(
+    embedding,
+    labels=None,
+    *,
+    title="Embedding",
+    n_dims=None,
+    categorical_labels=True,
+    mode="auto",
+    density_threshold=50000,
+    max_points=10000,
+    n_bins=_DENSITY_BINS,
+    point_size=None,
+    width=None,
+    height=None,
+    seed=42,
+    logger=None,
+):
+    """Build a Plotly figure for a 2D/3D embedding (scatter or binned density).
+
+    Parameters
+    ----------
+    embedding : ndarray of shape (n_points, 2 or 3)
+        The low-dimensional layout to plot.
+    labels : array-like of shape (n_points,), optional
+        Per-point labels used for coloring (scatter) or density layers.
+    title : str, default="Embedding"
+        Base title; the render type and point count are appended.
+    n_dims : int, optional
+        Embedding dimensionality; inferred from ``embedding`` if None.
+    categorical_labels : bool, default=True
+        Treat labels as discrete classes (per-category colors / density layers)
+        rather than a continuous scalar (single colorbar / mean heatmap).
+    mode : {'auto', 'scatter', 'density'}, default='auto'
+        ``'auto'`` switches to density once a 2D embedding exceeds
+        ``density_threshold`` points; ``'density'`` forces density (2D only,
+        falls back to scatter in 3D); ``'scatter'`` always draws markers.
+    density_threshold : int, default=50000
+        Point count above which ``'auto'`` mode uses density.
+    max_points : int, default=10000
+        Subsample cap for scatter rendering (density uses all points).
+    n_bins : int, default=300
+        Bins per axis for density; bounds the figure payload.
+    point_size : int, optional
+        Marker size; defaults to 4 (2D) / 2 (3D) when None.
+    width, height : int, optional
+        Figure size overrides.
+    seed : int, default=42
+        RNG seed for reproducible scatter subsampling.
+    logger : logging.Logger, optional
+        Used for warnings; falls back to silent when None.
+
+    Returns
+    -------
+    plotly.graph_objects.Figure or None
+        ``None`` if the embedding is not 2D/3D.
+    """
+    import plotly.graph_objects as go  # pylint: disable=import-outside-toplevel
+
+    def _warn(msg):
+        if logger is not None:
+            logger.warning(msg)
+
+    embedding = np.asarray(embedding)
+    if embedding.ndim != 2 or embedding.shape[1] not in (2, 3):
+        _warn(f"Cannot visualize embedding with shape {embedding.shape}")
+        return None
+    n_points = embedding.shape[0]
+    if n_dims is None:
+        n_dims = embedding.shape[1]
+
+    if mode == "density" and n_dims != 2:
+        _warn("density mode is only supported for 2D embeddings; using scatter")
+
+    if _resolve_use_density(mode, n_dims, n_points, density_threshold):
+        traces = _density_traces_2d(embedding, labels, categorical_labels, n_bins)
+        fig = go.Figure(data=traces)
+        fig.update_layout(
+            title=f"{title} - 2D Density ({n_points:,} points, {n_bins}×{n_bins} bins)",
+            xaxis_title="Dimension 1", yaxis_title="Dimension 2",
+            width=width or 800, height=height or 600, hovermode="closest",
+        )
+        return fig
+
+    # Scatter (subsample if larger than max_points).
+    if n_points > max_points:
+        rng = np.random.default_rng(seed)
+        idx = rng.choice(n_points, max_points, replace=False)
+        emb_vis = embedding[idx]
+        labels_vis = np.asarray(labels)[idx] if labels is not None else None
+    else:
+        emb_vis = embedding
+        labels_vis = labels
+
+    if point_size is None:
+        point_size = 4 if n_dims == 2 else 2
+    traces = _scatter_traces(emb_vis, labels_vis, categorical_labels, n_dims, point_size)
+    fig = go.Figure(data=traces)
+    if n_dims == 2:
+        fig.update_layout(
+            title=f"{title} - 2D Embedding",
+            xaxis_title="Dimension 1", yaxis_title="Dimension 2",
+            width=width or 800, height=height or 600, hovermode="closest",
+        )
+    else:
+        fig.update_layout(
+            title=f"{title} - 3D Embedding",
+            scene={"xaxis_title": "Dimension 1", "yaxis_title": "Dimension 2",
+                   "zaxis_title": "Dimension 3"},
+            width=width or 900, height=height or 700,
+        )
+    return fig
+
+
+def _infer_categorical(labels):
+    """Heuristic: strings/objects/bools are categorical; numeric is continuous.
+
+    Matches the prior ``px.scatter`` behavior where integer class labels were
+    rendered with a continuous colorbar.
+    """
+    if labels is None:
+        return True
+    return np.asarray(labels).dtype.kind in ("U", "S", "O", "b")
+
+
 def _display_obj(obj):  # pylint: disable=too-many-return-statements
     """Display an object using appropriate renderer (plotly, matplotlib, IPython)."""
     if obj is None:
@@ -523,7 +811,9 @@ class ReducerConfig:
     reducer_kwargs: dict
     visualize: bool = False
     categorical_labels: bool = True  # False for regression-style labels (swiss_roll, etc.)
-    max_points: int = 10000  # Max points for visualization (subsamples if larger)
+    max_points: int = 10000  # Max points for scatter visualization (subsamples if larger)
+    mode: str = "auto"  # 'auto' | 'scatter' | 'density' rendering for visualization
+    density_threshold: int = 50000  # 'auto' switches 2D to density above this many points
 
 
 # --------- selector parsing ---------
@@ -571,7 +861,9 @@ class ReducerRunner:
             self.config.reducer_kwargs,
             self.config.visualize,
             self.config.categorical_labels,
-            self.config.max_points
+            self.config.max_points,
+            self.config.mode,
+            self.config.density_threshold,
         )
 
     def run(self, dataset, *, dataset_kwargs=None, transform=None):
@@ -598,7 +890,8 @@ class ReducerRunner:
             - dataset_info: dataset metadata
         """
         # Get reducer configuration
-        reducer_name, reducer_class, reducer_kwargs, should_visualize, categorical_labels, max_points = self._get_reducer_info()
+        (reducer_name, reducer_class, reducer_kwargs, should_visualize,
+         categorical_labels, max_points, mode, density_threshold) = self._get_reducer_info()
 
         scheme, name = _parse_selector(dataset)
         dataset_kwargs = dataset_kwargs or {}
@@ -641,7 +934,9 @@ class ReducerRunner:
             n_dims = embedding.shape[1] if len(embedding.shape) > 1 else 1
             if n_dims in (2, 3):
                 try:
-                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims, categorical_labels, max_points)
+                    self._visualize_with_plotly(embedding, y, reducer_name, n_dims,
+                                                categorical_labels, max_points,
+                                                mode, density_threshold)
                 except Exception as e:  # pylint: disable=broad-exception-caught
                     print(f"[WARNING] plotly visualization failed: {e}")
 
@@ -657,171 +952,32 @@ class ReducerRunner:
             },
         }
 
-    def _visualize_with_plotly(self, embedding, labels, title, n_dims, categorical_labels=True, max_points=10000):
+    def _visualize_with_plotly(self, embedding, labels, title, n_dims,
+                               categorical_labels=True, max_points=10000,
+                               mode="auto", density_threshold=50000):
         """
-        Create and display plotly visualization for 2D or 3D embeddings.
+        Create and display a plotly visualization for 2D or 3D embeddings.
 
-        Uses WebGL rendering (Scattergl) for performance. Automatically subsamples
-        to max_points if dataset is larger.
+        Uses WebGL scatter (Scattergl/Scatter3d) for moderate point counts. For
+        large 2D embeddings (see ``mode``/``density_threshold``) it switches to a
+        binned density so the figure payload stays bounded; see
+        :func:`build_embedding_figure`.
         """
         try:
-            import plotly.graph_objects as go  # pylint: disable=import-outside-toplevel
+            import plotly.graph_objects  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
         except ImportError:
             print("[WARNING] plotly not installed. Install with: pip install plotly")
             return
 
         _safe_init_plotly_renderer()
 
-        n_points = embedding.shape[0]
-
-        # Subsample if needed
-        if n_points > max_points:
-            rng = np.random.default_rng(42)
-            subsample_idx = rng.choice(n_points, max_points, replace=False)
-            embedding_vis = embedding[subsample_idx]
-            labels_vis = labels[subsample_idx] if labels is not None else None
-        else:
-            embedding_vis = embedding
-            labels_vis = labels
-
-        if n_dims == 2:
-            # Use Scattergl for WebGL acceleration
-            if labels_vis is not None:
-                if not categorical_labels:
-                    fig = go.Figure(data=go.Scattergl(
-                        x=embedding_vis[:, 0],
-                        y=embedding_vis[:, 1],
-                        mode='markers',
-                        marker={
-                            "size": 4,
-                            "color": labels_vis,
-                            "colorscale": 'Viridis',
-                            "colorbar": {"title": "Label Value"},
-                            "showscale": True,
-                            "opacity": 0.8
-                        }
-                    ))
-                else:
-                    unique_labels = np.unique(labels_vis)
-
-                    if len(unique_labels) > 20:
-                        label_to_idx = {lbl: idx for idx, lbl in enumerate(unique_labels)}
-                        colors = np.array([label_to_idx[lbl] for lbl in labels_vis])
-
-                        fig = go.Figure(data=go.Scattergl(
-                            x=embedding_vis[:, 0],
-                            y=embedding_vis[:, 1],
-                            mode='markers',
-                            marker={
-                                "size": 4,
-                                "color": colors,
-                                "colorscale": 'Viridis',
-                                "showscale": True,
-                                "opacity": 0.8
-                            },
-                            text=[f"Label: {lbl}" for lbl in labels_vis],
-                            hovertemplate='%{text}<extra></extra>'
-                        ))
-                    else:
-                        fig = go.Figure()
-                        for label in unique_labels:
-                            mask = labels_vis == label
-                            fig.add_trace(go.Scattergl(
-                                x=embedding_vis[mask, 0],
-                                y=embedding_vis[mask, 1],
-                                mode='markers',
-                                name=str(label),
-                                marker={"size": 4, "opacity": 0.8}
-                            ))
-            else:
-                fig = go.Figure(data=go.Scattergl(
-                    x=embedding_vis[:, 0],
-                    y=embedding_vis[:, 1],
-                    mode='markers',
-                    marker={"size": 4, "opacity": 0.7}
-                ))
-
-            fig.update_layout(
-                title=f"{title} - 2D Embedding",
-                xaxis_title="Dimension 1",
-                yaxis_title="Dimension 2",
-                width=800,
-                height=600,
-                hovermode='closest'
-            )
-
-        elif n_dims == 3:
-            if labels_vis is not None:
-                if not categorical_labels:
-                    fig = go.Figure(data=go.Scatter3d(
-                        x=embedding_vis[:, 0],
-                        y=embedding_vis[:, 1],
-                        z=embedding_vis[:, 2],
-                        mode='markers',
-                        marker={
-                            "size": 2,
-                            "color": labels_vis,
-                            "colorscale": 'Viridis',
-                            "colorbar": {"title": "Label Value"},
-                            "showscale": True,
-                            "opacity": 0.8
-                        }
-                    ))
-                else:
-                    unique_labels = np.unique(labels_vis)
-
-                    if len(unique_labels) > 20:
-                        label_to_idx = {lbl: idx for idx, lbl in enumerate(unique_labels)}
-                        colors = np.array([label_to_idx[lbl] for lbl in labels_vis])
-
-                        fig = go.Figure(data=go.Scatter3d(
-                            x=embedding_vis[:, 0],
-                            y=embedding_vis[:, 1],
-                            z=embedding_vis[:, 2],
-                            mode='markers',
-                            marker={
-                                "size": 2,
-                                "color": colors,
-                                "colorscale": 'Viridis',
-                                "showscale": True,
-                                "opacity": 0.8
-                            },
-                            text=[f"Label: {lbl}" for lbl in labels_vis],
-                            hovertemplate='%{text}<extra></extra>'
-                        ))
-                    else:
-                        fig = go.Figure()
-                        for label in unique_labels:
-                            mask = labels_vis == label
-                            fig.add_trace(go.Scatter3d(
-                                x=embedding_vis[mask, 0],
-                                y=embedding_vis[mask, 1],
-                                z=embedding_vis[mask, 2],
-                                mode='markers',
-                                name=str(label),
-                                marker={"size": 2, "opacity": 0.8}
-                            ))
-            else:
-                fig = go.Figure(data=go.Scatter3d(
-                    x=embedding_vis[:, 0],
-                    y=embedding_vis[:, 1],
-                    z=embedding_vis[:, 2],
-                    mode='markers',
-                    marker={"size": 2, "opacity": 0.7}
-                ))
-
-            fig.update_layout(
-                title=f"{title} - 3D Embedding",
-                scene={
-                    "xaxis_title": "Dimension 1",
-                    "yaxis_title": "Dimension 2",
-                    "zaxis_title": "Dimension 3"
-                },
-                width=900,
-                height=700
-            )
-
-        fig.show()
+        fig = build_embedding_figure(
+            embedding, labels, title=title, n_dims=n_dims,
+            categorical_labels=categorical_labels, mode=mode,
+            density_threshold=density_threshold, max_points=max_points,
+        )
+        if fig is not None:
+            fig.show()
 
     @staticmethod
     def available_sklearn():

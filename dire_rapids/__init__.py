@@ -92,7 +92,7 @@ from .dire_pytorch import DiRePyTorch, create_dire
 from .dire_pytorch_memory_efficient import DiRePyTorchMemoryEfficient
 
 # Import utility classes
-from .utils import ReducerRunner, ReducerConfig
+from .utils import ReducerRunner, ReducerConfig, build_embedding_figure
 
 # Attempt to import cuVS backend
 try:
@@ -113,6 +113,7 @@ __all__ = [
     'create_dire',
     'ReducerRunner',
     'ReducerConfig',
+    'build_embedding_figure',
     'metrics',
     'betti_curve',
     'presets',

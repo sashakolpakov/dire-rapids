@@ -210,7 +210,9 @@ config = ReducerConfig(
     reducer_class=create_dire,
     reducer_kwargs={"n_neighbors": 16},
     visualize=True,
-    max_points=10000
+    max_points=10000,      # subsample cap for scatter rendering
+    mode="auto",           # 'auto' | 'scatter' | 'density'
+    density_threshold=50000  # 'auto' switches 2D to density above this many points
 )
 
 runner = ReducerRunner(config=config)
@@ -219,6 +221,20 @@ result = runner.run("openml:mnist_784")
 ```
 
 **Data sources:** `sklearn:name`, `openml:name`, `cytof:name`, `dire:name` (geometric datasets), `file:path` (.csv, .npy, .npz, .parquet).
+
+### Large-embedding density rendering
+
+Plotting hundreds of thousands of individual markers is slow (every point is shipped to the browser) and illegible (overplotting collapses structure into a blob). For large 2D embeddings, `DiRePyTorch.visualize` and `ReducerRunner` therefore switch from per-point scatter to a **binned density**: points are reduced to a fixed `n_bins × n_bins` grid with `np.histogram2d` (O(n_points), server-side), so the figure payload stays bounded no matter how many points there are.
+
+- `mode='auto'` (default) uses density once a 2D embedding exceeds `density_threshold` points; `'scatter'` always draws markers; `'density'` forces it (2D only — 3D falls back to scatter).
+- Categorical labels render as a **per-category density overlay** (one filled-contour layer per class); unlabeled data renders a count heatmap, and continuous labels a mean-value heatmap.
+
+```python
+from dire_rapids import build_embedding_figure  # also used internally
+
+fig = build_embedding_figure(embedding, labels, mode="density", categorical_labels=True)
+fig.show()
+```
 
 ## Metrics Module
 

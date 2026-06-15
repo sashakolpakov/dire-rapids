@@ -1441,12 +1441,16 @@ class DiRePyTorch(TransformerMixin):
         self.fit_transform(X, y)
         return self
 
-    def visualize(self, labels=None, point_size=2, title=None, max_points=10000, **kwargs):
+    def visualize(self, labels=None, point_size=2, title=None, max_points=10000,
+                  mode="auto", density_threshold=50000, categorical_labels=None,
+                  **kwargs):
         """
         Create an interactive visualization of the embedding.
 
-        Uses WebGL rendering (Scattergl) for performance and automatically
-        subsamples to max_points if dataset is larger.
+        Uses WebGL scatter for moderate point counts and automatically subsamples
+        to ``max_points``. For large 2D embeddings it switches to a binned density
+        (2D histogram) so the figure payload stays bounded regardless of the
+        number of points; see ``mode`` and ``density_threshold``.
 
         Parameters
         ----------
@@ -1454,6 +1458,16 @@ class DiRePyTorch(TransformerMixin):
             Labels for coloring points in the visualization.
         point_size : int, default=2
             Size of points in the scatter plot.
+        mode : {'auto', 'scatter', 'density'}, default='auto'
+            Rendering mode. ``'auto'`` switches a 2D embedding to density once it
+            exceeds ``density_threshold`` points; ``'density'`` forces density
+            (2D only); ``'scatter'`` always draws markers.
+        density_threshold : int, default=50000
+            Point count above which ``'auto'`` mode uses density.
+        categorical_labels : bool, optional
+            Treat labels as discrete classes (per-category colors / density
+            layers). If None, inferred from the label dtype (numeric is treated
+            as a continuous scalar).
         title : str, optional
             Title for the plot. If None, a default title is generated.
         max_points : int, default=10000
@@ -1494,52 +1508,20 @@ class DiRePyTorch(TransformerMixin):
             self.logger.warning("No layout available for visualization")
             return None
 
-        import pandas as pd  # pylint: disable=import-outside-toplevel
-        import plotly.express as px  # pylint: disable=import-outside-toplevel
+        from .utils import build_embedding_figure, _infer_categorical  # pylint: disable=import-outside-toplevel
 
         if title is None:
             title = f"PyTorch {self.n_components}D Embedding"
+        if categorical_labels is None:
+            categorical_labels = _infer_categorical(labels)
 
-        # Subsample if needed
-        n_points = self._layout.shape[0]
-        if n_points > max_points:
-            rng = np.random.default_rng(42)
-            subsample_idx = rng.choice(n_points, max_points, replace=False)
-            layout_vis = self._layout[subsample_idx]
-            labels_vis = labels[subsample_idx] if labels is not None else None
-        else:
-            layout_vis = self._layout
-            labels_vis = labels
-
-        # Create dataframe
-        if self.n_components == 2:
-            df = pd.DataFrame(layout_vis, columns=['x', 'y'])
-        elif self.n_components == 3:
-            df = pd.DataFrame(layout_vis, columns=['x', 'y', 'z'])
-        else:
-            self.logger.error(f"Cannot visualize {self.n_components}D embedding")
-            return None
-
-        # Add labels if provided
-        if labels_vis is not None:
-            df['label'] = labels_vis
-
-        # Create plot
-        vis_params = {
-            'color': 'label' if labels_vis is not None else None,
-            'title': title,
-        }
-        vis_params.update(kwargs)
-
-        if self.n_components == 2:
-            vis_params.setdefault('render_mode', 'webgl')
-            fig = px.scatter(df, x='x', y='y', **vis_params)
-        else:
-            fig = px.scatter_3d(df, x='x', y='y', z='z', **vis_params)
-
-        fig.update_traces(marker={'size': point_size, 'opacity': 0.7})
-
-        return fig
+        return build_embedding_figure(
+            self._layout, labels, title=title, n_dims=self.n_components,
+            categorical_labels=categorical_labels, mode=mode,
+            density_threshold=density_threshold, max_points=max_points,
+            point_size=point_size, width=kwargs.get('width'),
+            height=kwargs.get('height'), logger=self.logger,
+        )
 
 
 def create_dire(backend='auto', memory_efficient=False, knn_backend='auto', **kwargs):
