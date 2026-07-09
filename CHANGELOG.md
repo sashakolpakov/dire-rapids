@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Density visualization for large embeddings**: `DiRePyTorch.visualize` and `ReducerRunner` now switch large 2D embeddings from per-point WebGL scatter to a binned 2D-histogram density so the figure payload stays bounded regardless of point count (binning is done server-side with `np.histogram2d`; only a fixed `n_bins × n_bins` grid is shipped). Categorical labels render as a per-category density overlay (one filled-contour layer per class); unlabeled data renders a count heatmap and continuous labels a mean-value heatmap. Controlled by `mode` (`'auto'` | `'scatter'` | `'density'`) and `density_threshold`. Exposed as the shared, public `dire_rapids.build_embedding_figure` helper.
+
 ## [0.3.2] - 2026-06-03
 
 ### Fixed
