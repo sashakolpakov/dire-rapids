@@ -1525,12 +1525,16 @@
 
 <div class="viewcode-block" id="DiRePyTorch.visualize">
 <a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch.visualize">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">visualize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_points</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">visualize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_points</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+                  <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mi">50000</span><span class="p">,</span> <span class="n">categorical_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                  <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Create an interactive visualization of the embedding.</span>
 
-<span class="sd">        Uses WebGL rendering (Scattergl) for performance and automatically</span>
-<span class="sd">        subsamples to max_points if dataset is larger.</span>
+<span class="sd">        Uses WebGL scatter for moderate point counts and automatically subsamples</span>
+<span class="sd">        to ``max_points``. For large 2D embeddings it switches to a binned density</span>
+<span class="sd">        (2D histogram) so the figure payload stays bounded regardless of the</span>
+<span class="sd">        number of points; see ``mode`` and ``density_threshold``.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1538,6 +1542,16 @@
 <span class="sd">            Labels for coloring points in the visualization.</span>
 <span class="sd">        point_size : int, default=2</span>
 <span class="sd">            Size of points in the scatter plot.</span>
+<span class="sd">        mode : {&#39;auto&#39;, &#39;scatter&#39;, &#39;density&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">            Rendering mode. ``&#39;auto&#39;`` switches a 2D embedding to density once it</span>
+<span class="sd">            exceeds ``density_threshold`` points; ``&#39;density&#39;`` forces density</span>
+<span class="sd">            (2D only); ``&#39;scatter&#39;`` always draws markers.</span>
+<span class="sd">        density_threshold : int, default=50000</span>
+<span class="sd">            Point count above which ``&#39;auto&#39;`` mode uses density.</span>
+<span class="sd">        categorical_labels : bool, optional</span>
+<span class="sd">            Treat labels as discrete classes (per-category colors / density</span>
+<span class="sd">            layers). If None, inferred from the label dtype (numeric is treated</span>
+<span class="sd">            as a continuous scalar).</span>
 <span class="sd">        title : str, optional</span>
 <span class="sd">            Title for the plot. If None, a default title is generated.</span>
 <span class="sd">        max_points : int, default=10000</span>
@@ -1578,52 +1592,20 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No layout available for visualization&quot;</span><span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
 
-        <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
-        <span class="kn">import</span><span class="w"> </span><span class="nn">plotly.express</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">px</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_embedding_figure</span><span class="p">,</span> <span class="n">_infer_categorical</span>  <span class="c1"># pylint: disable=import-outside-toplevel</span>
 
         <span class="k">if</span> <span class="n">title</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">title</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;PyTorch </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="si">}</span><span class="s2">D Embedding&quot;</span>
+        <span class="k">if</span> <span class="n">categorical_labels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">categorical_labels</span> <span class="o">=</span> <span class="n">_infer_categorical</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
 
-        <span class="c1"># Subsample if needed</span>
-        <span class="n">n_points</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">n_points</span> <span class="o">&gt;</span> <span class="n">max_points</span><span class="p">:</span>
-            <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
-            <span class="n">subsample_idx</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">n_points</span><span class="p">,</span> <span class="n">max_points</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="n">layout_vis</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span><span class="p">[</span><span class="n">subsample_idx</span><span class="p">]</span>
-            <span class="n">labels_vis</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">subsample_idx</span><span class="p">]</span> <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">layout_vis</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span>
-            <span class="n">labels_vis</span> <span class="o">=</span> <span class="n">labels</span>
-
-        <span class="c1"># Create dataframe</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
-            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">layout_vis</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">])</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
-            <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">layout_vis</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="s1">&#39;z&#39;</span><span class="p">])</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot visualize </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="si">}</span><span class="s2">D embedding&quot;</span><span class="p">)</span>
-            <span class="k">return</span> <span class="kc">None</span>
-
-        <span class="c1"># Add labels if provided</span>
-        <span class="k">if</span> <span class="n">labels_vis</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">df</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">labels_vis</span>
-
-        <span class="c1"># Create plot</span>
-        <span class="n">vis_params</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s1">&#39;color&#39;</span><span class="p">:</span> <span class="s1">&#39;label&#39;</span> <span class="k">if</span> <span class="n">labels_vis</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="s1">&#39;title&#39;</span><span class="p">:</span> <span class="n">title</span><span class="p">,</span>
-        <span class="p">}</span>
-        <span class="n">vis_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
-            <span class="n">vis_params</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;render_mode&#39;</span><span class="p">,</span> <span class="s1">&#39;webgl&#39;</span><span class="p">)</span>
-            <span class="n">fig</span> <span class="o">=</span> <span class="n">px</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">vis_params</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">fig</span> <span class="o">=</span> <span class="n">px</span><span class="o">.</span><span class="n">scatter_3d</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="s1">&#39;z&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">vis_params</span><span class="p">)</span>
-
-        <span class="n">fig</span><span class="o">.</span><span class="n">update_traces</span><span class="p">(</span><span class="n">marker</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;size&#39;</span><span class="p">:</span> <span class="n">point_size</span><span class="p">,</span> <span class="s1">&#39;opacity&#39;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">})</span>
-
-        <span class="k">return</span> <span class="n">fig</span></div>
+        <span class="k">return</span> <span class="n">build_embedding_figure</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="n">title</span><span class="p">,</span> <span class="n">n_dims</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_components</span><span class="p">,</span>
+            <span class="n">categorical_labels</span><span class="o">=</span><span class="n">categorical_labels</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span>
+            <span class="n">density_threshold</span><span class="o">=</span><span class="n">density_threshold</span><span class="p">,</span> <span class="n">max_points</span><span class="o">=</span><span class="n">max_points</span><span class="p">,</span>
+            <span class="n">point_size</span><span class="o">=</span><span class="n">point_size</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;width&#39;</span><span class="p">),</span>
+            <span class="n">height</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;height&#39;</span><span class="p">),</span> <span class="n">logger</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="p">,</span>
+        <span class="p">)</span></div>
 </div>
 
 
