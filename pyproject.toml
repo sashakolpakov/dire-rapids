@@ -29,6 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Environment :: GPU :: NVIDIA CUDA",
 ]
@@ -66,13 +67,35 @@ cuda = [
     "cupy-cuda12x>=10.0.0",
 ]
 rapids = [
+    # Backward-compatible alias for the CUDA 12 RAPIDS stack.
     "numpy>=2.0,<2.6",
-    "scipy>=1.13.0",
-    "torch>=2.11.0",
-    "cuml-cu12>=26.2.0,<27.0.0",
-    "cuvs-cu12>=26.2.0,<27.0.0",
-    "cudf-cu12>=26.2.0,<27.0.0",
+    "scipy>=1.14.0",
+    "scikit-learn>=1.5",
+    "torch>=2.11,<2.12",
+    "cuml-cu12>=26.6,<26.7",
+    "cuvs-cu12>=26.6,<26.7",
+    "cudf-cu12>=26.6,<26.7",
     "cupy-cuda12x>=14.0.0,<15.0.0",
+]
+rapids-cu12 = [
+    "numpy>=2.0,<2.6",
+    "scipy>=1.14.0",
+    "scikit-learn>=1.5",
+    "torch>=2.11,<2.12",
+    "cuml-cu12>=26.6,<26.7",
+    "cuvs-cu12>=26.6,<26.7",
+    "cudf-cu12>=26.6,<26.7",
+    "cupy-cuda12x>=14.0.0,<15.0.0",
+]
+rapids-cu13 = [
+    "numpy>=2.0,<2.6",
+    "scipy>=1.14.0",
+    "scikit-learn>=1.5",
+    "torch>=2.11,<2.12",
+    "cuml-cu13>=26.6,<26.7",
+    "cuvs-cu13>=26.6,<26.7",
+    "cudf-cu13>=26.6,<26.7",
+    "cupy-cuda13x>=14.0.0,<15.0.0",
 ]
 dev = [
     "pytest>=7.0.0",

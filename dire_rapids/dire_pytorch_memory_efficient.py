@@ -372,8 +372,15 @@ class DiRePyTorchMemoryEfficient(DiRePyTorch):
         b_val = float(self._b)
 
         # ============ ATTRACTION FORCES (compiled kernel) ============
-        if not hasattr(self, '_knn_indices_torch') or self._knn_indices_torch.device != positions.device:
-            self._knn_indices_torch = torch.as_tensor(self._knn_indices, dtype=torch.long, device=positions.device)
+        knn_indices_torch = getattr(self, '_knn_indices_torch', None)
+        if (
+                knn_indices_torch is None or
+                knn_indices_torch.device != positions.device or
+                tuple(knn_indices_torch.shape) != tuple(self._knn_indices.shape)
+        ):
+            self._knn_indices_torch = torch.as_tensor(
+                self._knn_indices, dtype=torch.long, device=positions.device
+            )
         knn_indices_torch = self._knn_indices_torch
         forces += _attraction_forces_compiled(positions, knn_indices_torch, a_val, b_val)
 

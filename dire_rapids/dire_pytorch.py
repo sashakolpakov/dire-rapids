@@ -515,12 +515,11 @@ class DiRePyTorch(TransformerMixin):
             that materialize broadcast tensors of shape ``(chunk, n_samples,
             n_features)``.
         normalize : bool, default=True
-            If True, mean-center and scale inputs to fit in [-1, 1] (global scalar
-            rescale) before kNN and PCA. This preserves neighbor rankings exactly
-            (kNN is translation- and scale-invariant) but keeps squared distances
-            in a numerically safe range for fp16. Without it, high-dimensional
-            data on large scales (e.g. raw [0, 255] MNIST pixels) overflows fp16
-            during distance computation, silently corrupting the kNN graph.
+            If True, scale inputs to fit in [-1, 1] before kNN and PCA, and
+            mean-center them for translation-invariant Euclidean metrics. Named
+            cosine and inner-product metrics retain the original origin so their
+            neighbor rankings are not changed. This keeps squared distances in a
+            numerically safe range for fp16.
         """
 
         self.n_components = n_components
@@ -750,6 +749,10 @@ class DiRePyTorch(TransformerMixin):
         ------------
         Sets self._knn_indices and self._knn_distances with computed k-NN graph.
         """
+        # A reducer can be fitted repeatedly. Any cached tensor belongs to the
+        # previous graph and must not be reused merely because N and k match.
+        self._knn_indices_torch = None
+
         n_samples = X.shape[0]
         n_dims = X.shape[1]
         self.logger.info(f"Computing {self.n_neighbors}-NN graph for {n_samples} points in {n_dims}D...")
@@ -1293,10 +1296,18 @@ class DiRePyTorch(TransformerMixin):
 
         self.logger.info(f"Optimizing layout for {self._n_samples} points...")
 
-        # Pre-convert kNN indices to GPU tensor once (avoid re-creating every iteration)
-        self._knn_indices_torch = torch.tensor(
-            self._knn_indices, dtype=torch.long, device=self.device
-        )
+        # Pre-convert kNN indices once. GPU graph builders may already have
+        # populated this cache through DLPack, avoiding a device→host→device
+        # round trip for large all-neighbors graphs.
+        knn_indices_torch = getattr(self, '_knn_indices_torch', None)
+        if (
+                knn_indices_torch is None or
+                knn_indices_torch.device != positions.device or
+                tuple(knn_indices_torch.shape) != tuple(self._knn_indices.shape)
+        ):
+            self._knn_indices_torch = torch.as_tensor(
+                self._knn_indices, dtype=torch.long, device=positions.device
+            )
 
         # Optimization loop with linear cooling
         for iteration in range(self.max_iter_layout):
@@ -1359,15 +1370,15 @@ class DiRePyTorch(TransformerMixin):
         self._n_samples = self._data.shape[0]
 
         if self.normalize:
-            # Mean-center, then scale by a single global scalar so all values lie
-            # in [-1, 1].  Centering and uniform scaling preserve kNN rankings
-            # exactly (Euclidean neighbors are translation- and scale-invariant),
-            # so this is a pure numerical-safety transformation: it prevents
-            # fp16 squared-distance overflow on unnormalized inputs such as raw
-            # [0, 255] pixels.  PCA init is scale-equivariant, and the layout
-            # re-normalizes to unit std, so the final embedding is unchanged for
-            # data that was already in a safe range.
-            self._data = self._data - self._data.mean(axis=0, keepdims=True)
+            # Mean-centering preserves Euclidean rankings but changes cosine and
+            # inner-product neighborhoods because those metrics depend on the
+            # origin. A single positive global rescale preserves all three.
+            origin_sensitive = (
+                isinstance(self.metric_spec, str) and
+                self.metric_spec.strip().lower() in ('cosine', 'inner_product')
+            )
+            if not origin_sensitive:
+                self._data = self._data - self._data.mean(axis=0, keepdims=True)
             max_abs = float(np.abs(self._data).max())
             if max_abs > 0:
                 self._data /= max_abs

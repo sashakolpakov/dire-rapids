@@ -18,6 +18,7 @@ BENCHMARK_FILES = {
 
 CI_GATED_FILES = {
     "test_cpu_basic.py",
+    "test_cuvs_all_neighbors.py",
     "test_reducer_runner.py",
 }
 

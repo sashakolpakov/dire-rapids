@@ -33,6 +33,114 @@ except ImportError:
     logger.trace("cuVS not available. Install RAPIDS for GPU-accelerated k-NN: "
                  "Follow the installation instructions at https://docs.rapids.ai/install/")
 
+# cuVS 25.10+ exposes a graph-construction API tailored to the all-vs-all
+# workload used by manifold-learning algorithms. Keep this feature check
+# separate from the core cuVS imports so older supported installations can
+# still use the legacy index-build + self-query path.
+try:
+    from cuvs.common import MultiGpuResources, Resources
+    from cuvs.neighbors import all_neighbors, nn_descent
+    ALL_NEIGHBORS_AVAILABLE = True
+except ImportError:
+    ALL_NEIGHBORS_AVAILABLE = False
+
+
+def _merged_params(defaults, overrides):
+    """Return constructor kwargs with user values overriding defaults."""
+    params = dict(defaults)
+    if overrides:
+        params.update(overrides)
+    return params
+
+
+_REMOVE_SELF_KERNEL = None
+
+
+def _remove_self_from_knn_cupy(indices, distances, n_neighbors):
+    """Remove each row's own id on-device while preserving neighbor order.
+
+    cuVS all-neighbors normally includes self, but self is not guaranteed to
+    occupy the first column (and may be absent for metrics such as inner
+    product). Requesting one extra candidate and compacting with per-row ranks
+    handles both cases without an O(N) Python loop or a second full graph
+    allocation.
+    """
+    global _REMOVE_SELF_KERNEL  # pylint: disable=global-statement
+
+    indices = cp.asarray(indices)
+    distances = cp.asarray(distances)
+    if indices.ndim != 2 or distances.shape != indices.shape:
+        raise ValueError("cuVS indices and distances must be equally shaped 2-D arrays")
+    if indices.dtype != cp.int64 or distances.dtype != cp.float32:
+        raise TypeError("cuVS all-neighbors requires int64 indices and float32 distances")
+    if not indices.flags.c_contiguous or not distances.flags.c_contiguous:
+        raise ValueError("cuVS all-neighbors outputs must be C-contiguous")
+    if indices.shape[1] < n_neighbors:
+        raise RuntimeError("cuVS result has fewer columns than requested neighbors")
+
+    if _REMOVE_SELF_KERNEL is None:
+        _REMOVE_SELF_KERNEL = cp.RawKernel(
+            r'''
+            extern "C" __global__
+            void remove_self(
+                long long* indices,
+                float* distances,
+                long long n_rows,
+                long long n_candidates,
+                long long n_neighbors,
+                int* failed)
+            {
+                long long row = (long long)blockDim.x * blockIdx.x + threadIdx.x;
+                if (row >= n_rows) return;
+
+                long long base = row * n_candidates;
+                long long write = 0;
+                for (long long col = 0; col < n_candidates; ++col) {
+                    long long neighbor = indices[base + col];
+                    float distance = distances[base + col];
+                    bool finite_distance =
+                        (__float_as_uint(distance) & 0x7f800000U) != 0x7f800000U;
+                    if (
+                        neighbor != row &&
+                        neighbor >= 0 &&
+                        neighbor < n_rows &&
+                        finite_distance &&
+                        write < n_neighbors
+                    ) {
+                        indices[base + write] = neighbor;
+                        distances[base + write] = distance;
+                        ++write;
+                    }
+                }
+                if (write < n_neighbors) atomicExch(failed, 1);
+            }
+            ''',
+            'remove_self',
+        )
+
+    n_rows, n_candidates = indices.shape
+    failed = cp.zeros(1, dtype=cp.int32)
+    threads = 256
+    blocks = (n_rows + threads - 1) // threads
+    _REMOVE_SELF_KERNEL(
+        (blocks,),
+        (threads,),
+        (
+            indices,
+            distances,
+            np.int64(n_rows),
+            np.int64(n_candidates),
+            np.int64(n_neighbors),
+            failed,
+        ),
+    )
+    if bool(failed.item()):
+        raise RuntimeError(
+            "cuVS all-neighbors returned an invalid or underfilled row; "
+            "increase cluster capacity/overlap or reduce n_neighbors."
+        )
+    return indices[:, :n_neighbors], distances[:, :n_neighbors]
+
 # Try to import cuML for GPU-accelerated PCA
 try:
     from cuml.decomposition import PCA as cuPCA
@@ -58,7 +166,7 @@ class DiReCuVS(DiRePyTorch):
     -------------------------------------------
     - **10-100x faster k-NN**: For large datasets (>100K points)
     - **Massive scale support**: Handles 10M+ points efficiently
-    - **High accuracy**: Approximate k-NN with >95% recall
+    - **Tunable accuracy**: Exact brute force or approximate graph builders
     - **Multi-GPU ready**: Supports extreme scale processing
     - **GPU-accelerated PCA**: cuML PCA/SVD for initialization
     
@@ -77,8 +185,13 @@ class DiReCuVS(DiRePyTorch):
     use_cuml : bool or None, default=None  
         Whether to use cuML for PCA initialization. If None, automatically
         detected based on availability and hardware.
+    cuvs_knn_method : {'auto', 'all_neighbors', 'index_search'}, default='auto'
+        cuVS graph-construction strategy. ``'auto'`` uses the purpose-built
+        all-neighbors API when available unless an explicit legacy
+        ``cuvs_index_type`` is selected.
     cuvs_index_type : {'auto', 'ivf_flat', 'ivf_pq', 'cagra', 'flat'}, default='auto'
-        Type of cuVS index to build:
+        Type of legacy cuVS index to build:
+
         - 'auto': Automatically select based on data characteristics
         - 'ivf_flat': Inverted file index without compression
         - 'ivf_pq': Inverted file index with product quantization
@@ -88,6 +201,18 @@ class DiReCuVS(DiRePyTorch):
         Custom parameters for cuVS index building. Overrides defaults.
     cuvs_search_params : dict, optional  
         Custom parameters for cuVS search. Overrides defaults.
+    all_neighbors_algo : {'nn_descent', 'brute_force', 'ivf_pq'}, default='nn_descent'
+        Local graph builder used by cuVS all-neighbors.
+    all_neighbors_n_clusters : int, default=1
+        Paper parameter ``c``. Values greater than one keep input on the host
+        and process spatial partitions out-of-core.
+    all_neighbors_overlap_factor : int or None, default=None
+        Paper spill factor ``s``. ``None`` selects 0 for a single cluster and
+        ``min(2, c - 1)`` for an out-of-core build.
+    all_neighbors_device_ids : sequence of int or None, default=None
+        GPU ids for multi-GPU out-of-core construction.
+    all_neighbors_algo_params : dict, optional
+        Overrides for the selected local graph builder's parameter object.
     *args, **kwargs
         Additional arguments passed to DiRePyTorch parent class.
         Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,
@@ -141,12 +266,10 @@ class DiReCuVS(DiRePyTorch):
 
     With custom distance metric::
 
-        # cuVS with L1 distance for k-NN computation
+        # Custom expressions use the PyTorch k-NN fallback
         reducer = DiReCuVS(
-            use_cuvs=True,
             metric='(x - y).abs().sum(-1)',  # L1/Manhattan distance
             n_neighbors=32,
-            cuvs_index_type='ivf_flat'
         )
 
         embedding = reducer.fit_transform(X)
@@ -154,19 +277,25 @@ class DiReCuVS(DiRePyTorch):
     Notes
     -----
     **Requirements:**
-    - RAPIDS cuVS: Follow the installation instructions at https://docs.rapids.ai/install/
-    - CUDA-capable GPU with compute capability >= 6.0
+
+    - RAPIDS cuVS 26.06
+    - CUDA 12.2--12.9 on Volta or newer, or CUDA 13.0--13.2 on
+      Turing or newer
     
-    **Index Selection Guidelines:**
+    **Legacy Index Selection Guidelines:**
+
     - < 50K points: 'flat' (exact search)
     - 50K-500K points: 'ivf_flat' 
     - 500K-5M points: 'ivf_pq'
     - > 5M points: 'cagra' (if dimensions <= 500)
     
     **Memory Considerations:**
-    - cuVS requires float32 precision (no FP16 support)
-    - Index building requires additional GPU memory
-    - 'cagra' uses more memory but provides best performance for huge datasets
+
+    - cuVS all-neighbors requires float32 input
+    - ``all_neighbors_n_clusters > 1`` keeps input in host memory, but the
+      final ``N x k`` graph must still fit on one GPU
+    - Larger cluster counts reduce working memory; larger overlap factors
+      improve boundary recall at additional compute cost
     """
     
     def __init__(
@@ -177,6 +306,12 @@ class DiReCuVS(DiRePyTorch):
         cuvs_index_type='auto',  # 'auto', 'ivf_flat', 'ivf_pq', 'cagra'
         cuvs_build_params=None,
         cuvs_search_params=None,
+        cuvs_knn_method='auto',
+        all_neighbors_algo='nn_descent',
+        all_neighbors_n_clusters=1,
+        all_neighbors_overlap_factor=None,
+        all_neighbors_device_ids=None,
+        all_neighbors_algo_params=None,
         **kwargs
     ):
         """
@@ -198,6 +333,7 @@ class DiReCuVS(DiRePyTorch):
             - False: Disable cuML, use sklearn backend
         cuvs_index_type : {'auto', 'ivf_flat', 'ivf_pq', 'cagra', 'flat'}, default='auto'
             Type of cuVS index to build:
+
             - 'auto': Automatically select optimal index based on data size/dimensionality
             - 'ivf_flat': Inverted file index without compression (good balance)
             - 'ivf_pq': Inverted file with product quantization (memory efficient)
@@ -211,6 +347,19 @@ class DiReCuVS(DiRePyTorch):
             Custom parameters for cuVS search operations. These override the
             automatically determined parameters. See cuVS documentation for
             index-specific search parameters.
+        cuvs_knn_method : {'auto', 'all_neighbors', 'index_search'}, default='auto'
+            Select the purpose-built graph API or the legacy build-index and
+            self-query implementation.
+        all_neighbors_algo : {'nn_descent', 'brute_force', 'ivf_pq'}, default='nn_descent'
+            Local graph algorithm for all-neighbors.
+        all_neighbors_n_clusters : int, default=1
+            Number of spatial partitions (paper parameter ``c``).
+        all_neighbors_overlap_factor : int or None, default=None
+            Number of partitions per point (paper spill factor ``s``).
+        all_neighbors_device_ids : sequence of int or None, default=None
+            Device ids used by ``MultiGpuResources`` for a batched build.
+        all_neighbors_algo_params : dict, optional
+            Local algorithm parameter overrides.
         **kwargs
             Additional keyword arguments passed to DiRePyTorch parent class.
             See DiRePyTorch documentation for available parameters including:
@@ -263,7 +412,270 @@ class DiReCuVS(DiRePyTorch):
         self.cuvs_search_params = cuvs_search_params
         self.cuvs_index = None
         self._n_lists = None  # Store n_lists for search params (older cuVS versions don't expose index.n_lists)
-    
+
+        valid_methods = {'auto', 'all_neighbors', 'index_search'}
+        if cuvs_knn_method not in valid_methods:
+            raise ValueError(
+                f"cuvs_knn_method must be one of {sorted(valid_methods)}, "
+                f"got {cuvs_knn_method!r}"
+            )
+        valid_algos = {'nn_descent', 'brute_force', 'ivf_pq'}
+        if all_neighbors_algo not in valid_algos:
+            raise ValueError(
+                f"all_neighbors_algo must be one of {sorted(valid_algos)}, "
+                f"got {all_neighbors_algo!r}"
+            )
+        if isinstance(all_neighbors_n_clusters, bool) or not isinstance(
+                all_neighbors_n_clusters, (int, np.integer)):
+            raise TypeError("all_neighbors_n_clusters must be an integer")
+        if all_neighbors_n_clusters < 1:
+            raise ValueError("all_neighbors_n_clusters must be at least 1")
+
+        if all_neighbors_overlap_factor is None:
+            all_neighbors_overlap_factor = (
+                0 if all_neighbors_n_clusters == 1
+                else min(2, all_neighbors_n_clusters - 1)
+            )
+        if isinstance(all_neighbors_overlap_factor, bool) or not isinstance(
+                all_neighbors_overlap_factor, (int, np.integer)):
+            raise TypeError("all_neighbors_overlap_factor must be an integer or None")
+        if all_neighbors_n_clusters == 1:
+            if all_neighbors_overlap_factor != 0:
+                raise ValueError(
+                    "all_neighbors_overlap_factor must be 0 when "
+                    "all_neighbors_n_clusters is 1"
+                )
+        elif not 1 <= all_neighbors_overlap_factor < all_neighbors_n_clusters:
+            raise ValueError(
+                "all_neighbors_overlap_factor must satisfy "
+                "1 <= overlap_factor < n_clusters"
+            )
+
+        if all_neighbors_device_ids is not None:
+            if not isinstance(all_neighbors_device_ids, (list, tuple)):
+                raise TypeError("all_neighbors_device_ids must be a list or tuple of integers")
+            if not all_neighbors_device_ids:
+                raise ValueError("all_neighbors_device_ids cannot be empty")
+            if any(
+                    isinstance(device_id, bool) or
+                    not isinstance(device_id, (int, np.integer)) or
+                    device_id < 0
+                    for device_id in all_neighbors_device_ids):
+                raise ValueError("all_neighbors_device_ids must contain non-negative integers")
+            if len(set(all_neighbors_device_ids)) != len(all_neighbors_device_ids):
+                raise ValueError("all_neighbors_device_ids must be unique")
+            if all_neighbors_n_clusters == 1:
+                raise ValueError(
+                    "all_neighbors_device_ids requires all_neighbors_n_clusters > 1"
+                )
+            all_neighbors_device_ids = [int(device_id) for device_id in all_neighbors_device_ids]
+
+        if all_neighbors_algo_params is not None and not isinstance(
+                all_neighbors_algo_params, dict):
+            raise TypeError("all_neighbors_algo_params must be a dict or None")
+
+        self.cuvs_knn_method = cuvs_knn_method
+        self.all_neighbors_algo = all_neighbors_algo
+        self.all_neighbors_n_clusters = int(all_neighbors_n_clusters)
+        self.all_neighbors_overlap_factor = int(all_neighbors_overlap_factor)
+        self.all_neighbors_device_ids = all_neighbors_device_ids
+        self.all_neighbors_algo_params = dict(all_neighbors_algo_params or {})
+        self._last_cuvs_knn_method = None
+
+    def _select_cuvs_knn_method(self):
+        """Resolve the cuVS graph-construction strategy."""
+        if self.cuvs_knn_method != 'auto':
+            return self.cuvs_knn_method
+        if (
+                ALL_NEIGHBORS_AVAILABLE and
+                self.cuvs_index_type == 'auto' and
+                not self.cuvs_build_params and
+                not self.cuvs_search_params
+        ):
+            return 'all_neighbors'
+        return 'index_search'
+
+    def _all_neighbors_metric(self):
+        """Return the cuVS metric and whether distances need a square root."""
+        if self.metric_spec is None:
+            return 'sqeuclidean', True
+        metric = self.metric_spec.strip().lower()
+        if metric in ('euclidean', 'l2'):
+            # sqeuclidean is supported by every local all-neighbors builder;
+            # convert the returned distances to the DiRe Euclidean contract.
+            return 'sqeuclidean', True
+        if metric == 'sqeuclidean':
+            return 'sqeuclidean', False
+        return metric, False
+
+    def _make_all_neighbors_params(self, n_samples, candidate_count, metric):
+        """Construct RAPIDS 26.06 all-neighbors and local-algorithm params."""
+        algo_params = None
+        if self.all_neighbors_algo == 'nn_descent':
+            if metric not in {'sqeuclidean', 'l2', 'cosine', 'inner_product'}:
+                raise ValueError(
+                    f"all_neighbors_algo='nn_descent' does not support metric {metric!r}"
+                )
+            kwargs = _merged_params(
+                {
+                    'metric': metric,
+                    'graph_degree': candidate_count,
+                    'intermediate_graph_degree': candidate_count * 2,
+                    'return_distances': True,
+                },
+                self.all_neighbors_algo_params,
+            )
+            if kwargs.get('metric') != metric:
+                raise ValueError(
+                    "all_neighbors_algo_params metric must match the reducer metric"
+                )
+            if kwargs.get('graph_degree', candidate_count) < candidate_count:
+                raise ValueError(
+                    "NN-descent graph_degree must be at least n_neighbors + 1"
+                )
+            if kwargs.get('intermediate_graph_degree', 0) < kwargs['graph_degree']:
+                raise ValueError(
+                    "NN-descent intermediate_graph_degree must be at least graph_degree"
+                )
+            algo_params = nn_descent.IndexParams(**kwargs)
+        elif self.all_neighbors_algo == 'ivf_pq':
+            if metric != 'sqeuclidean':
+                raise ValueError(
+                    "all_neighbors_algo='ivf_pq' supports only sqeuclidean distance"
+                )
+            local_rows = int(np.ceil(
+                n_samples * max(self.all_neighbors_overlap_factor, 1) /
+                self.all_neighbors_n_clusters
+            ))
+            kwargs = _merged_params(
+                {
+                    'metric': metric,
+                    'n_lists': max(1, min(int(np.sqrt(local_rows)), 1024)),
+                    'pq_bits': 8,
+                    'pq_dim': 0,
+                    'add_data_on_build': True,
+                },
+                self.all_neighbors_algo_params,
+            )
+            if kwargs.get('metric') != metric:
+                raise ValueError(
+                    "all_neighbors_algo_params metric must match the reducer metric"
+                )
+            algo_params = ivf_pq.IndexParams(**kwargs)
+        elif self.all_neighbors_algo_params:
+            raise ValueError(
+                "all_neighbors_algo_params is not supported with algo='brute_force'"
+            )
+
+        params_kwargs = {
+            'algo': self.all_neighbors_algo,
+            'overlap_factor': self.all_neighbors_overlap_factor,
+            'n_clusters': self.all_neighbors_n_clusters,
+            'metric': metric,
+        }
+        if self.all_neighbors_algo == 'nn_descent':
+            params_kwargs['nn_descent_params'] = algo_params
+        elif self.all_neighbors_algo == 'ivf_pq':
+            params_kwargs['ivf_pq_params'] = algo_params
+        return all_neighbors.AllNeighborsParams(**params_kwargs)
+
+    def _compute_knn_all_neighbors(self, X):
+        """Build the full k-NN graph with cuVS all-neighbors."""
+        if not ALL_NEIGHBORS_AVAILABLE:
+            raise RuntimeError(
+                "cuvs_knn_method='all_neighbors' requires cuVS 25.10 or newer "
+                "(RAPIDS 26.06 is recommended)"
+            )
+
+        n_samples = X.shape[0]
+        candidate_count = self.n_neighbors + 1
+        if self.all_neighbors_n_clusters > 1:
+            if candidate_count > 1024:
+                raise ValueError(
+                    "partitioned cuVS all-neighbors supports at most 1024 "
+                    "candidates (n_neighbors must be <= 1023)"
+                )
+            total_assignments = n_samples * self.all_neighbors_overlap_factor
+            required_assignments = (
+                self.all_neighbors_n_clusters * candidate_count
+            )
+            if total_assignments < required_assignments:
+                raise ValueError(
+                    "partitioned cuVS all-neighbors has insufficient average "
+                    "cluster capacity for n_neighbors; reduce n_clusters or "
+                    "n_neighbors, or increase all_neighbors_overlap_factor"
+                )
+        metric, take_sqrt = self._all_neighbors_metric()
+        params = self._make_all_neighbors_params(
+            n_samples, candidate_count, metric
+        )
+
+        if self.all_neighbors_n_clusters == 1:
+            dataset = cp.asarray(X, dtype=cp.float32, order='C')
+            mode = 'in-core'
+        else:
+            # Host input is the switch that enables cuVS batched/out-of-core
+            # graph construction. Passing a device array here is rejected by
+            # the API when n_clusters > 1.
+            dataset = np.ascontiguousarray(X, dtype=np.float32)
+            mode = 'out-of-core'
+
+        if self.all_neighbors_device_ids is None:
+            resources = Resources()
+        else:
+            resources = MultiGpuResources(device_ids=self.all_neighbors_device_ids)
+
+        self.logger.info(
+            f"Building k-NN graph with cuVS all-neighbors ({mode}, "
+            f"algo={self.all_neighbors_algo}, "
+            f"clusters={self.all_neighbors_n_clusters}, "
+            f"overlap={self.all_neighbors_overlap_factor})"
+        )
+
+        distances_out = cp.empty(
+            (n_samples, candidate_count), dtype=cp.float32
+        )
+        indices, distances = all_neighbors.build(
+            dataset,
+            candidate_count,
+            params,
+            distances=distances_out,
+            resources=resources,
+        )
+        resources.sync()
+
+        indices_cp, distances_cp = _remove_self_from_knn_cupy(
+            indices, distances, self.n_neighbors
+        )
+        if take_sqrt:
+            cp.maximum(distances_cp, 0.0, out=distances_cp)
+            cp.sqrt(distances_cp, out=distances_cp)
+        elif metric == 'inner_product':
+            cp.negative(distances_cp, out=distances_cp)
+
+        # Preserve the historical NumPy-facing internal contract while also
+        # keeping a zero-copy device view for the layout optimizer.
+        self._knn_indices = cp.asnumpy(indices_cp)
+        self._knn_distances = cp.asnumpy(distances_cp)
+        try:
+            self._knn_indices_torch = torch.from_dlpack(indices_cp)
+        except (RuntimeError, TypeError):
+            self._knn_indices_torch = None
+
+        # The host copies and optional DLPack view are now the only live graph
+        # state. Release the input, distances, resources, and CuPy cache before
+        # PyTorch allocates the layout; the DLPack-backed index allocation stays
+        # alive through the Torch tensor.
+        del dataset, distances_out, distances, distances_cp, indices, indices_cp
+        del resources
+        cp.get_default_memory_pool().free_all_blocks()
+
+        self._last_cuvs_knn_method = 'all_neighbors'
+        self.logger.info(
+            f"k-NN graph computed via cuVS all-neighbors: "
+            f"shape {self._knn_indices.shape}"
+        )
+
     def _select_cuvs_index_type(self, n_samples, n_dims, metric='sqeuclidean'):
         """
         Automatically select optimal cuVS index type based on data characteristics.
@@ -375,40 +787,47 @@ class DiReCuVS(DiRePyTorch):
             else:
                 n_lists = min(int(np.sqrt(n_samples)), 4096)
 
-            build_params = ivf_flat.IndexParams(
-                n_lists=n_lists,
-                metric=metric,
-                add_data_on_build=True
+            build_kwargs = _merged_params(
+                {
+                    'n_lists': n_lists,
+                    'metric': metric,
+                    'add_data_on_build': True,
+                },
+                self.cuvs_build_params,
             )
-
-            if self.cuvs_build_params:
-                build_params.update(self.cuvs_build_params)
+            build_params = ivf_flat.IndexParams(**build_kwargs)
 
             index = ivf_flat.build(build_params, X_gpu)
-            self._n_lists = n_lists  # Store for search params
+            self._n_lists = build_kwargs['n_lists']
 
-            self.logger.info(f"Built IVF-Flat index with {n_lists} lists for {n_dims}D data")
+            self.logger.info(
+                f"Built IVF-Flat index with {self._n_lists} lists for {n_dims}D data"
+            )
 
         elif index_type == 'ivf_pq':
             # IVF with product quantization
             n_lists = min(int(np.sqrt(n_samples)), 8192)
             pq_dim = min(n_dims // 4, 128)  # Reasonable PQ dimension
 
-            build_params = ivf_pq.IndexParams(
-                n_lists=n_lists,
-                metric=metric,
-                pq_dim=pq_dim,
-                pq_bits=8,
-                add_data_on_build=True
+            build_kwargs = _merged_params(
+                {
+                    'n_lists': n_lists,
+                    'metric': metric,
+                    'pq_dim': pq_dim,
+                    'pq_bits': 8,
+                    'add_data_on_build': True,
+                },
+                self.cuvs_build_params,
             )
-
-            if self.cuvs_build_params:
-                build_params.update(self.cuvs_build_params)
+            build_params = ivf_pq.IndexParams(**build_kwargs)
 
             index = ivf_pq.build(build_params, X_gpu)
-            self._n_lists = n_lists  # Store for search params
+            self._n_lists = build_kwargs['n_lists']
 
-            self.logger.info(f"Built IVF-PQ index with {n_lists} lists, PQ dim={pq_dim}")
+            self.logger.info(
+                f"Built IVF-PQ index with {self._n_lists} lists, "
+                f"PQ dim={build_kwargs['pq_dim']}"
+            )
 
         elif index_type == 'cagra':
             # CAGRA only supports sqeuclidean and inner_product metrics
@@ -431,15 +850,16 @@ class DiReCuVS(DiRePyTorch):
                     f"(euclidean is automatically converted to sqeuclidean)."
                 )
 
-            build_params = cagra.IndexParams(
-                metric=cagra_metric,
-                graph_degree=32,
-                intermediate_graph_degree=64,
-                build_algo='nn_descent'
+            build_kwargs = _merged_params(
+                {
+                    'metric': cagra_metric,
+                    'graph_degree': 32,
+                    'intermediate_graph_degree': 64,
+                    'build_algo': 'nn_descent',
+                },
+                self.cuvs_build_params,
             )
-
-            if self.cuvs_build_params:
-                build_params.update(self.cuvs_build_params)
+            build_params = cagra.IndexParams(**build_kwargs)
 
             index = cagra.build(build_params, X_gpu)
 
@@ -501,18 +921,23 @@ class DiReCuVS(DiRePyTorch):
             # This avoids dtype issues with brute_force module
             n_lists = min(int(np.sqrt(n_samples)), 1024)
 
-            build_params = ivf_flat.IndexParams(
-                n_lists=n_lists,
-                metric=metric,
-                add_data_on_build=True
+            build_kwargs = _merged_params(
+                {
+                    'n_lists': n_lists,
+                    'metric': metric,
+                    'add_data_on_build': True,
+                },
+                self.cuvs_build_params,
             )
+            build_params = ivf_flat.IndexParams(**build_kwargs)
 
             index = ivf_flat.build(build_params, X_gpu)
 
             # Search with high probe count for near-exact results
-            search_params = ivf_flat.SearchParams(
-                n_probes=min(n_lists, 256)  # High probe count for accuracy
-            )
+            search_params = ivf_flat.SearchParams(**_merged_params(
+                {'n_probes': min(build_kwargs['n_lists'], 256)},
+                self.cuvs_search_params,
+            ))
 
             distances, indices = ivf_flat.search(
                 search_params, index, X_gpu, k+1
@@ -520,11 +945,10 @@ class DiReCuVS(DiRePyTorch):
             
         elif index_type == 'ivf_flat':
             # IVF search - use stored n_lists (compatible with older cuVS versions)
-            n_probes = min(self._n_lists // 10, 100) if self._n_lists else 20
-            search_params = ivf_flat.SearchParams(n_probes=n_probes)
-            
-            if self.cuvs_search_params:
-                search_params.update(self.cuvs_search_params)
+            n_probes = max(1, min(self._n_lists // 10, 100)) if self._n_lists else 20
+            search_params = ivf_flat.SearchParams(**_merged_params(
+                {'n_probes': n_probes}, self.cuvs_search_params
+            ))
             
             distances, indices = ivf_flat.search(
                 search_params, index, X_gpu, k+1
@@ -532,11 +956,10 @@ class DiReCuVS(DiRePyTorch):
             
         elif index_type == 'ivf_pq':
             # IVF-PQ search - use stored n_lists (compatible with older cuVS versions)
-            n_probes = min(self._n_lists // 10, 200) if self._n_lists else 20
-            search_params = ivf_pq.SearchParams(n_probes=n_probes)
-            
-            if self.cuvs_search_params:
-                search_params.update(self.cuvs_search_params)
+            n_probes = max(1, min(self._n_lists // 10, 200)) if self._n_lists else 20
+            search_params = ivf_pq.SearchParams(**_merged_params(
+                {'n_probes': n_probes}, self.cuvs_search_params
+            ))
             
             distances, indices = ivf_pq.search(
                 search_params, index, X_gpu, k+1
@@ -544,14 +967,14 @@ class DiReCuVS(DiRePyTorch):
             
         elif index_type == 'cagra':
             # CAGRA search
-            search_params = cagra.SearchParams(
-                max_queries=0,  # Automatic
-                itopk_size=min(k * 2, 256),
-                search_width=4
-            )
-            
-            if self.cuvs_search_params:
-                search_params.update(self.cuvs_search_params)
+            search_params = cagra.SearchParams(**_merged_params(
+                {
+                    'max_queries': 0,
+                    'itopk_size': min(k * 2, 256),
+                    'search_width': 4,
+                },
+                self.cuvs_search_params,
+            ))
             
             distances, indices = cagra.search(
                 search_params, index, X_gpu, k+1
@@ -671,6 +1094,8 @@ class DiReCuVS(DiRePyTorch):
         Cleans up GPU memory after computation.
         """
         n_samples, n_dims = X.shape
+        self._knn_indices_torch = None
+        self._last_cuvs_knn_method = None
 
         if self.knn_backend in ('pytorch', 'pykeops'):
             return self._fallback_to_pytorch_knn(
@@ -704,6 +1129,7 @@ class DiReCuVS(DiRePyTorch):
         # Decide whether to use cuVS
         use_cuvs_for_this = (
             self.knn_backend == 'cuvs' or
+            self.cuvs_knn_method != 'auto' or
             n_samples >= 10000  # cuVS overhead not worth it for small datasets
         )
 
@@ -720,6 +1146,11 @@ class DiReCuVS(DiRePyTorch):
         # Use cuVS for k-NN
         self._last_knn_backend = 'cuvs'
         self.logger.info(f"Computing {self.n_neighbors}-NN graph using cuVS...")
+
+        cuvs_knn_method = self._select_cuvs_knn_method()
+        if cuvs_knn_method == 'all_neighbors':
+            return self._compute_knn_all_neighbors(X)
+        self._last_cuvs_knn_method = 'index_search'
 
         # Determine which metric to use for cuVS
         # Default to sqeuclidean (cuVS default), but allow named metrics
@@ -760,12 +1191,27 @@ class DiReCuVS(DiRePyTorch):
         # first column when there are duplicate/tied distances.
         indices_cp = cp.asarray(indices)
         distances_cp = cp.asarray(distances)
-        self._knn_indices, self._knn_distances = _remove_self_from_knn(
+        self._knn_indices, knn_distances = _remove_self_from_knn(
             cp.asnumpy(indices_cp),
             cp.asnumpy(distances_cp),
             0,
             self.n_neighbors,
         )
+        # Match the base reducer's Euclidean-distance contract. Explicit
+        # metric='sqeuclidean' intentionally retains squared distances.
+        metric_name = (
+            self.metric_spec.strip().lower()
+            if isinstance(self.metric_spec, str) else None
+        )
+        if (
+                self.metric_spec is None or
+                (index_type == 'cagra' and metric_name in ('euclidean', 'l2'))
+        ):
+            self._knn_distances = np.sqrt(np.maximum(knn_distances, 0.0))
+        elif metric_name == 'inner_product':
+            self._knn_distances = -knn_distances
+        else:
+            self._knn_distances = knn_distances
         
         self.logger.info(f"k-NN graph computed: shape {self._knn_indices.shape}")
         

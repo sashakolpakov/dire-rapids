@@ -584,6 +584,56 @@ class TestKnnBackendSelection:
                 verbose=False,
             )
 
+    def test_repeated_fit_refreshes_cached_knn_tensor(self):
+        """A same-shaped second fit must not optimize against the first graph."""
+        first, _ = make_blobs(
+            n_samples=24, n_features=4, centers=3, random_state=11
+        )
+        second, _ = make_blobs(
+            n_samples=24, n_features=4, centers=5, random_state=29
+        )
+        model = DiRePyTorch(
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=1,
+            knn_backend="pytorch",
+            random_state=7,
+            verbose=False,
+        )
+        model.device = torch.device("cpu")
+
+        model.fit_transform(first)
+        first_graph = model._knn_indices.copy()
+        model.fit_transform(second)
+
+        assert not np.array_equal(first_graph, model._knn_indices)
+        np.testing.assert_array_equal(
+            model._knn_indices_torch.cpu().numpy(), model._knn_indices
+        )
+
+    def test_memory_efficient_fit_rebuilds_invalidated_knn_tensor(self):
+        """The memory-efficient force path accepts a cleared graph cache."""
+        data, _ = make_blobs(
+            n_samples=24, n_features=4, centers=3, random_state=17
+        )
+        model = create_dire(
+            backend="pytorch_cpu",
+            memory_efficient=True,
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=1,
+            knn_backend="pytorch",
+            random_state=7,
+            verbose=False,
+        )
+
+        embedding = model.fit_transform(data)
+
+        assert embedding.shape == (24, 2)
+        assert np.all(np.isfinite(embedding))
+        np.testing.assert_array_equal(
+            model._knn_indices_torch.cpu().numpy(), model._knn_indices
+        )
 
 class TestDiRePyTorchErrors:
     """Test error handling and edge cases."""
@@ -766,6 +816,36 @@ class TestDiRePyTorchCustomMetrics:
         assert model._metric_fn is not None
         assert model._knn_indices[0, 0] == 1
         assert model._knn_indices[1, 0] == 0
+
+    @pytest.mark.parametrize("metric", ["cosine", "inner_product"])
+    def test_origin_sensitive_metric_normalization_preserves_neighbors(self, metric):
+        """Default normalization must not mean-center origin-sensitive metrics."""
+        data = np.random.default_rng(13).uniform(1.0, 8.0, size=(16, 4)).astype(
+            np.float32
+        )
+        model = DiRePyTorch(
+            metric=metric,
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=1,
+            knn_backend="pytorch",
+            random_state=5,
+            verbose=False,
+        )
+        model.device = torch.device("cpu")
+
+        model.fit_transform(data)
+
+        scaled = data / np.abs(data).max()
+        np.testing.assert_allclose(model._data, scaled, rtol=1e-6, atol=1e-7)
+        if metric == "cosine":
+            norms = np.linalg.norm(scaled, axis=1)
+            pairwise = 1.0 - (scaled @ scaled.T) / np.outer(norms, norms)
+        else:
+            pairwise = -(scaled @ scaled.T)
+        np.fill_diagonal(pairwise, np.inf)
+        expected = np.argsort(pairwise, axis=1)[:, :model.n_neighbors]
+        np.testing.assert_array_equal(model._knn_indices, expected)
 
     def test_callable_metric(self):
         """Test custom callable metric function."""

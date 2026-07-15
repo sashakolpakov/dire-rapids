@@ -76,7 +76,7 @@ python -m pip install "dire-rapids==0.3.2"
 # With PyKeOps support for the optional PyKeOps k-NN engine
 python -m pip install "dire-rapids[keops]==0.3.2"
 
-# With CUDA CuPy support
+# With CUDA 12 CuPy support
 python -m pip install "dire-rapids[cuda]==0.3.2"
 ```
 
@@ -87,27 +87,62 @@ git clone https://github.com/sashakolpakov/dire-rapids.git
 cd dire-rapids
 
 python -m pip install -e .            # CPU + PyTorch
-python -m pip install -e ".[cuda]"    # With CUDA CuPy support
+python -m pip install -e ".[cuda]"    # With CUDA 12 CuPy support
 python -m pip install -e ".[keops]"   # With PyKeOps support
 python -m pip install -e ".[dev]"     # Development (testing + dev tools)
 ```
 
 #### With RAPIDS Support (Optional, GPU only)
 
-Use a clean virtual environment. The `rapids` extra installs cuML/cuVS/cuDF from
-the NVIDIA index and PyTorch from the matching CUDA wheel index.
-```bash
-python -m pip install \
-  --extra-index-url https://pypi.nvidia.com \
-  --extra-index-url https://download.pytorch.org/whl/cu128 \
-  "dire-rapids[rapids,keops]==0.3.2"
+Use a clean virtual environment. For the stable 0.3.2 CUDA 12 release, install
+PyTorch from its dedicated wheel index first, followed by the `rapids` extra
+from PyPI and the NVIDIA package index:
 
-# From a clone:
+```bash
+python -m pip install torch==2.11.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install --extra-index-url https://pypi.nvidia.com \
+  "dire-rapids[rapids,keops]==0.3.2"
+```
+
+For RAPIDS 26.06 and the all-neighbors implementation, choose exactly one
+CUDA-specific development extra. Both extras pin cuML, cuVS, and cuDF to
+RAPIDS 26.06.x. The development `rapids` extra remains an alias of
+`rapids-cu12` for backward compatibility.
+
+The core package supports Python 3.10+, while these RAPIDS extras require
+Python 3.11--3.14.
+The CUDA-specific extras are currently unreleased, so install this version
+from a clone:
+
+```bash
+git clone https://github.com/sashakolpakov/dire-rapids.git
+cd dire-rapids
+```
+
+CUDA 13 (recommended for the RAPIDS 26.06/Python 3.14 stack):
+
+```bash
+python -m pip install torch==2.11.0 \
+  --index-url https://download.pytorch.org/whl/cu130
 python -m pip install \
   --extra-index-url https://pypi.nvidia.com \
-  --extra-index-url https://download.pytorch.org/whl/cu128 \
-  -e ".[rapids,keops]"
+  -e ".[rapids-cu13,keops]"
 ```
+
+CUDA 12:
+
+```bash
+python -m pip install torch==2.11.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  -e ".[rapids-cu12,keops]"
+```
+
+Do not install the CUDA 12 and CUDA 13 extras together. Install the pinned
+PyTorch wheel first from its dedicated index; `cu128` above is for CUDA 12 and
+`cu130` is for CUDA 13.
 
 ## Quick Start [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sashakolpakov/dire-rapids/blob/main/benchmarking/dire_rapids_benchmarks.ipynb)
 
@@ -157,6 +192,46 @@ Custom metric expressions and callables run on the PyTorch/PyKeOps k-NN paths. c
 - **DiReCuVS** -- RAPIDS cuVS backend for massive-scale datasets
 
 `backend` selects the DiRe implementation. `knn_backend` selects the k-nearest-neighbor engine used inside that implementation. Leave `knn_backend='auto'` to use the built-in heuristics, or set it explicitly to `'pytorch'`, `'pykeops'`, or `'cuvs'`. Explicit k-NN backend requests are strict: unsupported engines raise instead of silently falling back.
+
+### RAPIDS 26.06 All-Neighbors k-NN
+
+`DiReCuVS` can build a full approximate k-NN graph (one row per input) through
+the RAPIDS 26.06 cuVS all-neighbors API instead of constructing an ANN index
+and querying the same dataset. This path supports partitioned, host-backed
+operation and multiple GPUs, which avoids copying the entire input to one GPU
+before graph construction. Use `all_neighbors_algo="brute_force"` when an
+exact local graph is required.
+
+```python
+from dire_rapids import DiReCuVS
+
+# Auto chooses all-neighbors when the API is available and cuvs_index_type is
+# also "auto"; otherwise it uses the established index-and-search path.
+reducer = DiReCuVS(cuvs_knn_method="auto")
+
+# Explicit partitioned/out-of-core all-neighbors graph construction.
+reducer = DiReCuVS(
+    cuvs_knn_method="all_neighbors",
+    all_neighbors_algo="nn_descent",
+    all_neighbors_n_clusters=16,
+    all_neighbors_device_ids=[0, 1],
+)
+```
+
+Host-backed/out-of-core execution requires `all_neighbors_n_clusters > 1`.
+Partitioning reduces the local graph-builder working set; the final `N × k`
+index and distance graph still has to fit on one GPU.
+`cuvs_knn_method` defaults to `"auto"`. The remaining defaults are
+`all_neighbors_algo="nn_descent"`,
+`all_neighbors_n_clusters=1`, `all_neighbors_device_ids=None`, and
+`all_neighbors_algo_params=None`. `all_neighbors_overlap_factor=None` selects
+0 for one cluster and `min(2, n_clusters - 1)` otherwise. To force the
+pre-26.06 behavior, set `cuvs_knn_method="index_search"`; explicitly selecting
+a legacy `cuvs_index_type` also keeps the index-and-search path when the method
+is `"auto"`.
+
+See the [cuVS all-neighbors API documentation](https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/)
+for the underlying RAPIDS interface.
 
 ### Backend and k-NN Engine Selection
 
@@ -288,8 +363,8 @@ If you use this work, please cite:
 - PyTorch 2.0+
 - NumPy, SciPy, scikit-learn
 - (Optional) PyKeOps 2.1+ (`python -m pip install "dire-rapids[keops]==0.3.2"`)
-- (Optional) CUDA 12.x+ for GPU acceleration
-- (Optional) RAPIDS 26.2+ for the cuVS k-NN engine
+- (Optional) a matching CUDA 12 or CUDA 13 stack for GPU acceleration
+- (Optional, Python 3.11--3.14) RAPIDS 26.06.x for the cuVS k-NN and all-neighbors engines
 - (Optional) CuPy for GPU-accelerated Betti curves
 
 <p align="center">

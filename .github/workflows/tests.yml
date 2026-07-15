@@ -40,7 +40,7 @@ jobs:
 
     - name: Run CPU tests
       run: |
-        pytest tests/test_cpu_basic.py tests/test_reducer_runner.py tests/test_density_viz.py -v -m "not gpu" --cov=dire_rapids --cov-report=term-missing
+        pytest tests/test_cpu_basic.py tests/test_reducer_runner.py tests/test_density_viz.py tests/test_cuvs_all_neighbors.py -v -m "not gpu" --cov=dire_rapids --cov-report=term-missing
 
     - name: Verify imports
       run: |

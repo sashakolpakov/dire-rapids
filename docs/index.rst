@@ -45,17 +45,41 @@ Install optional k-NN engines:
    # CUDA CuPy support
    python -m pip install "dire-rapids[cuda]==0.3.2"
 
-For GPU acceleration with RAPIDS:
-
-Use a clean virtual environment. The ``rapids`` extra installs cuML/cuVS/cuDF
-from the NVIDIA index and PyTorch from the matching CUDA wheel index.
+For GPU acceleration with RAPIDS 26.06, use a clean virtual environment and
+choose exactly one CUDA-specific extra. The legacy ``rapids`` extra remains a
+CUDA 12 alias for backward compatibility.
+The core package supports Python 3.10+, while RAPIDS 26.06 requires Python
+3.11--3.14.
+The CUDA-specific extras are currently unreleased. Install this version from
+a clone before choosing one of the CUDA-family commands below:
 
 .. code-block:: bash
 
+   git clone https://github.com/sashakolpakov/dire-rapids.git
+   cd dire-rapids
+
+CUDA 13 (recommended for RAPIDS 26.06 with Python 3.14):
+
+.. code-block:: bash
+
+   python -m pip install torch==2.11.0 \
+     --index-url https://download.pytorch.org/whl/cu130
    python -m pip install \
      --extra-index-url https://pypi.nvidia.com \
-     --extra-index-url https://download.pytorch.org/whl/cu128 \
-     "dire-rapids[rapids,keops]==0.3.2"
+     -e ".[rapids-cu13,keops]"
+
+CUDA 12:
+
+.. code-block:: bash
+
+   python -m pip install torch==2.11.0 \
+     --index-url https://download.pytorch.org/whl/cu128
+   python -m pip install \
+     --extra-index-url https://pypi.nvidia.com \
+     -e ".[rapids-cu12,keops]"
+
+Do not combine the CUDA 12 and CUDA 13 extras. Install the pinned PyTorch wheel
+first from the index matching the selected CUDA family.
 
 For development from a clone:
 
@@ -96,6 +120,7 @@ API Documentation
    :maxdepth: 2
    :caption: Contents:
 
+   numpy2_rapids
    api/modules
 
 Examples
@@ -153,6 +178,46 @@ GPU Acceleration with RAPIDS
        n_neighbors=64
    )
    embedding = reducer.fit_transform(X)
+
+RAPIDS 26.06 All-Neighbors Graph Construction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``DiReCuVS`` can use the cuVS all-neighbors API to build a full approximate
+k-NN graph (one row per input) without first copying the entire dataset into a
+single-GPU ANN index. The partitioned path supports host-backed/out-of-core
+data and multiple GPUs. Select ``all_neighbors_algo="brute_force"`` when an
+exact local graph is required.
+
+.. code-block:: python
+
+   from dire_rapids import DiReCuVS
+
+   # Automatic when all-neighbors is available and cuvs_index_type is "auto".
+   reducer = DiReCuVS(cuvs_knn_method="auto")
+
+   # Partitioned/out-of-core construction. More than one cluster is required.
+   reducer = DiReCuVS(
+       cuvs_knn_method="all_neighbors",
+       all_neighbors_algo="nn_descent",
+       all_neighbors_n_clusters=16,
+       all_neighbors_device_ids=[0, 1],
+   )
+
+``cuvs_knn_method`` defaults to ``"auto"``. The remaining defaults are
+``all_neighbors_algo="nn_descent"``,
+``all_neighbors_n_clusters=1``, ``all_neighbors_device_ids=None``, and
+``all_neighbors_algo_params=None``. ``all_neighbors_overlap_factor=None``
+selects 0 for one cluster and ``min(2, n_clusters - 1)`` otherwise. Set
+``cuvs_knn_method="index_search"`` to force the established index-and-search
+path. With ``cuvs_knn_method="auto"``, explicitly selecting a legacy
+``cuvs_index_type`` also retains that path.
+
+Partitioning reduces the local graph-builder working set, but the final
+``N x k`` index and distance graph must still fit on one GPU.
+
+See the `cuVS all-neighbors API documentation
+<https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/>`_
+for the underlying RAPIDS interface.
 
 Automatic Backend and k-NN Selection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

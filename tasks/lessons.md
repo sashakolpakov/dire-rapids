@@ -2,7 +2,9 @@
 
 ## Environment
 - Must use `python -m pip` (not bare `pip`) in the rapids conda env.
-- Run commands via: `conda run --no-capture-output -n rapids-26.02 bash -c 'LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH ...'`
+- Run commands via the pinned environment: `conda run --no-capture-output -n rapids-26.06 ...`.
+- With RAPIDS 26.06/CUDA 13 and pip PyTorch, preload the conda copy of nvJitLink: `LD_PRELOAD=$CONDA_PREFIX/lib/libnvJitLink.so.13`. `LD_LIBRARY_PATH` alone does not make imports deterministic once PyTorch's copy is loaded.
+- Smoke-test `torch` then `cuml` and `cuml` then `torch` in separate Python processes; one process cannot detect order-dependent dynamic-loader state reliably.
 - torch.compile cache invalidation causes slow first run after code changes.
 
 ## Numerical
@@ -18,5 +20,6 @@
 
 ## Architecture
 - Chunked force computation had 10x overhead vs unchunked — always prefer unchunked unless OOM.
-- cuVS IVF-Flat gives 97-99% recall vs exact kNN; embedding quality is identical.
+- cuVS IVF-Flat recall is dataset- and tuning-dependent. On 100K×64 Gaussian data with RAPIDS 26.06 and the current automatic parameters, IVF-Flat measured 51.1% recall against exact kNN, while all-neighbors NN-descent measured 98.9%; do not assume the historical 97–99% figure without benchmarking the target data.
 - kNN was the bottleneck (96-98% of total time at large N) before cuVS integration.
+- RAPIDS 26.06 all-neighbors avoids staging the whole dataset in a single-GPU index. Host-backed/out-of-core execution requires more than one cluster; keep the index-and-search path for explicit legacy index types.
