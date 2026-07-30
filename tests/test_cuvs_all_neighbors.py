@@ -159,7 +159,7 @@ def test_explicit_cuvs_knn_method_wins_over_auto_selection(
 @pytest.mark.parametrize(
     "available, index_type, expected",
     [
-        (True, "auto", "all_neighbors"),
+        (True, "auto", "index_search"),
         (False, "auto", "index_search"),
         (True, "ivf_flat", "index_search"),
         (True, "ivf_pq", "index_search"),
@@ -167,9 +167,10 @@ def test_explicit_cuvs_knn_method_wins_over_auto_selection(
         (True, "flat", "index_search"),
     ],
 )
-def test_auto_method_preserves_explicit_legacy_index_selection(
+def test_auto_method_preserves_released_index_search_policy(
     monkeypatch, available, index_type, expected
 ):
+    """API availability alone must not silently change the automatic graph."""
     _set_all_neighbors_available(monkeypatch, available)
     reducer = _cpu_reducer(
         cuvs_knn_method="auto",
@@ -192,6 +193,68 @@ def test_auto_method_preserves_legacy_parameter_overrides(monkeypatch, overrides
     reducer = _cpu_reducer(**overrides)
 
     assert reducer._select_cuvs_knn_method() == "index_search"
+
+
+@pytest.mark.cpu
+@pytest.mark.parametrize(
+    "n_samples, n_dims, metric, expected",
+    [
+        (49_999, 32, "sqeuclidean", "flat"),
+        (50_000, 32, "sqeuclidean", "ivf_flat"),
+        (499_999, 32, "sqeuclidean", "ivf_flat"),
+        (500_000, 32, "sqeuclidean", "ivf_pq"),
+        (4_999_999, 32, "sqeuclidean", "ivf_pq"),
+        (5_000_000, 500, "sqeuclidean", "cagra"),
+        (5_000_000, 501, "sqeuclidean", "ivf_flat"),
+        (5_000_000, 32, "cosine", "ivf_pq"),
+        (500_000, 501, "sqeuclidean", "ivf_flat"),
+    ],
+)
+def test_legacy_auto_index_boundaries(n_samples, n_dims, metric, expected):
+    reducer = _cpu_reducer()
+
+    assert reducer._select_cuvs_index_type(n_samples, n_dims, metric) == expected
+
+
+@pytest.mark.cpu
+def test_diagnostics_export_requested_and_effective_policy():
+    import json
+
+    data, _ = make_blobs(
+        n_samples=24, n_features=4, centers=3, random_state=41
+    )
+    reducer = _cpu_reducer(
+        n_neighbors=3,
+        init="random",
+        max_iter_layout=0,
+        knn_backend="pytorch",
+        random_state=41,
+    )
+
+    reducer.fit_transform(data)
+    diagnostics = reducer.get_diagnostics()
+
+    assert diagnostics["requested_knn_backend"] == "pytorch"
+    assert diagnostics["effective_knn_backend"] == "pytorch"
+    assert set(diagnostics["stage_timings_seconds"]) == {
+        "graph_construction",
+        "initialization",
+        "layout",
+        "total",
+    }
+    assert all(
+        value >= 0 for value in diagnostics["stage_timings_seconds"].values()
+    )
+    assert diagnostics["force_chunked_fallback_used"] is False
+    assert diagnostics["force_chunked_fallback_calls"] == 0
+    assert diagnostics["cuvs"] == {
+        "requested_knn_method": "auto",
+        "effective_knn_method": None,
+        "requested_index_type": "auto",
+        "effective_index_type": None,
+        "effective_all_neighbors_algo": None,
+    }
+    json.dumps(diagnostics)
 
 
 @pytest.mark.cpu
@@ -349,6 +412,9 @@ def test_all_neighbors_in_core_recall_and_self_removal():
 
     _assert_valid_knn_graph(reducer, n_samples, k)
     assert reducer._last_cuvs_knn_method == "all_neighbors"
+    assert reducer.effective_cuvs_knn_method_ == "all_neighbors"
+    assert reducer.effective_cuvs_index_type_ is None
+    assert reducer.effective_all_neighbors_algo_ == "nn_descent"
     assert _mean_recall(reducer._knn_indices, expected) >= 0.85
     assert reducer._knn_indices_torch.is_cuda
     np.testing.assert_array_equal(
@@ -464,6 +530,8 @@ def test_legacy_index_search_distances_are_euclidean(index_type, metric):
     reducer._compute_knn(data)
 
     selected = data[reducer._knn_indices]
+    assert reducer.effective_cuvs_knn_method_ == "index_search"
+    assert reducer.effective_cuvs_index_type_ == index_type
     expected_distances = np.linalg.norm(data[:, None, :] - selected, axis=2)
     np.testing.assert_allclose(
         reducer._knn_distances, expected_distances, rtol=2e-4, atol=2e-5

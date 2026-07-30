@@ -186,9 +186,10 @@ class DiReCuVS(DiRePyTorch):
         Whether to use cuML for PCA initialization. If None, automatically
         detected based on availability and hardware.
     cuvs_knn_method : {'auto', 'all_neighbors', 'index_search'}, default='auto'
-        cuVS graph-construction strategy. ``'auto'`` uses the purpose-built
-        all-neighbors API when available unless an explicit legacy
-        ``cuvs_index_type`` is selected.
+        cuVS graph-construction strategy. ``'auto'`` preserves the established
+        index-and-search policy. The purpose-built all-neighbors API is
+        available through explicit ``'all_neighbors'`` opt-in while its
+        downstream embedding-quality validation remains experimental.
     cuvs_index_type : {'auto', 'ivf_flat', 'ivf_pq', 'cagra', 'flat'}, default='auto'
         Type of legacy cuVS index to build:
 
@@ -285,8 +286,8 @@ class DiReCuVS(DiRePyTorch):
     **Legacy Index Selection Guidelines:**
 
     - < 50K points: 'flat' (exact search)
-    - 50K-500K points: 'ivf_flat' 
-    - 500K-5M points: 'ivf_pq'
+    - 50K-500K points, or more than 500 dimensions: 'ivf_flat'
+    - 500K-5M points at up to 500 dimensions: 'ivf_pq'
     - > 5M points: 'cagra' (if dimensions <= 500)
     
     **Memory Considerations:**
@@ -486,14 +487,29 @@ class DiReCuVS(DiRePyTorch):
         """Resolve the cuVS graph-construction strategy."""
         if self.cuvs_knn_method != 'auto':
             return self.cuvs_knn_method
-        if (
-                ALL_NEIGHBORS_AVAILABLE and
-                self.cuvs_index_type == 'auto' and
-                not self.cuvs_build_params and
-                not self.cuvs_search_params
-        ):
-            return 'all_neighbors'
+        # Preserve the released automatic policy until all-neighbors clears
+        # frozen neighbor, topology, local, context, and global quality gates.
+        # Availability alone is not evidence that changing the graph builder is
+        # quality-neutral.
         return 'index_search'
+
+    def get_diagnostics(self):
+        """Return fitted pipeline diagnostics, including effective cuVS policy."""
+        diagnostics = super().get_diagnostics()
+        diagnostics["cuvs"] = {
+            "requested_knn_method": self.cuvs_knn_method,
+            "effective_knn_method": getattr(
+                self, "effective_cuvs_knn_method_", None
+            ),
+            "requested_index_type": self.cuvs_index_type,
+            "effective_index_type": getattr(
+                self, "effective_cuvs_index_type_", None
+            ),
+            "effective_all_neighbors_algo": getattr(
+                self, "effective_all_neighbors_algo_", None
+            ),
+        }
+        return diagnostics
 
     def _all_neighbors_metric(self):
         """Return the cuVS metric and whether distances need a square root."""
@@ -588,6 +604,9 @@ class DiReCuVS(DiRePyTorch):
             )
 
         n_samples = X.shape[0]
+        self.effective_cuvs_knn_method_ = 'all_neighbors'
+        self.effective_cuvs_index_type_ = None
+        self.effective_all_neighbors_algo_ = self.all_neighbors_algo
         candidate_count = self.n_neighbors + 1
         if self.all_neighbors_n_clusters > 1:
             if candidate_count > 1024:
@@ -704,9 +723,9 @@ class DiReCuVS(DiRePyTorch):
         Selection Heuristics:
         - **< 50K samples**: 'flat' (exact search)
         - **50K-500K samples or >500D**: 'ivf_flat' (good balance)
-        - **500K-5M samples**: 'ivf_pq' (memory efficient)
+        - **500K-5M samples at ≤500D**: 'ivf_pq' (memory efficient)
         - **> 5M samples and ≤500D**: 'cagra' (best performance, if metric is supported)
-        - **> 5M samples and >500D**: 'ivf_pq' (high-D fallback)
+        - **> 5M samples and >500D**: 'ivf_flat' (high-D policy)
         - **cosine metric**: Forces IVF method (CAGRA doesn't support cosine)
         """
         if self.cuvs_index_type != 'auto':
@@ -729,7 +748,8 @@ class DiReCuVS(DiRePyTorch):
         if n_dims <= 500 and metric in ('sqeuclidean', 'euclidean', 'inner_product'):
             return 'cagra'
         else:
-            # Fallback to IVF-PQ for unsupported metrics (e.g., cosine) or high-D
+            # Fallback to IVF-PQ for unsupported CAGRA metrics (e.g., cosine).
+            # High-dimensional inputs already selected IVF-Flat above.
             return 'ivf_pq'
     
     def _build_cuvs_index(self, X_gpu, index_type, metric='euclidean'):
@@ -1096,6 +1116,9 @@ class DiReCuVS(DiRePyTorch):
         n_samples, n_dims = X.shape
         self._knn_indices_torch = None
         self._last_cuvs_knn_method = None
+        self.effective_cuvs_knn_method_ = None
+        self.effective_cuvs_index_type_ = None
+        self.effective_all_neighbors_algo_ = None
 
         if self.knn_backend in ('pytorch', 'pykeops'):
             return self._fallback_to_pytorch_knn(
@@ -1148,6 +1171,8 @@ class DiReCuVS(DiRePyTorch):
         self.logger.info(f"Computing {self.n_neighbors}-NN graph using cuVS...")
 
         cuvs_knn_method = self._select_cuvs_knn_method()
+        self.effective_cuvs_knn_method_ = cuvs_knn_method
+        self.logger.info(f"Effective cuVS k-NN method: {cuvs_knn_method}")
         if cuvs_knn_method == 'all_neighbors':
             return self._compute_knn_all_neighbors(X)
         self._last_cuvs_knn_method = 'index_search'
@@ -1175,6 +1200,8 @@ class DiReCuVS(DiRePyTorch):
 
         # Select index type (pass metric to avoid selecting CAGRA for unsupported metrics)
         index_type = self._select_cuvs_index_type(n_samples, n_dims, cuvs_metric)
+        self.effective_cuvs_index_type_ = index_type
+        self.logger.info(f"Effective cuVS index type: {index_type}")
 
         # Build index
         if index_type != 'flat':

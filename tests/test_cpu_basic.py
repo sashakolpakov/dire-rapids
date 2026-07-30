@@ -340,19 +340,45 @@ class TestDiRePyTorchNormalization:
             f"between/within ratio = {ratio_spec:.2f} (expected > 1)"
         )
 
-    def test_topology_tuned_preset_importable_and_usable(self):
-        """TOPOLOGY_TUNED preset is exposed and produces a valid embedding."""
-        from dire_rapids import TOPOLOGY_TUNED, presets  # noqa: F401
-        assert isinstance(TOPOLOGY_TUNED, dict)
-        assert TOPOLOGY_TUNED['init'] == 'spectral'
-        assert TOPOLOGY_TUNED['spread'] > 2.0   # the signature deviation from default
-        X, _ = make_blobs(n_samples=120, n_features=10, centers=3, random_state=0)
-        # Override max_iter_layout for test speed (preset default is higher).
-        cfg = {**TOPOLOGY_TUNED, 'max_iter_layout': 20}
-        model = DiRePyTorch(n_components=2, verbose=False, random_state=0, **cfg)
-        emb = model.fit_transform(X)
-        assert emb.shape == (120, 2)
-        assert np.all(np.isfinite(emb))
+    def test_unsupported_topology_preset_is_not_exported(self):
+        """A merge or rebase must not resurrect the failed public preset."""
+        import dire_rapids
+
+        assert not hasattr(dire_rapids, "TOPOLOGY_TUNED")
+        assert "TOPOLOGY_TUNED" not in dire_rapids.__all__
+        assert not hasattr(dire_rapids.presets, "TOPOLOGY_TUNED")
+        assert "TOPOLOGY_TUNED" not in dire_rapids.presets.__all__
+
+    def test_frozen_topology_preset_audit_retains_failure_summary(self):
+        """The evidence behind preset removal remains a checked fixture."""
+        import csv
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).with_name("data")
+            / "topology_preset_atlas_audit.csv"
+        )
+        with fixture.open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+
+        gaps = [float(row["relative_gap"]) for row in rows]
+        intervals = [
+            (
+                float(row["paired_mean_95pct_low"]),
+                float(row["paired_mean_95pct_high"]),
+            )
+            for row in rows
+        ]
+
+        assert len(rows) == 12
+        assert {int(row["paired_count"]) for row in rows} == {20}
+        assert sum(gap > 0 for gap in gaps) == 10
+        assert sum(gap > 0.05 for gap in gaps) == 9
+        assert sum(low > 0 for low, _ in intervals) == 9
+        assert not any(
+            gap < -0.05 or high < 0
+            for gap, (_, high) in zip(gaps, intervals)
+        )
 
     def test_betti_curve_ripser_on_circle(self):
         """Ripser backend returns correct Betti curve shape and identifies one
@@ -610,6 +636,36 @@ class TestKnnBackendSelection:
         np.testing.assert_array_equal(
             model._knn_indices_torch.cpu().numpy(), model._knn_indices
         )
+
+    def test_vectorized_force_fallback_is_reported(self, monkeypatch):
+        """Downstream benchmarks can detect every chunked force fallback."""
+        data, _ = make_blobs(
+            n_samples=24, n_features=4, centers=3, random_state=23
+        )
+
+        def raise_oom(*args, **kwargs):
+            del args, kwargs
+            raise RuntimeError("forced vectorized-force failure")
+
+        monkeypatch.setattr(
+            dire_pytorch_module, "_compute_forces_compiled", raise_oom
+        )
+        model = DiRePyTorch(
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=2,
+            knn_backend="pytorch",
+            random_state=7,
+            verbose=False,
+        )
+
+        embedding = model.fit_transform(data)
+        diagnostics = model.get_diagnostics()
+
+        assert embedding.shape == (24, 2)
+        assert diagnostics["force_chunked_fallback_used"] is True
+        assert diagnostics["force_chunked_fallback_calls"] == 2
+        assert model.force_chunked_fallback_calls_ == 2
 
     def test_memory_efficient_fit_rebuilds_invalidated_knn_tensor(self):
         """The memory-efficient force path accepts a cleared graph cache."""

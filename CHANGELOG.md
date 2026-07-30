@@ -15,14 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   multi-GPU resources.
 - **All-neighbors tests**: Added CPU-safe routing and validation coverage plus
   GPU recall, self-removal, and out-of-core graph-contract tests.
+- **Fitted backend diagnostics**: Reducers now expose effective k-NN/cuVS
+  policy, graph/initialization/layout timings, and vectorized-force fallback
+  counts through fitted attributes and `get_diagnostics()`.
 
 ### Changed
 - **RAPIDS 26.06 baseline**: Added CUDA 12 and CUDA 13 extras pinned to the
   26.06 release line, Python 3.14 metadata, and a reproducible
   RAPIDS 26.06/CUDA 13/Python 3.14 container configuration.
-- **cuVS auto policy**: The RAPIDS reducer now prefers all-neighbors for
-  all-vs-all graph construction when available; explicitly selected legacy
-  index types retain the index-and-search implementation.
+- **cuVS all-neighbors policy**: The RAPIDS reducer preserves the released
+  automatic index-and-search policy. All-neighbors is explicit opt-in until
+  frozen downstream quality gates justify changing existing embeddings.
 - **GPU graph handoff**: Reuses a DLPack-backed PyTorch view of the cuVS graph
   during layout optimization instead of uploading the host copy again.
 
@@ -38,6 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Metric graph contracts**: Preserves the input origin for cosine and
   inner-product normalization and keeps Euclidean distance scales consistent
   between the all-neighbors and legacy cuVS paths.
+
+### Removed
+- **Unsupported topology preset**: Withdrew the public `TOPOLOGY_TUNED` export
+  after a paired held-out Atlas audit found worse discrepancy in 10 of 12
+  dataset-by-homology comparisons. The original fixed-sample Ripser selection
+  did not support its general name.
 
 ## [0.3.2] - 2026-06-03
 
@@ -62,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Test extras**: Added pandas and plotly to test dependencies for CI visualization tests
-- **Presets**: New `TOPOLOGY_TUNED` preset discovered via NSGA-II Pareto studies
+- **Presets (subsequently withdrawn)**: Added the former `TOPOLOGY_TUNED`
+  fixed-sample Ripser study configuration
 
 ### Changed
 - **Python version**: Updated minimum to 3.10 (was 3.9)

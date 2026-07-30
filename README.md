@@ -205,11 +205,10 @@ exact local graph is required.
 ```python
 from dire_rapids import DiReCuVS
 
-# Auto chooses all-neighbors when the API is available and cuvs_index_type is
-# also "auto"; otherwise it uses the established index-and-search path.
+# Auto preserves the released index-and-search policy and its size thresholds.
 reducer = DiReCuVS(cuvs_knn_method="auto")
 
-# Explicit partitioned/out-of-core all-neighbors graph construction.
+# Explicit, experimental partitioned/out-of-core all-neighbors construction.
 reducer = DiReCuVS(
     cuvs_knn_method="all_neighbors",
     all_neighbors_algo="nn_descent",
@@ -225,10 +224,39 @@ index and distance graph still has to fit on one GPU.
 `all_neighbors_algo="nn_descent"`,
 `all_neighbors_n_clusters=1`, `all_neighbors_device_ids=None`, and
 `all_neighbors_algo_params=None`. `all_neighbors_overlap_factor=None` selects
-0 for one cluster and `min(2, n_clusters - 1)` otherwise. To force the
-pre-26.06 behavior, set `cuvs_knn_method="index_search"`; explicitly selecting
-a legacy `cuvs_index_type` also keeps the index-and-search path when the method
-is `"auto"`.
+0 for one cluster and `min(2, n_clusters - 1)` otherwise. `"auto"` and
+`"index_search"` both retain the established index-and-search behavior.
+All-neighbors remains explicit opt-in until it clears frozen neighbor-recall,
+topology, local, context, and global embedding-quality gates; API availability
+alone does not change the graph used by existing code.
+
+The legacy `cuvs_index_type="auto"` thresholds are:
+
+| Rows / shape | Effective index |
+|---|---|
+| fewer than 50,000 | `flat` |
+| 50,000 to fewer than 500,000, or more than 500 dimensions | `ivf_flat` |
+| 500,000 to fewer than 5,000,000, at most 500 dimensions | `ivf_pq` |
+| 5,000,000 or more, at most 500 dimensions, supported metric | `cagra` |
+| otherwise | `ivf_pq` |
+
+After fitting, requested policy, effective backend/index, pipeline timings, and
+force-kernel fallback status are public and exportable:
+
+```python
+embedding = reducer.fit_transform(X)
+
+print(reducer.effective_cuvs_knn_method_)
+print(reducer.effective_cuvs_index_type_)
+print(reducer.stage_timings_)
+print(reducer.force_chunked_fallback_calls_)
+record = reducer.get_diagnostics()  # JSON-serializable dictionary
+```
+
+Forcing an index or opting into all-neighbors can materially change both
+runtime and approximation behavior. Benchmark records should therefore retain
+the requested and effective policies alongside neighbor recall and downstream
+embedding-quality results.
 
 See the [cuVS all-neighbors API documentation](https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/)
 for the underlying RAPIDS interface.

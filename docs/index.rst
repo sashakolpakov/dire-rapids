@@ -192,10 +192,10 @@ exact local graph is required.
 
    from dire_rapids import DiReCuVS
 
-   # Automatic when all-neighbors is available and cuvs_index_type is "auto".
+   # Automatic preserves the released index-and-search policy.
    reducer = DiReCuVS(cuvs_knn_method="auto")
 
-   # Partitioned/out-of-core construction. More than one cluster is required.
+   # Explicit experimental partitioned/out-of-core construction.
    reducer = DiReCuVS(
        cuvs_knn_method="all_neighbors",
        all_neighbors_algo="nn_descent",
@@ -207,13 +207,46 @@ exact local graph is required.
 ``all_neighbors_algo="nn_descent"``,
 ``all_neighbors_n_clusters=1``, ``all_neighbors_device_ids=None``, and
 ``all_neighbors_algo_params=None``. ``all_neighbors_overlap_factor=None``
-selects 0 for one cluster and ``min(2, n_clusters - 1)`` otherwise. Set
-``cuvs_knn_method="index_search"`` to force the established index-and-search
-path. With ``cuvs_knn_method="auto"``, explicitly selecting a legacy
-``cuvs_index_type`` also retains that path.
+selects 0 for one cluster and ``min(2, n_clusters - 1)`` otherwise.
+``cuvs_knn_method="auto"`` and ``"index_search"`` both retain the established
+index-and-search policy. All-neighbors is explicit opt-in until it clears
+frozen neighbor-recall, topology, local, context, and global quality gates;
+availability of the API alone does not change existing embeddings.
 
 Partitioning reduces the local graph-builder working set, but the final
 ``N x k`` index and distance graph must still fit on one GPU.
+
+The legacy automatic index thresholds are:
+
+* fewer than 50,000 rows: exact/flat;
+* 50,000 to fewer than 500,000 rows, or more than 500 dimensions: IVF-Flat;
+* 500,000 to fewer than 5,000,000 rows at no more than 500 dimensions: IVF-PQ;
+* at least 5,000,000 rows with at most 500 dimensions and a supported metric:
+  CAGRA;
+* otherwise: IVF-PQ.
+
+Fitted Backend Diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Requested policy is not a substitute for the algorithm that actually ran.
+After fitting, ``DiReCuVS`` exposes ``effective_cuvs_knn_method_`` and
+``effective_cuvs_index_type_``. All reducers expose per-stage
+``stage_timings_``, ``effective_knn_backend_``, and
+``force_chunked_fallback_calls_``. ``get_diagnostics()`` returns these values
+as a JSON-serializable dictionary:
+
+.. code-block:: python
+
+   embedding = reducer.fit_transform(X)
+   record = reducer.get_diagnostics()
+   print(record["cuvs"]["effective_index_type"])
+   print(record["stage_timings_seconds"])
+   print(record["force_chunked_fallback_calls"])
+
+Forcing an index or opting into all-neighbors can materially change both
+runtime and approximation behavior. Benchmark records should retain requested
+and effective policies together with recall and downstream embedding-quality
+measurements.
 
 See the `cuVS all-neighbors API documentation
 <https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/>`_

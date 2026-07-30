@@ -89,8 +89,9 @@ RUN python -c "import cuml; import torch; print('cuml -> torch import OK', cuml.
 # Also check the installed dire-rapids surface. GPU availability is expected
 # to be false during an ordinary image build, so this test only imports.
 RUN python -c "import torch; \
-    from dire_rapids import DiRePyTorch, TOPOLOGY_TUNED, presets; \
+    from dire_rapids import DiRePyTorch, presets; \
     from dire_rapids.betti_curve import compute_betti_curve_ripser; \
+    assert not hasattr(presets, 'TOPOLOGY_TUNED'); \
     print('dire-rapids imports OK; torch.cuda.is_available() ==', torch.cuda.is_available())"
 
 WORKDIR /workspace

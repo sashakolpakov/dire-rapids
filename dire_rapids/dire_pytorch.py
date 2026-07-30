@@ -18,6 +18,7 @@ Performance characteristics:
 
 import gc
 import importlib.util
+from time import perf_counter
 
 import numpy as np
 import torch
@@ -1218,6 +1219,10 @@ class DiRePyTorch(TransformerMixin):
                 a_val, b_val, self.cutoff,
             )
         except (RuntimeError, torch.cuda.OutOfMemoryError):
+            self.force_chunked_fallback_calls_ = (
+                getattr(self, "force_chunked_fallback_calls_", 0) + 1
+            )
+            self.force_chunked_fallback_used_ = True
             if self.device.type == 'cuda':
                 torch.cuda.empty_cache()
             self.logger.warning(
@@ -1266,6 +1271,46 @@ class DiRePyTorch(TransformerMixin):
             forces[s] += (rep * diff_n * inv_dist_n).sum(dim=1)
 
         return torch.clamp(forces, -self.cutoff, self.cutoff)
+
+    def _synchronize_for_timing(self):
+        """Synchronize pending accelerator work before reading a stage timer."""
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+
+    def _time_fit_stage(self, name, operation, *args, **kwargs):
+        """Run one fit stage and retain a wall-clock duration in seconds."""
+        self._synchronize_for_timing()
+        started = perf_counter()
+        result = operation(*args, **kwargs)
+        self._synchronize_for_timing()
+        self.stage_timings_[name] = perf_counter() - started
+        return result
+
+    def get_diagnostics(self):
+        """Return JSON-serializable fitted backend and pipeline diagnostics.
+
+        Returns
+        -------
+        dict
+            Requested/effective k-NN backend, per-stage wall-clock timings,
+            and whether the vectorized force implementation fell back to its
+            chunked implementation during the most recent fit.
+        """
+        return {
+            "requested_knn_backend": self.knn_backend,
+            "effective_knn_backend": getattr(
+                self, "effective_knn_backend_", None
+            ),
+            "stage_timings_seconds": dict(
+                getattr(self, "stage_timings_", {})
+            ),
+            "force_chunked_fallback_used": getattr(
+                self, "force_chunked_fallback_used_", False
+            ),
+            "force_chunked_fallback_calls": getattr(
+                self, "force_chunked_fallback_calls_", 0
+            ),
+        }
 
     def _optimize_layout(self, initial_positions):
         """
@@ -1359,6 +1404,12 @@ class DiRePyTorch(TransformerMixin):
             embedding = reducer.fit_transform(X)
             print(embedding.shape)  # (1000, 2)
         """
+        fit_started = perf_counter()
+        self.stage_timings_ = {}
+        self.effective_knn_backend_ = None
+        self.force_chunked_fallback_calls_ = 0
+        self.force_chunked_fallback_used_ = False
+
         # Seed torch RNGs for reproducibility (deferred from __init__
         # to avoid mutating global state at construction time).
         torch.manual_seed(self.random_state)
@@ -1406,13 +1457,23 @@ class DiRePyTorch(TransformerMixin):
         self._find_ab_params()
 
         # Compute k-NN graph
-        self._compute_knn(self._data, chunk_size=self.knn_chunk_size)
+        self._time_fit_stage(
+            "graph_construction",
+            self._compute_knn,
+            self._data,
+            chunk_size=self.knn_chunk_size,
+        )
+        self.effective_knn_backend_ = self._last_knn_backend
 
         # Initialize embedding
-        initial_embedding = self._initialize_embedding(self._data)
+        initial_embedding = self._time_fit_stage(
+            "initialization", self._initialize_embedding, self._data
+        )
 
         # Optimize layout
-        final_embedding = self._optimize_layout(initial_embedding)
+        final_embedding = self._time_fit_stage(
+            "layout", self._optimize_layout, initial_embedding
+        )
 
         # Convert back to numpy and store
         self._layout = torch_tensor_to_numpy(final_embedding)
@@ -1421,6 +1482,16 @@ class DiRePyTorch(TransformerMixin):
         if self.device.type == 'cuda':
             torch.cuda.empty_cache()
         gc.collect()
+        self._synchronize_for_timing()
+        self.stage_timings_["total"] = perf_counter() - fit_started
+        self.logger.info(
+            "Fit diagnostics: "
+            f"backend={self.effective_knn_backend_}, "
+            f"graph={self.stage_timings_['graph_construction']:.3f}s, "
+            f"initialization={self.stage_timings_['initialization']:.3f}s, "
+            f"layout={self.stage_timings_['layout']:.3f}s, "
+            f"chunked_force_fallbacks={self.force_chunked_fallback_calls_}"
+        )
 
         return self._layout
 
