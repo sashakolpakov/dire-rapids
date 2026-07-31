@@ -29,8 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **H100 all-neighbors validation**: A held-fixed 10x/arXiv A/B run found
   dataset-dependent runtime (about 26% slower on full 10x and 1.91x faster on
   full arXiv), graph overlap of 0.623 and 0.839, and mixed downstream quality.
-  The separate reproducibility harness therefore remains test-only and the
-  package default remains index/search.
+  It remains a viable explicit option, particularly for arXiv-like workloads,
+  but was not promoted to the default; the reproducibility harness stays on
+  its separate test branch.
 - **Atlas topology default**: `compute_betti_curve` now selects GPU then CPU
   Atlas by default. Ripser remains available with `prefer_ripser=True` as an
   explicit reference backend.

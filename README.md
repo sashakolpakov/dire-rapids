@@ -230,33 +230,16 @@ All-neighbors remains explicit opt-in until it clears frozen neighbor-recall,
 topology, local, context, and global embedding-quality gates; API availability
 alone does not change the graph used by existing code.
 
-#### H100 A/B observation (July 2026)
-
-An NVIDIA H100 PCIe run compared explicit single-cluster NN-descent
-all-neighbors against the released automatic index/search policy, holding the
-data, initialization, layout parameters, seeds, repeat count, and hardware
-fixed. Steady end-to-end times and fixed-query graph overlap were:
-
-| Dataset | Rows | Index/search | All-neighbors | Index/all speed ratio | Graph overlap |
-|---|---:|---:|---:|---:|---:|
-| 10x | 100,000 | 0.953 s | 1.525 s | 0.625 | 0.9862 |
-| arXiv | 100,000 | 1.646 s | 1.696 s | 0.970 | 0.9920 |
-| 10x | 1,306,127 | 7.413 s | 9.324 s | 0.795 | 0.6228 |
-| arXiv | 723,457 | 14.136 s | 7.394 s | 1.912 | 0.8393 |
-
-At full scale, all-neighbors was about 26% slower on 10x and 1.91x faster on
-arXiv. Downstream results were mixed rather than quality-neutral: balanced
-context accuracy decreased by 1.62 percentage points on 10x and 0.84 points
-on arXiv, while local, global, and Atlas-topology metrics moved in both
-directions. These are descriptive observations, not post-hoc pass thresholds.
-They support retaining all-neighbors as an explicit option rather than changing
-the default.
-
-The reproducible harness and raw-result workflow remain separate from this
-package on
-[`homological-stability-repro@a00aa54`](https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a).
-The run evaluated DiRe commit `f3a6161815b5526aeea4408729654008ee68a4cc`;
-the harness is test infrastructure and is not part of this PR.
+An H100 A/B audit produced mixed results. At full scale, all-neighbors was
+about 26% slower on 10x (0.623 graph overlap) but 1.91x faster on arXiv (0.839
+overlap); downstream quality moved in both directions and balanced context
+accuracy decreased by 1.62 and 0.84 percentage points, respectively. It was
+therefore not promoted to the default, but remains a viable explicit option,
+particularly given the arXiv performance. Full observations are recorded in
+[PR #12](https://github.com/sashakolpakov/dire-rapids/pull/12); the harness and
+raw-result workflow remain on the separate
+[`homological-stability-repro@a00aa54`](https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a)
+test branch.
 
 The legacy `cuvs_index_type="auto"` thresholds are:
 

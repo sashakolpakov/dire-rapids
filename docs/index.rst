@@ -213,60 +213,16 @@ index-and-search policy. All-neighbors is explicit opt-in until it clears
 frozen neighbor-recall, topology, local, context, and global quality gates;
 availability of the API alone does not change existing embeddings.
 
-H100 A/B observation (July 2026)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-An NVIDIA H100 PCIe run compared explicit single-cluster NN-descent
-all-neighbors with the released automatic index/search policy while holding
-data, initialization, layout parameters, seeds, repeat count, and hardware
-fixed.
-
-.. list-table:: Steady end-to-end runtime and fixed-query graph overlap
-   :header-rows: 1
-
-   * - Dataset
-     - Rows
-     - Index/search
-     - All-neighbors
-     - Index/all ratio
-     - Graph overlap
-   * - 10x
-     - 100,000
-     - 0.953 s
-     - 1.525 s
-     - 0.625
-     - 0.9862
-   * - arXiv
-     - 100,000
-     - 1.646 s
-     - 1.696 s
-     - 0.970
-     - 0.9920
-   * - 10x
-     - 1,306,127
-     - 7.413 s
-     - 9.324 s
-     - 0.795
-     - 0.6228
-   * - arXiv
-     - 723,457
-     - 14.136 s
-     - 7.394 s
-     - 1.912
-     - 0.8393
-
-At full scale, all-neighbors was about 26% slower on 10x and 1.91x faster on
-arXiv. Downstream results were mixed rather than quality-neutral: balanced
-context accuracy decreased by 1.62 percentage points on 10x and 0.84 points
-on arXiv, while local, global, and Atlas-topology metrics moved in both
-directions. These are descriptive observations, not post-hoc pass thresholds,
-and support keeping all-neighbors explicit rather than making it automatic.
-
-The reproducible harness and raw-result workflow remain on the separate
+An H100 A/B audit produced mixed results. At full scale, all-neighbors was
+about 26% slower on 10x (0.623 graph overlap) but 1.91x faster on arXiv (0.839
+overlap); downstream quality moved in both directions and balanced context
+accuracy decreased by 1.62 and 0.84 percentage points, respectively. It was
+therefore not promoted to the default, but remains a viable explicit option,
+particularly given the arXiv performance. Full observations are recorded in
+`PR #12 <https://github.com/sashakolpakov/dire-rapids/pull/12>`_; the harness
+and raw-result workflow remain on the separate
 `homological-stability-repro test branch
-<https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a>`_
-at commit ``a00aa54``. It evaluated DiRe commit
-``f3a6161815b5526aeea4408729654008ee68a4cc`` and is not shipped by this PR.
+<https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a>`_.
 
 Partitioning reduces the local graph-builder working set, but the final
 ``N x k`` index and distance graph must still fit on one GPU.
