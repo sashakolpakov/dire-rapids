@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **cuVS all-neighbors policy**: The RAPIDS reducer preserves the released
   automatic index-and-search policy. All-neighbors is explicit opt-in until
   frozen downstream quality gates justify changing existing embeddings.
+- **H100 all-neighbors validation**: A held-fixed 10x/arXiv A/B run found
+  dataset-dependent runtime (about 26% slower on full 10x and 1.91x faster on
+  full arXiv), graph overlap of 0.623 and 0.839, and mixed downstream quality.
+  The separate reproducibility harness therefore remains test-only and the
+  package default remains index/search.
+- **Atlas topology default**: `compute_betti_curve` now selects GPU then CPU
+  Atlas by default. Ripser remains available with `prefer_ripser=True` as an
+  explicit reference backend.
 - **GPU graph handoff**: Reuses a DLPack-backed PyTorch view of the cuVS graph
   during layout optimization instead of uploading the host copy again.
 

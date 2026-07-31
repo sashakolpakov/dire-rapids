@@ -230,6 +230,34 @@ All-neighbors remains explicit opt-in until it clears frozen neighbor-recall,
 topology, local, context, and global embedding-quality gates; API availability
 alone does not change the graph used by existing code.
 
+#### H100 A/B observation (July 2026)
+
+An NVIDIA H100 PCIe run compared explicit single-cluster NN-descent
+all-neighbors against the released automatic index/search policy, holding the
+data, initialization, layout parameters, seeds, repeat count, and hardware
+fixed. Steady end-to-end times and fixed-query graph overlap were:
+
+| Dataset | Rows | Index/search | All-neighbors | Index/all speed ratio | Graph overlap |
+|---|---:|---:|---:|---:|---:|
+| 10x | 100,000 | 0.953 s | 1.525 s | 0.625 | 0.9862 |
+| arXiv | 100,000 | 1.646 s | 1.696 s | 0.970 | 0.9920 |
+| 10x | 1,306,127 | 7.413 s | 9.324 s | 0.795 | 0.6228 |
+| arXiv | 723,457 | 14.136 s | 7.394 s | 1.912 | 0.8393 |
+
+At full scale, all-neighbors was about 26% slower on 10x and 1.91x faster on
+arXiv. Downstream results were mixed rather than quality-neutral: balanced
+context accuracy decreased by 1.62 percentage points on 10x and 0.84 points
+on arXiv, while local, global, and Atlas-topology metrics moved in both
+directions. These are descriptive observations, not post-hoc pass thresholds.
+They support retaining all-neighbors as an explicit option rather than changing
+the default.
+
+The reproducible harness and raw-result workflow remain separate from this
+package on
+[`homological-stability-repro@a00aa54`](https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a).
+The run evaluated DiRe commit `f3a6161815b5526aeea4408729654008ee68a4cc`;
+the harness is test infrastructure and is not part of this PR.
+
 The legacy `cuvs_index_type="auto"` thresholds are:
 
 | Rows / shape | Effective index |
@@ -285,20 +313,23 @@ reducer = create_dire(knn_backend='cuvs')
 
 ## Betti Curves / Topology
 
-The `betti_curve` module computes **filtered Betti curves** that track topological features across filtration thresholds. It prefers `ripser` when available; otherwise it builds a kNN atlas complex and updates Betti numbers incrementally with union-find for beta\_0 and GF(2) bitset elimination for beta\_1.
+The `betti_curve` module computes **filtered Betti curves** that track topological features across filtration thresholds. By default it builds a kNN atlas complex and updates Betti numbers incrementally with union-find for beta\_0 and GF(2) bitset elimination for beta\_1. Ripser remains available as an explicit reference backend.
 
 ```python
 from dire_rapids.betti_curve import compute_betti_curve
 
-# Automatic backend selection: ripser, then GPU atlas, then CPU atlas
+# Default backend selection: GPU atlas, then CPU atlas
 result = compute_betti_curve(X, k_neighbors=20, n_steps=50)
+
+# Explicit reference-backend selection: ripser, then atlas if unavailable
+reference = compute_betti_curve(X, n_steps=50, prefer_ripser=True)
 
 print(result['filtration_values'])  # filtration thresholds
 print(result['beta_0'])             # connected components at each step
 print(result['beta_1'])             # 1-cycles (loops) at each step
 ```
 
-The atlas fallback uses GPU kNN when cuVS/cuML is available, then performs the set-heavy atlas merge and incremental rank update on CPU.
+The Atlas path uses GPU kNN when cuVS/cuML is available, then performs the set-heavy atlas merge and incremental rank update on CPU. No topology-tuned public preset is exported: its fixed-sample Ripser selection did not survive the paired held-out Atlas audit described in the changelog.
 
 ## ReducerRunner Framework
 

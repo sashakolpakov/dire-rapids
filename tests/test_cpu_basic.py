@@ -408,6 +408,48 @@ class TestDiRePyTorchNormalization:
         # filtration steps — the big circular loop.
         assert int(result['beta_1'].max()) >= 1
 
+    def test_betti_curve_selector_defaults_to_atlas(self, monkeypatch):
+        """Installing Ripser must not silently change the public default."""
+        import dire_rapids.betti_curve as betti_curve
+
+        sentinel = {"backend": "cpu-atlas"}
+
+        def unexpected_ripser(*args, **kwargs):
+            raise AssertionError("default selector must not call ripser")
+
+        monkeypatch.setattr(betti_curve, "compute_betti_curve_ripser", unexpected_ripser)
+        monkeypatch.setattr(
+            betti_curve,
+            "compute_betti_curve_fast",
+            lambda *args, **kwargs: sentinel,
+        )
+
+        result = betti_curve.compute_betti_curve(
+            np.zeros((4, 2), dtype=np.float32),
+            use_gpu=False,
+        )
+
+        assert result is sentinel
+
+    def test_betti_curve_selector_keeps_ripser_as_explicit_option(self, monkeypatch):
+        """Callers can still request Ripser without making it the default."""
+        import dire_rapids.betti_curve as betti_curve
+
+        sentinel = {"backend": "ripser"}
+        monkeypatch.setattr(
+            betti_curve,
+            "compute_betti_curve_ripser",
+            lambda *args, **kwargs: sentinel,
+        )
+
+        result = betti_curve.compute_betti_curve(
+            np.zeros((4, 2), dtype=np.float32),
+            use_gpu=False,
+            prefer_ripser=True,
+        )
+
+        assert result is sentinel
+
     def test_normalize_false_preserves_old_behavior(self):
         """normalize=False should leave _data untouched, for back-compat."""
         X = np.full((40, 10), 7.0, dtype=np.float32)
