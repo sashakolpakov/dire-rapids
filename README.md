@@ -270,7 +270,9 @@ the requested and effective policies alongside neighbor recall and downstream
 embedding-quality results.
 
 See the [cuVS all-neighbors API documentation](https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/)
-for the underlying RAPIDS interface.
+for the underlying RAPIDS interface and
+[*Massive-Scale Out-of-Core UMAP on the GPU*](110_Massive_Scale_Out_Of_Core_.pdf)
+for the partitioned all-neighbors algorithm and scale-out design.
 
 ### Backend and k-NN Engine Selection
 
