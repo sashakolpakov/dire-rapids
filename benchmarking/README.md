@@ -126,19 +126,29 @@ refinement can be run with `--design local`. It evaluates 18 one-parameter
 changes around default (plus the default control), making any safe improvement
 interpretable and adding only 152 fits. The quality gates are not relaxed.
 
+After the coarse search identified `spread=0.8` as the only setting that
+transferred, `--design atlas-fine` resolves a distinct Atlas preset with seven
+nearby candidates, the current default control, and the retained Ripser
+incumbent. It adds 72 tuning fits; only its quality-feasible Atlas winner is
+eligible for held-out confirmation.
+
 The completed H100 run retained 272 broad-search, 152 local-refinement, 12
-seed-42 screening, and 120 repeated-validation records. No broad candidate
-passed every safeguard. The local search selected `spread=1.2` for Atlas and
-`spread=0.8` for Ripser, but only `spread=0.8` transferred: over six untouched
-datasets and 20 paired seeds, its geometric ratios to default were 0.951 for
-Atlas and 0.908 for Ripser, with numerical wins in 11/12 cells under both
-evaluators. It beat the retained cell-wise UMAP/t-SNE envelope in suite
-aggregate (0.944 for repeated Atlas; 0.891 for the canonical seed-42 Ripser
-screen), but only in 6/12 individual cells. The result supports separate
-canonical `ATLAS_TUNED` and `RIPSER_TUNED` objective names, both currently
-using the validated `spread=0.8` setting. The names may diverge when later
-evaluator-specific evidence supports different parameters; the failed
-Atlas-selected `spread=1.2` candidate is not exported.
+seed-42 screening, 120 repeated crossed-validation, 72 Atlas-refinement, and
+120 Atlas-confirmation records. No broad candidate passed every safeguard.
+The coarse local search selected `spread=1.2` for Atlas and `spread=0.8` for
+Ripser, but only `spread=0.8` transferred. The focused refinement then selected
+`max_iter_layout=96` for Atlas, distinct from Ripser's 128. On six untouched
+datasets and 20 paired seeds, `ATLAS_TUNED` had geometric ratios of 0.908 to
+default and 0.884 to the retained cell-wise UMAP/t-SNE envelope; it won 11/12
+default cells and 6/12 comparator cells. `RIPSER_TUNED` retained its 0.908
+ratio and 11/12 wins against default, plus a 0.891 canonical seed-42 ratio and
+6/12 wins against the UMAP/t-SNE envelope. The failed Atlas-selected
+`spread=1.2` candidate is not exported.
+
+An immediate identical seed-42 reproducibility check found nonzero Atlas drift
+in 2/24 topology metrics, with a 0.348 maximum absolute cell change and only a
+0.38% aggregate Atlas change; Ripser metrics matched exactly. The preset claims
+therefore use the 20-seed paired distributions, not bitwise GPU equality.
 
 The complete raw records, manifests, tuning reference curves, and summaries
 are retained in `tests/data/topology_preset_search_h100_audit.tar.gz`; the

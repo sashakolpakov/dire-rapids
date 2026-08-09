@@ -339,16 +339,16 @@ held-out replacements have canonical evaluator-specific names::
    atlas_embedding = create_dire(**ATLAS_TUNED).fit_transform(X)
    ripser_embedding = create_dire(**RIPSER_TUNED).fit_transform(X)
 
-Both currently change only ``spread`` from ``1.0`` to ``0.8``. They are
-separate public objective contracts even though the best validated parameters
-presently coincide. Across six untouched datasets and 20 paired seeds this
-setting improved 11/12 Atlas and 11/12 Ripser cells against current default
-DiRe, with geometric discrepancy ratios of 0.951 and 0.908. Against the
-strongest retained UMAP/t-SNE method in each cell it won 6/12 cells for both
-evaluators, so neither name promises a universal topology improvement. The
-initially Atlas-selected ``spread=1.2`` candidate failed to transfer;
-``ATLAS_TUNED`` therefore uses the independently validated ``spread=0.8``
-setting.
+The presets are genuinely distinct. Both use ``spread=0.8``, while
+``ATLAS_TUNED`` uses ``max_iter_layout=96`` and ``RIPSER_TUNED`` uses 128.
+Across six untouched datasets and 20 paired seeds each improved 11/12 cells
+against current default DiRe under its respective evaluator, with geometric
+discrepancy ratios of 0.908 for both. Against the strongest retained UMAP/t-SNE
+method in each cell they won 6/12 cells, with aggregate ratios of 0.884 for
+repeated Atlas and 0.891 for the canonical seed-42 Ripser screen. Neither name
+promises a universal topology improvement. The initially Atlas-selected
+``spread=1.2`` candidate failed to transfer; a subsequent seven-candidate
+Atlas refinement selected and held-out-confirmed the 96-iteration layout.
 
 See :doc:`api/dire_rapids.metrics` for full API reference.
 

@@ -8,8 +8,26 @@
       "RIPSER_TUNED"
     ],
     "separate_evaluator_names": true,
-    "canonical_parameter_sets_currently_distinct": false,
-    "conclusion": "The Atlas-selected spread=1.2 candidate did not transfer. The Ripser-selected spread=0.8 candidate passed every tuning quality guard and independently improved both evaluators against default on the held-out suite, supporting canonical ATLAS_TUNED and RIPSER_TUNED objective names with currently coincident parameters. It beats the retained cell-wise UMAP/t-SNE envelope in suite aggregate, not in every cell."
+    "canonical_parameter_sets_currently_distinct": true,
+    "atlas_tuned_parameters": {
+      "cutoff": 42.0,
+      "init": "pca",
+      "max_iter_layout": 96,
+      "min_dist": 0.01,
+      "n_neighbors": 16,
+      "neg_ratio": 8,
+      "spread": 0.8
+    },
+    "ripser_tuned_parameters": {
+      "cutoff": 42.0,
+      "init": "pca",
+      "max_iter_layout": 128,
+      "min_dist": 0.01,
+      "n_neighbors": 16,
+      "neg_ratio": 8,
+      "spread": 0.8
+    },
+    "conclusion": "The coarse Atlas-selected spread=1.2 candidate did not transfer, while spread=0.8 did. A focused quality-gated refinement around that transferred setting selected max_iter_layout=96 for Atlas, distinct from Ripser's 128. On the six-dataset, 20-seed held-out suite ATLAS_TUNED improved 11/12 cells against default with a 0.908 geometric ratio and beat the retained cell-wise UMAP/t-SNE envelope in aggregate at 0.884. RIPSER_TUNED retains its independently confirmed 0.908 ratio and 11/12 wins against default. Neither preset wins every comparator cell."
   },
   "broad_search": {
     "design": "32-candidate deterministic Sobol",
@@ -32,6 +50,24 @@
     "ripser_ratio_to_default": 0.9357152797510608,
     "source_revision": "6942167ba83e438bdb5f78ab2077a7cfcf296f33"
   },
+  "atlas_fine_refinement": {
+    "design": "seven candidates around the transferred Ripser setting plus default and incumbent controls",
+    "records": 72,
+    "candidate_count": 7,
+    "eligible_candidates": 2,
+    "atlas_selection": "atlas_max_iter_layout_96",
+    "atlas_ratio_to_default": 0.9932809305421854,
+    "parameters": {
+      "cutoff": 42.0,
+      "init": "pca",
+      "max_iter_layout": 96,
+      "min_dist": 0.01,
+      "n_neighbors": 16,
+      "neg_ratio": 8,
+      "spread": 0.8
+    },
+    "source_revision": "09dbfec56d222d7211584cda866264f67b1eeb50"
+  },
   "held_out_seed42_screen": {
     "datasets": 6,
     "candidates": 2,
@@ -45,6 +81,7 @@
     "source_revision": "f8d210d028df641974f232b65e3858fda38ed67e"
   },
   "held_out_confirmation": {
+    "canonical_role": "RIPSER_TUNED",
     "candidate": "local_spread_0p8",
     "parameters": {
       "cutoff": 42.0,
@@ -84,6 +121,63 @@
       "scope": "archived canonical seed 42; no repeated comparator claim"
     },
     "source_revision": "370b38f0df2b161621feefa3f66105298a337c07"
+  },
+  "held_out_atlas_confirmation": {
+    "candidate": "atlas_max_iter_layout_96",
+    "canonical_role": "ATLAS_TUNED",
+    "parameters": {
+      "cutoff": 42.0,
+      "init": "pca",
+      "max_iter_layout": 96,
+      "min_dist": 0.01,
+      "n_neighbors": 16,
+      "neg_ratio": 8,
+      "spread": 0.8
+    },
+    "datasets": 6,
+    "layout_seeds": 20,
+    "records": 120,
+    "atlas_vs_default": {
+      "geometric_ratio": 0.907720221255276,
+      "mean_wins": 11,
+      "paired_interval_wins": 8,
+      "cells": 12
+    },
+    "atlas_vs_best_cellwise_umap_tsne": {
+      "geometric_ratio": 0.8843051909450077,
+      "mean_wins": 6,
+      "paired_interval_wins": 6,
+      "cells": 12,
+      "paired_counts": "10 for CPU comparators and 20 for GPU comparators"
+    },
+    "ripser_diagnostic_vs_default": {
+      "geometric_ratio": 0.9010559046840149,
+      "mean_wins": 10,
+      "paired_interval_wins": 8,
+      "cells": 12
+    },
+    "ripser_diagnostic_vs_best_cellwise_umap_tsne": {
+      "geometric_ratio": 0.8802005188286659,
+      "wins": 6,
+      "cells": 12,
+      "scope": "archived canonical seed 42; no repeated comparator claim"
+    },
+    "source_revision": "09dbfec56d222d7211584cda866264f67b1eeb50"
+  },
+  "seed42_reproducibility_check": {
+    "candidate": "atlas_max_iter_layout_96",
+    "datasets": 6,
+    "records": 6,
+    "topology_metrics_compared": 24,
+    "topology_metrics_with_nonzero_drift": 2,
+    "maximum_absolute_topology_metric_drift": 0.348214689101793,
+    "maximum_drift_cell": "blobs/atlas/dtw_beta1",
+    "mean_absolute_topology_metric_drift": 0.014528091814616007,
+    "atlas_geometric_repeat_to_first_ratio": 1.003823391268141,
+    "ripser_geometric_repeat_to_first_ratio": 1.0,
+    "effective_policy_match": true,
+    "dataset_subset_reference_provenance_match": true,
+    "conclusion": "The H100 layout is not bitwise deterministic: 2/24 topology metrics changed on an immediate identical seed-42 rerun. The aggregate Atlas change was 0.38%, while Ripser metrics matched exactly. Canonical claims therefore use the retained 20-seed paired distributions rather than exact single-run equality."
   },
   "quality_guard": {
     "datasets": [

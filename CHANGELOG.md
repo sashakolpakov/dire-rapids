@@ -10,11 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Canonical Atlas/Ripser presets**: Added separate `ATLAS_TUNED` and
   `RIPSER_TUNED` public objective contracts after a disjoint crossed search and
-  six-dataset, 20-seed H100 confirmation. Their current parameters coincide,
-  changing only `spread` from 1.0 to 0.8; this setting improved 11/12 held-out
-  cells against default under each evaluator. The initially Atlas-selected
-  `spread=1.2` candidate did not transfer, and cells where UMAP or t-SNE
-  remains better stay documented.
+  six-dataset, 20-seed H100 confirmation. Both use `spread=0.8`, but a focused
+  Atlas refinement selected `max_iter_layout=96` while Ripser retains 128.
+  Each improved 11/12 held-out cells against default under its evaluator. The
+  initially Atlas-selected `spread=1.2` candidate did not transfer, and cells
+  where UMAP or t-SNE remains better stay documented.
 - **Density visualization for large embeddings**: `DiRePyTorch.visualize` and `ReducerRunner` now switch large 2D embeddings from per-point WebGL scatter to a binned 2D-histogram density so the figure payload stays bounded regardless of point count (binning is done server-side with `np.histogram2d`; only a fixed `n_bins × n_bins` grid is shipped). Categorical labels render as a per-category density overlay (one filled-contour layer per class); unlabeled data renders a count heatmap and continuous labels a mean-value heatmap. Controlled by `mode` (`'auto'` | `'scatter'` | `'density'`) and `density_threshold`. Exposed as the shared, public `dire_rapids.build_embedding_figure` helper.
 - **cuVS all-neighbors graph builder**: `DiReCuVS` can use RAPIDS 26.06's
   purpose-built all-neighbors API, including host-backed partitioned builds,

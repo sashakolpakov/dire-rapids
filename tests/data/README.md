@@ -45,15 +45,17 @@ summary files are also unpacked under `topology_historical_h100/` for ordinary
 diff review. The predeclared result found no material post-`9117dc4`
 implementation change in any Atlas cell.
 
-`topology_preset_search_h100_audit.tar.gz` is the completed 556-record crossed
-search and validation archive (SHA-256
-`ca101bd25db6e24a438718544b5f4a4f799ab4b1f9e5f44ba88cb27f1cc813eb`).
+`topology_preset_search_h100_audit.tar.gz` is the completed 754-record search,
+validation, and reproducibility archive (SHA-256
+`feb553d81aa5cc01adc957eecf02b85c6a9e2ae7003c4b4580d8900f62e68c45`).
 It contains the 272-record broad search, 152-record guarded local refinement,
-12-record seed-42 held-out screen, 120-record/20-seed confirmation, all four
-manifests and summaries, eight tuning reference curves, and the frozen tuning
+12-record seed-42 held-out screen, 120-record/20-seed crossed confirmation,
+72-record focused Atlas refinement, 120-record/20-seed Atlas confirmation, all
+six search/validation manifests and summaries, a six-record identical-seed
+reproducibility check, eight tuning reference curves, and the frozen tuning
 manifest. The 22 MB tuning arrays are omitted but their file and array hashes
-remain enforced. The compact conclusion is also unpacked under
-`topology_preset_search_h100/`: only `spread=0.8` transferred. It independently
-improved both evaluators on the held-out suite, supporting canonical
-`ATLAS_TUNED` and `RIPSER_TUNED` objective names with currently coincident
-parameters.
+remain enforced. The reproducibility check found a 0.38% aggregate Atlas
+change and exact Ripser agreement, so claims use paired 20-seed distributions
+rather than bitwise GPU equality. The compact conclusion is unpacked under
+`topology_preset_search_h100/`: `ATLAS_TUNED` uses `spread=0.8` with 96 layout
+iterations, while `RIPSER_TUNED` uses `spread=0.8` with 128.

@@ -350,27 +350,30 @@ class TestDiRePyTorchNormalization:
         assert "TOPOLOGY_TUNED" not in dire_rapids.presets.__all__
 
     def test_canonical_topology_presets_are_named_and_frozen(self):
-        """Both evaluator contracts retain the held-out parameter set."""
+        """Both evaluator contracts retain distinct held-out parameter sets."""
         import dire_rapids
 
-        expected = {
+        shared = {
             "init": "pca",
             "n_neighbors": 16,
             "spread": 0.8,
             "min_dist": 1e-2,
             "cutoff": 42.0,
             "neg_ratio": 8,
-            "max_iter_layout": 128,
         }
-        for name in ("ATLAS_TUNED", "RIPSER_TUNED"):
-            assert getattr(dire_rapids, name) == expected
-            assert getattr(dire_rapids.presets, name) == expected
+        expected = {
+            "ATLAS_TUNED": {**shared, "max_iter_layout": 96},
+            "RIPSER_TUNED": {**shared, "max_iter_layout": 128},
+        }
+        for name, parameters in expected.items():
+            assert getattr(dire_rapids, name) == parameters
+            assert getattr(dire_rapids.presets, name) == parameters
             assert name in dire_rapids.__all__
         assert dire_rapids.presets.__all__ == [
             "ATLAS_TUNED",
             "RIPSER_TUNED",
         ]
-        assert dire_rapids.ATLAS_TUNED is not dire_rapids.RIPSER_TUNED
+        assert dire_rapids.ATLAS_TUNED != dire_rapids.RIPSER_TUNED
 
     def test_frozen_topology_preset_audit_retains_failure_summary(self):
         """The evidence behind preset removal remains a checked fixture."""

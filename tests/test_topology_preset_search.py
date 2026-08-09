@@ -33,13 +33,15 @@ def test_retained_h100_search_archive_contains_complete_evidence():
         / "topology_preset_search_h100_audit.tar.gz"
     )
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == (
-        "ca101bd25db6e24a438718544b5f4a4f799ab4b1f9e5f44ba88cb27f1cc813eb"
+        "feb553d81aa5cc01adc957eecf02b85c6a9e2ae7003c4b4580d8900f62e68c45"
     )
     expected_records = {
         "search-production-auto": 272,
         "search-local-auto": 152,
+        "search-atlas-fine-auto": 72,
         "validation-seed42": 12,
         "validation-spread08-seeds42-61": 120,
+        "validation-atlas-maxiter96-seeds42-61": 120,
     }
     with tarfile.open(archive, "r:gz") as bundle:
         names = set(bundle.getnames())
@@ -56,6 +58,11 @@ def test_retained_h100_search_archive_contains_complete_evidence():
             stream = bundle.extractfile(raw_name)
             assert stream is not None
             assert len(stream.read().splitlines()) == count
+        reproducibility_stream = bundle.extractfile(
+            "reprocheck/validation-atlas-maxiter96-seed42-repeat.jsonl"
+        )
+        assert reproducibility_stream is not None
+        assert len(reproducibility_stream.read().splitlines()) == 6
         summary_stream = bundle.extractfile(
             "summary/topology_preset_search_summary.json"
         )
@@ -70,11 +77,26 @@ def test_retained_h100_search_archive_contains_complete_evidence():
         assert summary["decision"]["separate_evaluator_names"] is True
         assert (
             summary["decision"]["canonical_parameter_sets_currently_distinct"]
-            is False
+            is True
         )
+        assert summary["decision"]["atlas_tuned_parameters"] != summary[
+            "decision"
+        ]["ripser_tuned_parameters"]
         confirmation = summary["held_out_confirmation"]
         assert confirmation["layout_seeds"] == 20
         assert confirmation["ripser_vs_default"]["mean_wins"] == 11
+        atlas = summary["held_out_atlas_confirmation"]
+        assert atlas["layout_seeds"] == 20
+        assert atlas["atlas_vs_default"]["mean_wins"] == 11
+        assert atlas["atlas_vs_default"]["paired_interval_wins"] == 8
+        assert (
+            atlas["atlas_vs_best_cellwise_umap_tsne"]["geometric_ratio"]
+            < 0.9
+        )
+        reproducibility = summary["seed42_reproducibility_check"]
+        assert reproducibility["topology_metrics_with_nonzero_drift"] == 2
+        assert reproducibility["atlas_geometric_repeat_to_first_ratio"] < 1.01
+        assert reproducibility["ripser_geometric_repeat_to_first_ratio"] == 1.0
 
 
 @pytest.mark.cpu
@@ -142,6 +164,31 @@ def test_local_refinement_changes_exactly_one_default_parameter():
             key
             for key, value in record["parameters"].items()
             if value != search.DEFAULT_PARAMETERS[key]
+        }
+        assert len(changed) == 1
+
+
+@pytest.mark.cpu
+def test_atlas_refinement_is_small_and_distinct_from_ripser_tuned():
+    candidates = search.atlas_candidate_parameters()
+    ripser = candidates["ripser_tuned"]
+
+    assert candidates["default"]["parameters"] == search.DEFAULT_PARAMETERS
+    assert ripser["role"] == "incumbent_control"
+    assert ripser["parameters"] == {
+        **search.DEFAULT_PARAMETERS,
+        "spread": 0.8,
+    }
+    assert len(candidates) == 2 + 7
+    for name, record in candidates.items():
+        if record["role"] != "candidate":
+            continue
+        assert name.startswith("atlas_")
+        assert record["parameters"] != ripser["parameters"]
+        changed = {
+            key
+            for key, value in record["parameters"].items()
+            if value != ripser["parameters"][key]
         }
         assert len(changed) == 1
 
