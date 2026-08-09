@@ -1,10 +1,15 @@
 {
   "schema_version": 1,
   "decision": {
-    "atlas_tuned_export": null,
+    "atlas_tuned_export": "ATLAS_TUNED",
     "ripser_tuned_export": "RIPSER_TUNED",
-    "separate_evaluator_presets_required": false,
-    "conclusion": "The Atlas-selected spread=1.2 candidate did not transfer. The Ripser-selected spread=0.8 candidate passed every tuning quality guard and improved both evaluators against default on the held-out suite, so only the narrowly scoped RIPSER_TUNED name is supported. It beats the retained cell-wise UMAP/t-SNE envelope in suite aggregate, not in every cell."
+    "canonical_evaluator_exports": [
+      "ATLAS_TUNED",
+      "RIPSER_TUNED"
+    ],
+    "separate_evaluator_names": true,
+    "canonical_parameter_sets_currently_distinct": false,
+    "conclusion": "The Atlas-selected spread=1.2 candidate did not transfer. The Ripser-selected spread=0.8 candidate passed every tuning quality guard and independently improved both evaluators against default on the held-out suite, supporting canonical ATLAS_TUNED and RIPSER_TUNED objective names with currently coincident parameters. It beats the retained cell-wise UMAP/t-SNE envelope in suite aggregate, not in every cell."
   },
   "broad_search": {
     "design": "32-candidate deterministic Sobol",

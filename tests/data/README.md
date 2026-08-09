@@ -47,11 +47,13 @@ implementation change in any Atlas cell.
 
 `topology_preset_search_h100_audit.tar.gz` is the completed 556-record crossed
 search and validation archive (SHA-256
-`96ff2c6ee70a0920909abc11ffbce1c9274102bf3562f5d67f1677cb3431fb22`).
+`ca101bd25db6e24a438718544b5f4a4f799ab4b1f9e5f44ba88cb27f1cc813eb`).
 It contains the 272-record broad search, 152-record guarded local refinement,
 12-record seed-42 held-out screen, 120-record/20-seed confirmation, all four
 manifests and summaries, eight tuning reference curves, and the frozen tuning
 manifest. The 22 MB tuning arrays are omitted but their file and array hashes
 remain enforced. The compact conclusion is also unpacked under
-`topology_preset_search_h100/`: only `spread=0.8` transferred, supporting
-`RIPSER_TUNED` and no separate `ATLAS_TUNED` export.
+`topology_preset_search_h100/`: only `spread=0.8` transferred. It independently
+improved both evaluators on the held-out suite, supporting canonical
+`ATLAS_TUNED` and `RIPSER_TUNED` objective names with currently coincident
+parameters.

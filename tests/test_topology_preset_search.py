@@ -33,7 +33,7 @@ def test_retained_h100_search_archive_contains_complete_evidence():
         / "topology_preset_search_h100_audit.tar.gz"
     )
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == (
-        "96ff2c6ee70a0920909abc11ffbce1c9274102bf3562f5d67f1677cb3431fb22"
+        "ca101bd25db6e24a438718544b5f4a4f799ab4b1f9e5f44ba88cb27f1cc813eb"
     )
     expected_records = {
         "search-production-auto": 272,
@@ -62,7 +62,16 @@ def test_retained_h100_search_archive_contains_complete_evidence():
         assert summary_stream is not None
         summary = json.loads(summary_stream.read())
         assert summary["decision"]["ripser_tuned_export"] == "RIPSER_TUNED"
-        assert summary["decision"]["atlas_tuned_export"] is None
+        assert summary["decision"]["atlas_tuned_export"] == "ATLAS_TUNED"
+        assert summary["decision"]["canonical_evaluator_exports"] == [
+            "ATLAS_TUNED",
+            "RIPSER_TUNED",
+        ]
+        assert summary["decision"]["separate_evaluator_names"] is True
+        assert (
+            summary["decision"]["canonical_parameter_sets_currently_distinct"]
+            is False
+        )
         confirmation = summary["held_out_confirmation"]
         assert confirmation["layout_seeds"] == 20
         assert confirmation["ripser_vs_default"]["mean_wins"] == 11

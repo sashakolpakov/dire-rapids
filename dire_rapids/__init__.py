@@ -104,7 +104,7 @@ except ImportError:
 # Remaining submodules for convenient access
 from . import betti_curve
 from . import presets
-from .presets import RIPSER_TUNED
+from .presets import ATLAS_TUNED, RIPSER_TUNED
 
 # Build __all__ based on available modules
 __all__ = [
@@ -117,6 +117,7 @@ __all__ = [
     'metrics',
     'betti_curve',
     'presets',
+    'ATLAS_TUNED',
     'RIPSER_TUNED',
 ]
 if HAS_CUVS:
