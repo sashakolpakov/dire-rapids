@@ -5,7 +5,10 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import sys
+import types
 
+import numpy as np
 import pytest
 
 
@@ -155,3 +158,118 @@ def test_historical_reducer_kwargs_keep_removed_preset_private_and_pinned():
     assert pr_auto["knn_backend"] == "cuvs"
     assert pr_auto["cuvs_knn_method"] == "auto"
     assert pr_auto["cuvs_index_type"] == "auto"
+
+
+@pytest.mark.cpu
+def test_run_variant_writes_resumable_records_and_shared_reference_cache(
+    tmp_path, monkeypatch
+):
+    data = np.asarray(
+        [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
+        dtype=np.float32,
+    )
+    dataset_hash = historical.array_sha256(data)
+    dataset_manifest = {
+        "datasets": {"tiny": {"array_sha256": dataset_hash}}
+    }
+
+    class FakeReducer:
+        cuvs_index_type = "flat"
+
+        def fit_transform(self, values):
+            return np.asarray(values[:, :2], dtype=np.float32)
+
+    class FakeDire:
+        @staticmethod
+        def create_dire(**_kwargs):
+            return FakeReducer()
+
+    class FakeEvaluator:
+        calls = 0
+
+        @classmethod
+        def curve(cls, _values, **_kwargs):
+            cls.calls += 1
+            return {
+                "filtration_values": np.asarray([1.0, 0.0]),
+                "beta_0": np.asarray([1, 4]),
+                "beta_1": np.asarray([0, 0]),
+                "n_edges_active": np.asarray([4, 0]),
+                "n_triangles_active": np.asarray([0, 0]),
+            }
+
+        compute_betti_curve_gpu = curve
+        compute_betti_curve_ripser = curve
+
+    fake_cupy = types.ModuleType("cupy")
+    fake_cupy.cuda = types.SimpleNamespace(
+        runtime=types.SimpleNamespace(
+            runtimeGetVersion=lambda: 13000,
+            driverGetVersion=lambda: 13000,
+        )
+    )
+    fake_cupy.get_default_memory_pool = lambda: types.SimpleNamespace(
+        free_all_blocks=lambda: None
+    )
+    fake_cuvs = types.ModuleType("cuvs")
+    fake_neighbors = types.ModuleType("cuvs.neighbors")
+    fake_neighbors.brute_force = object()
+    fake_cuvs.neighbors = fake_neighbors
+
+    import torch
+
+    monkeypatch.setattr(historical, "DATASETS", ("tiny",))
+    monkeypatch.setattr(historical, "LAYOUT_SEEDS", (42,))
+    monkeypatch.setattr(historical, "TOPOLOGY_SUBSET_SIZE", 3)
+    monkeypatch.setattr(
+        historical,
+        "import_target_dire",
+        lambda _root, _revision: FakeDire,
+    )
+    monkeypatch.setattr(
+        historical,
+        "load_fixed_evaluator",
+        lambda _source: FakeEvaluator,
+    )
+    monkeypatch.setattr(
+        historical,
+        "load_dataset_manifest",
+        lambda _root: (dataset_manifest, {"tiny": data}),
+    )
+    monkeypatch.setattr(historical, "sha256_file", lambda _path: "manifest-hash")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_name", lambda _index: "Fake H100")
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda: None)
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
+    monkeypatch.setitem(sys.modules, "cupy", fake_cupy)
+    monkeypatch.setitem(sys.modules, "cuvs", fake_cuvs)
+    monkeypatch.setitem(sys.modules, "cuvs.neighbors", fake_neighbors)
+
+    output = tmp_path / "raw" / "variant.jsonl"
+    cache = tmp_path / "reference-cache"
+    arguments = (
+        "9117dc4_index_search_flat",
+        tmp_path / "source",
+        tmp_path / "evaluator.py",
+        tmp_path / "datasets",
+        output,
+        cache,
+    )
+    historical.run_variant(*arguments)
+    first_lines = output.read_text(encoding="utf-8").splitlines()
+    calls_after_first_run = FakeEvaluator.calls
+    historical.run_variant(*arguments)
+
+    assert len(first_lines) == 2
+    assert output.read_text(encoding="utf-8").splitlines() == first_lines
+    assert FakeEvaluator.calls == calls_after_first_run
+    assert (cache / "tiny" / "seed-42.json").is_file()
+    records = [json.loads(line) for line in first_lines]
+    assert {record["configuration"] for record in records} == set(
+        historical.CONFIGURATIONS
+    )
+    assert all(
+        record["effective_policy"]
+        == {"method": "index_search", "index_type": "flat"}
+        for record in records
+    )
