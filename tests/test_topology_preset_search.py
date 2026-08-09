@@ -92,6 +92,27 @@ def test_local_refinement_changes_exactly_one_default_parameter():
 
 
 @pytest.mark.cpu
+def test_validation_can_retain_only_a_search_shortlist_subset():
+    summary = {
+        "selections": {
+            "atlas": "atlas_candidate",
+            "ripser": "ripser_candidate",
+            "compromise": "ripser_candidate",
+        }
+    }
+
+    assert search.validation_candidate_names(summary, None) == (
+        "atlas_candidate",
+        "ripser_candidate",
+    )
+    assert search.validation_candidate_names(summary, ("ripser_candidate",)) == (
+        "ripser_candidate",
+    )
+    with pytest.raises(ValueError, match="not shortlisted"):
+        search.validation_candidate_names(summary, ("unsafe_candidate",))
+
+
+@pytest.mark.cpu
 def test_summary_can_select_distinct_atlas_and_ripser_candidates(monkeypatch):
     monkeypatch.setattr(search, "TUNING_DATASETS", {"tiny": {"openml_id": 1}})
     candidates = {

@@ -109,10 +109,11 @@ python benchmarking/bench_topology_preset_search.py summarize-validation \
 
 The first validation pass deliberately uses only seed 42, which is the seed
 for every archived canonical UMAP/t-SNE embedding. If a Ripser candidate is
-competitive in that screen, rerun validation with `--layout-seeds 42:62` and
-fit only the strongest missing Ripser comparator(s) needed for a repeated
-claim. Atlas already has retained repeat distributions, so its validation
-summary uses overlapping seeds and reports paired 95% intervals immediately.
+competitive in that screen, rerun only that candidate with `--candidate NAME
+--layout-seeds 42:62` and fit only the strongest missing Ripser comparator(s)
+needed for a repeated claim. Atlas already has retained repeat distributions,
+so its validation summary uses overlapping seeds and reports paired 95%
+intervals immediately.
 
 If the broad Sobol design produces no quality-feasible candidate, a bounded
 refinement can be run with `--design local`. It evaluates 18 one-parameter

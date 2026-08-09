@@ -765,6 +765,20 @@ def import_source_dire(source_root: Path):
     return dire_rapids, torch
 
 
+def validation_candidate_names(
+    search_summary: dict, requested_candidates: tuple[str, ...] | None
+) -> tuple[str, ...]:
+    """Restrict confirmation runs to candidates selected by the search."""
+    shortlisted = tuple(dict.fromkeys(search_summary["selections"].values()))
+    candidate_names = requested_candidates or shortlisted
+    if not candidate_names or len(candidate_names) != len(set(candidate_names)):
+        raise ValueError("validation candidates must be a non-empty unique list")
+    unknown = sorted(set(candidate_names) - set(shortlisted))
+    if unknown:
+        raise ValueError(f"validation candidates were not shortlisted: {unknown}")
+    return candidate_names
+
+
 def run_validation(
     source_root: Path,
     evaluator_source: Path,
@@ -773,13 +787,16 @@ def run_validation(
     output: Path,
     reference_cache: Path,
     layout_seeds: tuple[int, ...],
+    requested_candidates: tuple[str, ...] | None = None,
 ) -> None:
     """Run or resume shortlisted candidates on the six untouched datasets."""
     dire_rapids, torch = import_source_dire(source_root)
     evaluator = historical.load_fixed_evaluator(evaluator_source)
     dataset_manifest, datasets = historical.load_dataset_manifest(frozen_root)
     search_summary = json.loads(search_summary_path.read_text(encoding="utf-8"))
-    candidate_names = tuple(dict.fromkeys(search_summary["selections"].values()))
+    candidate_names = validation_candidate_names(
+        search_summary, requested_candidates
+    )
     candidates = {
         name: search_summary["scores"][name]["parameters"]
         for name in candidate_names
@@ -1107,6 +1124,12 @@ def main() -> None:
     validation.add_argument("--output", type=Path, required=True)
     validation.add_argument("--reference-cache", type=Path, required=True)
     validation.add_argument("--layout-seeds", default="42")
+    validation.add_argument(
+        "--candidate",
+        dest="candidates",
+        action="append",
+        help="validate only this shortlisted candidate; may be repeated",
+    )
 
     validation_summary = subparsers.add_parser(
         "summarize-validation", help="compare validation candidates to retained baselines"
@@ -1140,6 +1163,7 @@ def main() -> None:
             args.output,
             args.reference_cache,
             parse_seed_spec(args.layout_seeds),
+            tuple(args.candidates) if args.candidates else None,
         )
     else:
         print(
