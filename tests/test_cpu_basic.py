@@ -349,8 +349,8 @@ class TestDiRePyTorchNormalization:
         assert not hasattr(dire_rapids.presets, "TOPOLOGY_TUNED")
         assert "TOPOLOGY_TUNED" not in dire_rapids.presets.__all__
 
-    def test_ripser_tuned_preset_is_narrowly_named_and_frozen(self):
-        """The held-out replacement changes only spread from current default."""
+    def test_canonical_topology_presets_are_named_and_frozen(self):
+        """Both evaluator contracts retain the held-out parameter set."""
         import dire_rapids
 
         expected = {
@@ -362,11 +362,15 @@ class TestDiRePyTorchNormalization:
             "neg_ratio": 8,
             "max_iter_layout": 128,
         }
-        assert dire_rapids.RIPSER_TUNED == expected
-        assert dire_rapids.presets.RIPSER_TUNED == expected
-        assert "RIPSER_TUNED" in dire_rapids.__all__
-        assert dire_rapids.presets.__all__ == ["RIPSER_TUNED"]
-        assert not hasattr(dire_rapids, "ATLAS_TUNED")
+        for name in ("ATLAS_TUNED", "RIPSER_TUNED"):
+            assert getattr(dire_rapids, name) == expected
+            assert getattr(dire_rapids.presets, name) == expected
+            assert name in dire_rapids.__all__
+        assert dire_rapids.presets.__all__ == [
+            "ATLAS_TUNED",
+            "RIPSER_TUNED",
+        ]
+        assert dire_rapids.ATLAS_TUNED is not dire_rapids.RIPSER_TUNED
 
     def test_frozen_topology_preset_audit_retains_failure_summary(self):
         """The evidence behind preset removal remains a checked fixture."""

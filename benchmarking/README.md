@@ -134,8 +134,11 @@ datasets and 20 paired seeds, its geometric ratios to default were 0.951 for
 Atlas and 0.908 for Ripser, with numerical wins in 11/12 cells under both
 evaluators. It beat the retained cell-wise UMAP/t-SNE envelope in suite
 aggregate (0.944 for repeated Atlas; 0.891 for the canonical seed-42 Ripser
-screen), but only in 6/12 individual cells. The result supports the narrow
-`RIPSER_TUNED` name and does not support a separate `ATLAS_TUNED` export.
+screen), but only in 6/12 individual cells. The result supports separate
+canonical `ATLAS_TUNED` and `RIPSER_TUNED` objective names, both currently
+using the validated `spread=0.8` setting. The names may diverge when later
+evaluator-specific evidence supports different parameters; the failed
+Atlas-selected `spread=1.2` candidate is not exported.
 
 The complete raw records, manifests, tuning reference curves, and summaries
 are retained in `tests/data/topology_preset_search_h100_audit.tar.gz`; the
