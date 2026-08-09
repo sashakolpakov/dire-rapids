@@ -4,6 +4,39 @@
 
 This directory contains comprehensive benchmarking results and performance analysis for DiRe-Rapids, focusing on scalability with high-dimensional data. The benchmarks compare reducer implementations (PyTorch, memory-efficient PyTorch, RAPIDS cuVS/cuML) and k-NN engines (`pytorch`, `pykeops`, `cuvs`) that enable processing datasets with millions of points in up to 1000 dimensions.
 
+## Withdrawn topology preset historical audit
+
+`bench_topology_historical.py` is the frozen issue #14 resolution harness. It
+does not restore or export the withdrawn preset. Instead, it privately pins the
+former parameters and compares them with default DiRe at:
+
+- `9117dc45a3e130fa1d636dfd181f3e97960c5b3b`, where the preset was added;
+- `293b622cc79fa8ea6fd5b54009e0930e3385b22f`, used by the paired audit;
+- `471ac168eb2e6638a84f700fe077f29f20e24488`, the original PR #12 head.
+
+Every revision uses the same materialized six-dataset arrays, layout seeds
+42--61, and seed-paired 1,000-row subsets. The evaluator is loaded from the
+hash-verified `293b622` `betti_curve.py` file for every revision. Both direct
+rank-based kNN Atlas and Ripser H0/H1 Betti-DTW discrepancies are retained.
+The legacy comparisons explicitly force exact-flat index/search. The PR #12
+head is also run through its proposed automatic all-neighbors path.
+
+Run the complete matrix inside the repository's RAPIDS 26.06 container on an
+NVIDIA GPU (the audit that motivated issue #14 used an H100):
+
+```bash
+benchmarking/run_topology_historical.sh /workspace/issue14-historical-results
+```
+
+The command is resumable. It appends one checksummed JSON record per fit and
+refuses to summarize until all 960 records are present and their dataset and
+subset identities pair exactly across configurations and revisions. The final
+summary predeclares a material implementation change as a change in the paired
+preset-minus-default gap exceeding 5% of the historical default mean, with a
+descriptive paired 95% interval excluding zero. Raw records and manifests must
+be retained with the three summary files before drawing or publishing the
+historical-regression conclusion.
+
 ## Key Achievements
 
 **High throughput for large datasets:**

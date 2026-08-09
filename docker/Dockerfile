@@ -78,7 +78,7 @@ COPY README.md /tmp/README.md
 # Install from the staged copy so the image doesn't embed the full repo
 # (keeps the image small; mount the repo at runtime if you want to edit).
 RUN python -m pip install --no-cache-dir /tmp[persistent,bench] && \
-    python -c "import dire_rapids, fastdtw, ripser, optuna; print('dire-rapids', dire_rapids.__version__, 'fastdtw OK', 'ripser', ripser.__version__, 'optuna', optuna.__version__)"
+    python -c "import dire_rapids, fastdtw, flowio, ripser, optuna; print('dire-rapids', dire_rapids.__version__, 'fastdtw OK', 'flowio OK', 'ripser', ripser.__version__, 'optuna', optuna.__version__)"
 
 # Smoke-test both import orders in separate Python processes. This catches a
 # libnvJitLink selection problem that can otherwise depend on which framework
