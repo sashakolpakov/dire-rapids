@@ -260,6 +260,32 @@ def local_candidate_parameters() -> dict[str, dict]:
     return candidates
 
 
+def atlas_candidate_parameters() -> dict[str, dict]:
+    """Return a small Atlas refinement around the validated Ripser preset."""
+    ripser_parameters = {**DEFAULT_PARAMETERS, "spread": 0.8}
+    candidates = {
+        "default": {"role": "control", "parameters": DEFAULT_PARAMETERS},
+        "ripser_tuned": {
+            "role": "incumbent_control",
+            "parameters": ripser_parameters,
+        },
+    }
+    for spread in (0.7, 0.75, 0.85, 0.9):
+        candidates[f"atlas_spread_{str(spread).replace('.', 'p')}"] = {
+            "role": "candidate",
+            "parameters": {**ripser_parameters, "spread": spread},
+        }
+    for max_iter_layout in (96, 160, 192):
+        candidates[f"atlas_max_iter_layout_{max_iter_layout}"] = {
+            "role": "candidate",
+            "parameters": {
+                **ripser_parameters,
+                "max_iter_layout": max_iter_layout,
+            },
+        }
+    return candidates
+
+
 def existing_keys(path: Path) -> set[tuple[str, str, int]]:
     keys = set()
     if not path.exists():
@@ -369,11 +395,12 @@ def run_search(
         raise RuntimeError("preset search requires an H100 CUDA GPU")
 
     tuning_manifest, datasets = load_tuning(tuning_root)
-    candidates = (
-        candidate_parameters(sobol_count)
-        if design == "sobol"
-        else local_candidate_parameters()
-    )
+    candidate_designs = {
+        "sobol": lambda: candidate_parameters(sobol_count),
+        "local": local_candidate_parameters,
+        "atlas-fine": atlas_candidate_parameters,
+    }
+    candidates = candidate_designs[design]()
     revision = git_commit(source_root)
     environment = {
         "platform": platform.platform(),
@@ -1253,7 +1280,11 @@ def main() -> None:
     run.add_argument("--output", type=Path, required=True)
     run.add_argument("--reference-cache", type=Path, required=True)
     run.add_argument("--sobol-count", type=int, default=32)
-    run.add_argument("--design", choices=("sobol", "local"), default="sobol")
+    run.add_argument(
+        "--design",
+        choices=("sobol", "local", "atlas-fine"),
+        default="sobol",
+    )
 
     summary_parser = subparsers.add_parser("summarize", help="select candidates")
     summary_parser.add_argument("--input", type=Path, required=True)

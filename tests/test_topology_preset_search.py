@@ -147,6 +147,31 @@ def test_local_refinement_changes_exactly_one_default_parameter():
 
 
 @pytest.mark.cpu
+def test_atlas_refinement_is_small_and_distinct_from_ripser_tuned():
+    candidates = search.atlas_candidate_parameters()
+    ripser = candidates["ripser_tuned"]
+
+    assert candidates["default"]["parameters"] == search.DEFAULT_PARAMETERS
+    assert ripser["role"] == "incumbent_control"
+    assert ripser["parameters"] == {
+        **search.DEFAULT_PARAMETERS,
+        "spread": 0.8,
+    }
+    assert len(candidates) == 2 + 7
+    for name, record in candidates.items():
+        if record["role"] != "candidate":
+            continue
+        assert name.startswith("atlas_")
+        assert record["parameters"] != ripser["parameters"]
+        changed = {
+            key
+            for key, value in record["parameters"].items()
+            if value != ripser["parameters"][key]
+        }
+        assert len(changed) == 1
+
+
+@pytest.mark.cpu
 def test_validation_can_retain_only_a_search_shortlist_subset():
     summary = {
         "selections": {
