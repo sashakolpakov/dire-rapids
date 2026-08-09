@@ -1004,6 +1004,14 @@ def summarize_validation(
     default_audit_path: Path | None = None,
 ) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema_version") != SCHEMA_VERSION:
+        raise RuntimeError("unsupported validation manifest schema")
+    if manifest.get("candidate_sha256") != json_sha256(manifest["candidates"]):
+        raise RuntimeError("validation candidate manifest hash changed")
+    if manifest.get("environment_sha256") != json_sha256(manifest["environment"]):
+        raise RuntimeError("validation environment manifest hash changed")
+    if manifest.get("policy", {}).get("expected_effective_method") != EXPECTED_AUTO_METHOD:
+        raise RuntimeError("validation effective-policy contract changed")
     baselines = json.loads(baseline_path.read_text(encoding="utf-8"))
     records = [
         json.loads(line)
@@ -1014,6 +1022,8 @@ def summarize_validation(
         (record["candidate"], record["dataset"], record["layout_seed"]): record
         for record in records
     }
+    if len(by_key) != len(records):
+        raise RuntimeError("validation records contain duplicate keys")
     candidates = tuple(manifest["candidates"])
     seeds = tuple(manifest["layout_seeds"])
     default_records = (
@@ -1029,6 +1039,30 @@ def summarize_validation(
     }
     if set(by_key) != expected:
         raise RuntimeError("validation matrix is incomplete")
+    for (candidate, dataset, _seed), record in by_key.items():
+        if record.get("schema_version") != SCHEMA_VERSION:
+            raise RuntimeError("validation record schema changed")
+        if record.get("source_revision") != manifest["source_revision"]:
+            raise RuntimeError("validation record source revision changed")
+        if record.get("environment_sha256") != manifest["environment_sha256"]:
+            raise RuntimeError("validation record environment changed")
+        if record.get("dataset_array_sha256") != manifest[
+            "dataset_array_sha256"
+        ][dataset]:
+            raise RuntimeError(f"validation dataset changed: {dataset}")
+        for parameter, value in manifest["candidates"][candidate].items():
+            if record.get("parameters", {}).get(parameter) != value:
+                raise RuntimeError(
+                    f"validation candidate parameter changed: {candidate}/{parameter}"
+                )
+        policy = record.get("effective_policy", {})
+        if policy.get("method") != EXPECTED_AUTO_METHOD or not policy.get(
+            "index_type"
+        ):
+            raise RuntimeError("validation record did not use guarded index/search")
+        reference_hashes = record.get("reference_curve_sha256", {})
+        if set(reference_hashes) != {"atlas", "ripser"}:
+            raise RuntimeError("validation reference-curve provenance changed")
 
     scores = {}
     for candidate in candidates:

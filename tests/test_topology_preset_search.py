@@ -202,10 +202,17 @@ def test_validation_summary_uses_paired_atlas_and_seed42_ripser(
     monkeypatch.setattr(search.historical, "DATASETS", ("tiny",))
     monkeypatch.setattr(search.historical, "LAYOUT_SEEDS", (42, 43))
     candidates = {"atlas_candidate": {"spread": 1}, "ripser_candidate": {"spread": 2}}
+    environment = {}
     manifest = {
+        "schema_version": search.SCHEMA_VERSION,
         "source_revision": "revision",
         "layout_seeds": [42, 43],
         "candidates": candidates,
+        "candidate_sha256": search.json_sha256(candidates),
+        "dataset_array_sha256": {"tiny": "dataset-hash"},
+        "environment": environment,
+        "environment_sha256": search.json_sha256(environment),
+        "policy": {"expected_effective_method": search.EXPECTED_AUTO_METHOD},
     }
     baselines = {
         "datasets": {
@@ -243,9 +250,17 @@ def test_validation_summary_uses_paired_atlas_and_seed42_ripser(
             ripser_value = 1.2 if candidate == "atlas_candidate" else 0.4
             records.append(
                 {
+                    "schema_version": search.SCHEMA_VERSION,
+                    "source_revision": "revision",
+                    "environment_sha256": search.json_sha256(environment),
                     "candidate": candidate,
                     "dataset": "tiny",
                     "layout_seed": seed,
+                    "parameters": candidates[candidate],
+                    "effective_policy": {
+                        "method": "index_search",
+                        "index_type": "flat",
+                    },
                     "dataset_array_sha256": "dataset-hash",
                     "subset_indices_sha256": f"subset-{seed}",
                     "reference_curve_sha256": {
