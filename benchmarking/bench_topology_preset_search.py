@@ -532,6 +532,8 @@ def summarize_records(records: list[dict], candidates: dict) -> dict:
         (record["candidate"], record["dataset"], record["layout_seed"]): record
         for record in records
     }
+    if len(by_key) != len(records):
+        raise RuntimeError("search records contain duplicate candidate/dataset/seed keys")
     expected = {
         (candidate, dataset, seed)
         for candidate in candidates
@@ -678,12 +680,55 @@ def summarize_records(records: list[dict], candidates: dict) -> dict:
 
 def summarize(input_path: Path, manifest_path: Path, output: Path) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema_version") != SCHEMA_VERSION:
+        raise RuntimeError("unsupported search manifest schema")
     candidates = manifest["candidates"]
+    if manifest.get("candidate_sha256") != json_sha256(candidates):
+        raise RuntimeError("search candidate manifest hash changed")
+    if tuple(manifest.get("search_seeds", ())) != SEARCH_SEEDS:
+        raise RuntimeError("search seeds changed")
+    if manifest.get("environment_sha256") != json_sha256(manifest["environment"]):
+        raise RuntimeError("search environment manifest hash changed")
+    if manifest.get("policy", {}).get("expected_effective_method") != EXPECTED_AUTO_METHOD:
+        raise RuntimeError("search effective-policy contract changed")
     records = [
         json.loads(line)
         for line in input_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+    for record in records:
+        candidate = record.get("candidate")
+        dataset = record.get("dataset")
+        if record.get("schema_version") != SCHEMA_VERSION:
+            raise RuntimeError("search record schema changed")
+        if record.get("source_revision") != manifest["source_revision"]:
+            raise RuntimeError("search record source revision changed")
+        if record.get("environment_sha256") != manifest["environment_sha256"]:
+            raise RuntimeError("search record environment changed")
+        if candidate not in candidates:
+            raise RuntimeError(f"unknown search candidate: {candidate!r}")
+        if record.get("candidate_role") != candidates[candidate]["role"]:
+            raise RuntimeError(f"search candidate role changed: {candidate}")
+        for parameter, value in candidates[candidate]["parameters"].items():
+            if record.get("parameters", {}).get(parameter) != value:
+                raise RuntimeError(
+                    f"search candidate parameter changed: {candidate}/{parameter}"
+                )
+        if record.get("dataset_array_sha256") != manifest.get(
+            "tuning_data_sha256", {}
+        ).get(dataset):
+            raise RuntimeError(f"search tuning data changed: {dataset}")
+        policy = record.get("effective_policy", {})
+        if policy.get("method") != EXPECTED_AUTO_METHOD or not policy.get(
+            "index_type"
+        ):
+            raise RuntimeError("search record did not use guarded index/search")
+        reference_hashes = record.get("reference_curve_sha256", {})
+        if set(reference_hashes) != {"atlas", "ripser"} or any(
+            not isinstance(value, str) or len(value) != 64
+            for value in reference_hashes.values()
+        ):
+            raise RuntimeError("search reference-curve provenance changed")
     summary = summarize_records(records, candidates)
     summary["source_revision"] = manifest["source_revision"]
     summary["environment_sha256"] = manifest["environment_sha256"]

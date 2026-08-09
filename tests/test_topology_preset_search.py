@@ -127,6 +127,8 @@ def test_summary_can_select_distinct_atlas_and_ripser_candidates(monkeypatch):
 
     assert summary["selections"]["atlas"] == "atlas_candidate"
     assert summary["selections"]["ripser"] == "ripser_candidate"
+    with pytest.raises(RuntimeError, match="duplicate"):
+        search.summarize_records([*records, records[0]], candidates)
 
 
 @pytest.mark.cpu
