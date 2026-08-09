@@ -235,6 +235,29 @@ def candidate_parameters(sobol_count: int) -> dict[str, dict]:
     return candidates
 
 
+def local_candidate_parameters() -> dict[str, dict]:
+    """Return an interpretable one-parameter refinement around default DiRe."""
+    candidates = {
+        "default": {"role": "control", "parameters": DEFAULT_PARAMETERS},
+    }
+    refinements = {
+        "n_neighbors": (12, 20, 24, 32),
+        "cutoff": (24.0, 30.0, 36.0),
+        "spread": (0.8, 1.2, 1.5),
+        "min_dist": (3e-3, 3e-2),
+        "neg_ratio": (6, 10, 12),
+        "max_iter_layout": (96, 160, 192),
+    }
+    for parameter, values in refinements.items():
+        for value in values:
+            configured = {**DEFAULT_PARAMETERS, parameter: value}
+            candidates[f"local_{parameter}_{str(value).replace('.', 'p')}"] = {
+                "role": "candidate",
+                "parameters": configured,
+            }
+    return candidates
+
+
 def existing_keys(path: Path) -> set[tuple[str, str, int]]:
     keys = set()
     if not path.exists():
@@ -325,6 +348,7 @@ def run_search(
     output: Path,
     reference_cache: Path,
     sobol_count: int,
+    design: str,
 ) -> None:
     """Run or resume every candidate/dataset/seed evaluation on an H100."""
     import torch
@@ -343,7 +367,11 @@ def run_search(
         raise RuntimeError("preset search requires an H100 CUDA GPU")
 
     tuning_manifest, datasets = load_tuning(tuning_root)
-    candidates = candidate_parameters(sobol_count)
+    candidates = (
+        candidate_parameters(sobol_count)
+        if design == "sobol"
+        else local_candidate_parameters()
+    )
     revision = git_commit(source_root)
     environment = {
         "platform": platform.platform(),
@@ -369,7 +397,8 @@ def run_search(
         },
         "search_seeds": list(SEARCH_SEEDS),
         "sobol_seed": SOBOL_SEED,
-        "sobol_count": sobol_count,
+        "sobol_count": sobol_count if design == "sobol" else None,
+        "design": design,
         "quality_tolerance": QUALITY_TOLERANCE,
         "stress_relative_tolerance": STRESS_RELATIVE_TOLERANCE,
         "global_pair_count": GLOBAL_PAIR_COUNT,
@@ -595,22 +624,41 @@ def summarize_records(records: list[dict], candidates: dict) -> dict:
             "compromise_ratio_to_default": math.sqrt(atlas_score * ripser_score),
         }
 
-    eligible = [
+    search_candidates = [
         name
         for name, value in scores.items()
-        if value["role"] == "candidate" and value["quality_feasible"]
+        if value["role"] == "candidate"
     ]
-    if not eligible:
-        raise RuntimeError("no search candidate passed the quality guard")
-    selections = {
-        "atlas": min(eligible, key=lambda name: scores[name]["atlas_ratio_to_default"]),
-        "ripser": min(eligible, key=lambda name: scores[name]["ripser_ratio_to_default"]),
-        "compromise": min(
-            eligible, key=lambda name: scores[name]["compromise_ratio_to_default"]
-        ),
-    }
+    eligible = [name for name in search_candidates if scores[name]["quality_feasible"]]
+
+    def select(pool):
+        if not pool:
+            return {}
+        return {
+            "atlas": min(
+                pool, key=lambda name: scores[name]["atlas_ratio_to_default"]
+            ),
+            "ripser": min(
+                pool, key=lambda name: scores[name]["ripser_ratio_to_default"]
+            ),
+            "compromise": min(
+                pool, key=lambda name: scores[name]["compromise_ratio_to_default"]
+            ),
+        }
+
+    selections = select(eligible)
+    unconstrained = select(search_candidates)
+    selection_status = (
+        "eligible candidates selected for held-out validation"
+        if eligible
+        else "no candidate passed all local/context/global quality guards; "
+        "unconstrained winners are diagnostic only and are not presets"
+    )
     return {
         "schema_version": SCHEMA_VERSION,
+        "selection_status": selection_status,
+        "eligible_candidate_count": len(eligible),
+        "search_candidate_count": len(search_candidates),
         "selection_rule": {
             "quality_guard": (
                 "on every tuning dataset, candidate mean 15-NN accuracy, local "
@@ -623,6 +671,7 @@ def summarize_records(records: list[dict], candidates: dict) -> dict:
             ),
         },
         "selections": selections,
+        "unconstrained_diagnostic_winners": unconstrained,
         "scores": scores,
     }
 
@@ -996,6 +1045,7 @@ def main() -> None:
     run.add_argument("--output", type=Path, required=True)
     run.add_argument("--reference-cache", type=Path, required=True)
     run.add_argument("--sobol-count", type=int, default=32)
+    run.add_argument("--design", choices=("sobol", "local"), default="sobol")
 
     summary_parser = subparsers.add_parser("summarize", help="select candidates")
     summary_parser.add_argument("--input", type=Path, required=True)
@@ -1032,6 +1082,7 @@ def main() -> None:
             args.output,
             args.reference_cache,
             args.sobol_count,
+            args.design,
         )
     elif args.command == "summarize":
         print(json.dumps(summarize(args.input, args.manifest, args.output), indent=2))

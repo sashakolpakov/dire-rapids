@@ -75,6 +75,23 @@ def test_candidate_design_requires_power_of_two_budget():
 
 
 @pytest.mark.cpu
+def test_local_refinement_changes_exactly_one_default_parameter():
+    candidates = search.local_candidate_parameters()
+
+    assert candidates["default"]["parameters"] == search.DEFAULT_PARAMETERS
+    assert len(candidates) == 1 + 18
+    for name, record in candidates.items():
+        if name == "default":
+            continue
+        changed = {
+            key
+            for key, value in record["parameters"].items()
+            if value != search.DEFAULT_PARAMETERS[key]
+        }
+        assert len(changed) == 1
+
+
+@pytest.mark.cpu
 def test_summary_can_select_distinct_atlas_and_ripser_candidates(monkeypatch):
     monkeypatch.setattr(search, "TUNING_DATASETS", {"tiny": {"openml_id": 1}})
     candidates = {
@@ -110,6 +127,47 @@ def test_summary_can_select_distinct_atlas_and_ripser_candidates(monkeypatch):
 
     assert summary["selections"]["atlas"] == "atlas_candidate"
     assert summary["selections"]["ripser"] == "ripser_candidate"
+
+
+@pytest.mark.cpu
+def test_summary_retains_diagnostics_when_no_candidate_passes_quality_guard(
+    monkeypatch,
+):
+    monkeypatch.setattr(search, "TUNING_DATASETS", {"tiny": {"openml_id": 1}})
+    candidates = {
+        "default": {"role": "control", "parameters": {}},
+        "unsafe_candidate": {"role": "candidate", "parameters": {"spread": 2}},
+    }
+    records = []
+    for candidate in candidates:
+        for seed in search.SEARCH_SEEDS:
+            unsafe = candidate == "unsafe_candidate"
+            records.append(
+                {
+                    "candidate": candidate,
+                    "dataset": "tiny",
+                    "layout_seed": seed,
+                    "knn_accuracy": 0.7 if unsafe else 0.9,
+                    "local": {"neighbor_mean": 0.6 if unsafe else 0.8, "stress": 1.0},
+                    "global_distance_spearman": 0.6 if unsafe else 0.8,
+                    "metrics": {
+                        backend: {
+                            metric: 0.5 if unsafe else 1.0
+                            for metric in search.TOPOLOGY_METRICS
+                        }
+                        for backend in ("atlas", "ripser")
+                    },
+                }
+            )
+
+    summary = search.summarize_records(records, candidates)
+
+    assert summary["eligible_candidate_count"] == 0
+    assert summary["selections"] == {}
+    assert summary["unconstrained_diagnostic_winners"] == {
+        backend: "unsafe_candidate" for backend in ("atlas", "ripser", "compromise")
+    }
+    assert "diagnostic only" in summary["selection_status"]
 
 
 @pytest.mark.cpu

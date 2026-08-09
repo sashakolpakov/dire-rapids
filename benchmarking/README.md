@@ -114,6 +114,11 @@ fit only the strongest missing Ripser comparator(s) needed for a repeated
 claim. Atlas already has retained repeat distributions, so its validation
 summary uses overlapping seeds and reports paired 95% intervals immediately.
 
+If the broad Sobol design produces no quality-feasible candidate, a bounded
+refinement can be run with `--design local`. It evaluates 18 one-parameter
+changes around default (plus the default control), making any safe improvement
+interpretable and adding only 152 fits. The quality gates are not relaxed.
+
 ## Key Achievements
 
 **High throughput for large datasets:**
