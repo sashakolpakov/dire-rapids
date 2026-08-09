@@ -32,3 +32,14 @@ missing Ripser comparator rerun.
 counts, preprocessing versions, and file/array hashes for the four disjoint
 tuning datasets used by the crossed search. The 22 MB arrays are retained with
 the run artifacts rather than committed to Git.
+
+`topology_historical_h100_audit.tar.gz` is the completed 960-record H100 audit
+archive (SHA-256
+`50e548e9b93beebb54e06e023889595a6304b2c3e5ba9746cde574bdc5dfa812`).
+It contains four 240-record JSONL files and manifests, all 120 shared Atlas and
+Ripser reference curves, the frozen-dataset manifest, and the three summaries;
+only the large `.npy` arrays and source downloads are omitted because their
+canonical hashes and reconstruction contract are already retained. The three
+summary files are also unpacked under `topology_historical_h100/` for ordinary
+diff review. The predeclared result found no material post-`9117dc4`
+implementation change in any Atlas cell.

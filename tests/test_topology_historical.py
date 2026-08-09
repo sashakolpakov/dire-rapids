@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import sys
+import tarfile
 import types
 
 import numpy as np
@@ -23,6 +25,43 @@ SPECIFICATION = importlib.util.spec_from_file_location(
 assert SPECIFICATION is not None and SPECIFICATION.loader is not None
 historical = importlib.util.module_from_spec(SPECIFICATION)
 SPECIFICATION.loader.exec_module(historical)
+
+
+@pytest.mark.cpu
+def test_retained_h100_archive_contains_complete_historical_evidence():
+    archive = (
+        Path(__file__).resolve().parent
+        / "data"
+        / "topology_historical_h100_audit.tar.gz"
+    )
+    assert hashlib.sha256(archive.read_bytes()).hexdigest() == (
+        "50e548e9b93beebb54e06e023889595a6304b2c3e5ba9746cde574bdc5dfa812"
+    )
+
+    with tarfile.open(archive, "r:gz") as bundle:
+        names = set(bundle.getnames())
+        reference_names = {
+            name
+            for name in names
+            if name.startswith("reference-cache/") and name.endswith(".json")
+        }
+        assert len(reference_names) == 6 * 20
+        for variant in historical.VARIANTS:
+            raw_name = f"raw/{variant}.jsonl"
+            manifest_name = f"raw/{variant}.manifest.json"
+            assert raw_name in names
+            assert manifest_name in names
+            raw_stream = bundle.extractfile(raw_name)
+            assert raw_stream is not None
+            assert len(raw_stream.read().splitlines()) == 6 * 20 * 2
+
+        summary_stream = bundle.extractfile(
+            "summary/topology_preset_historical_summary.json"
+        )
+        assert summary_stream is not None
+        summary = json.loads(summary_stream.read())
+        assert summary["material_post_9117_implementation_change"] is False
+        assert not summary["material_post_9117_implementation_change_cells"]
 
 
 def make_complete_records(repeats=2):
