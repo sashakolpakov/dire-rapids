@@ -72,6 +72,12 @@ one percentage point below default DiRe, and local stress is no more than 10%
 higher. The search never fits UMAP or t-SNE; those thresholds come from the
 retained, hash-pinned baseline fixture.
 
+The search requests the released `cuvs_knn_method="auto"` policy and asserts
+that the current guarded policy resolves to `index_search`, recording the
+effective index type for every fit. The historical audit separately covers
+PR #12 head's proposed automatic all-neighbors behavior; candidate tuning does
+not silently opt into that unreleased policy change.
+
 ```bash
 python benchmarking/bench_topology_preset_search.py prepare \
   --output issue14-preset-search/tuning-datasets

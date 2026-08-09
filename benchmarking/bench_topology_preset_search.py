@@ -46,6 +46,7 @@ TOPOLOGY_METRICS = ("dtw_beta0", "dtw_beta1")
 QUALITY_TOLERANCE = 0.01
 STRESS_RELATIVE_TOLERANCE = 0.10
 GLOBAL_PAIR_COUNT = 20_000
+EXPECTED_AUTO_METHOD = "index_search"
 TUNING_DATASETS = {
     "mfeat-factors": {"openml_id": 12},
     "satimage": {"openml_id": 182},
@@ -254,10 +255,13 @@ def existing_keys(path: Path) -> set[tuple[str, str, int]]:
 
 def effective_policy(reducer) -> dict:
     method = getattr(reducer, "effective_cuvs_knn_method_", None)
-    if method != "all_neighbors":
-        raise RuntimeError(f"expected auto all_neighbors, got {method!r}")
+    if method != EXPECTED_AUTO_METHOD:
+        raise RuntimeError(
+            f"expected guarded auto {EXPECTED_AUTO_METHOD}, got {method!r}"
+        )
     return {
         "method": method,
+        "index_type": getattr(reducer, "effective_cuvs_index_type_", None),
         "algorithm": getattr(reducer, "effective_all_neighbors_algo_", None),
     }
 
@@ -377,7 +381,7 @@ def run_search(
             "backend": "cuvs",
             "knn_backend": "cuvs",
             "cuvs_knn_method": "auto",
-            "expected_effective_method": "all_neighbors",
+            "expected_effective_method": EXPECTED_AUTO_METHOD,
         },
     }
     manifest_path = output.with_suffix(".manifest.json")
@@ -718,7 +722,7 @@ def run_validation(
             "backend": "cuvs",
             "knn_backend": "cuvs",
             "cuvs_knn_method": "auto",
-            "expected_effective_method": "all_neighbors",
+            "expected_effective_method": EXPECTED_AUTO_METHOD,
         },
     }
     manifest_path = output.with_suffix(".manifest.json")
