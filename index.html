@@ -377,8 +377,20 @@ requested engine is unavailable or unsupported for the current data.</p>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">compute_betti_curve</span></code> tries the GPU Atlas path first when GPU use is enabled,
 then the CPU Atlas path. Pass <code class="docutils literal notranslate"><span class="pre">prefer_ripser=True</span></code> to request Ripser first.
-No topology-tuned public preset is exported because its fixed-sample Ripser
-selection did not survive a paired held-out Atlas audit.</p>
+The former broad <code class="docutils literal notranslate"><span class="pre">TOPOLOGY_TUNED</span></code> preset remains withdrawn. The crossed,
+held-out replacement is narrowly named <code class="docutils literal notranslate"><span class="pre">RIPSER_TUNED</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">RIPSER_TUNED</span><span class="p">,</span> <span class="n">create_dire</span>
+
+<span class="n">embedding</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="o">**</span><span class="n">RIPSER_TUNED</span><span class="p">)</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>It changes only <code class="docutils literal notranslate"><span class="pre">spread</span></code> from <code class="docutils literal notranslate"><span class="pre">1.0</span></code> to <code class="docutils literal notranslate"><span class="pre">0.8</span></code>. Across six untouched
+datasets and 20 paired seeds it improved 11/12 Atlas and 11/12 Ripser cells
+against current default DiRe, with geometric discrepancy ratios of 0.951 and
+0.908. Against the strongest retained UMAP/t-SNE method in each cell it won
+6/12 cells for both evaluators, so the name describes its selection objective
+rather than promising a universal topology improvement. No <code class="docutils literal notranslate"><span class="pre">ATLAS_TUNED</span></code>
+preset is exported because the Atlas-selected candidate failed to transfer.</p>
 <p>See <a class="reference internal" href="api/dire_rapids.metrics.html"><span class="doc">dire_rapids.metrics module</span></a> for full API reference.</p>
 </section>
 <section id="custom-distance-metrics">
