@@ -385,16 +385,16 @@ held-out replacements have canonical evaluator-specific names:</p>
 <span class="n">ripser_embedding</span> <span class="o">=</span> <span class="n">create_dire</span><span class="p">(</span><span class="o">**</span><span class="n">RIPSER_TUNED</span><span class="p">)</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Both currently change only <code class="docutils literal notranslate"><span class="pre">spread</span></code> from <code class="docutils literal notranslate"><span class="pre">1.0</span></code> to <code class="docutils literal notranslate"><span class="pre">0.8</span></code>. They are
-separate public objective contracts even though the best validated parameters
-presently coincide. Across six untouched datasets and 20 paired seeds this
-setting improved 11/12 Atlas and 11/12 Ripser cells against current default
-DiRe, with geometric discrepancy ratios of 0.951 and 0.908. Against the
-strongest retained UMAP/t-SNE method in each cell it won 6/12 cells for both
-evaluators, so neither name promises a universal topology improvement. The
-initially Atlas-selected <code class="docutils literal notranslate"><span class="pre">spread=1.2</span></code> candidate failed to transfer;
-<code class="docutils literal notranslate"><span class="pre">ATLAS_TUNED</span></code> therefore uses the independently validated <code class="docutils literal notranslate"><span class="pre">spread=0.8</span></code>
-setting.</p>
+<p>The presets are genuinely distinct. Both use <code class="docutils literal notranslate"><span class="pre">spread=0.8</span></code>, while
+<code class="docutils literal notranslate"><span class="pre">ATLAS_TUNED</span></code> uses <code class="docutils literal notranslate"><span class="pre">max_iter_layout=96</span></code> and <code class="docutils literal notranslate"><span class="pre">RIPSER_TUNED</span></code> uses 128.
+Across six untouched datasets and 20 paired seeds each improved 11/12 cells
+against current default DiRe under its respective evaluator, with geometric
+discrepancy ratios of 0.908 for both. Against the strongest retained UMAP/t-SNE
+method in each cell they won 6/12 cells, with aggregate ratios of 0.884 for
+repeated Atlas and 0.891 for the canonical seed-42 Ripser screen. Neither name
+promises a universal topology improvement. The initially Atlas-selected
+<code class="docutils literal notranslate"><span class="pre">spread=1.2</span></code> candidate failed to transfer; a subsequent seven-candidate
+Atlas refinement selected and held-out-confirmed the 96-iteration layout.</p>
 <p>See <a class="reference internal" href="api/dire_rapids.metrics.html"><span class="doc">dire_rapids.metrics module</span></a> for full API reference.</p>
 </section>
 <section id="custom-distance-metrics">
