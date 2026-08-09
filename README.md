@@ -323,18 +323,17 @@ atlas_embedding = create_dire(**ATLAS_TUNED).fit_transform(X)
 ripser_embedding = create_dire(**RIPSER_TUNED).fit_transform(X)
 ```
 
-Both canonical presets currently change only `spread` from `1.0` to `0.8`.
-They are separate dictionaries and public objective contracts even though the
-best validated parameters presently coincide. Against current default DiRe,
-this setting improved 11/12 held-out Atlas cells and 11/12 Ripser cells; the
-suite geometric discrepancy ratios were 0.951 and 0.908 (lower is better).
-Against the strongest retained UMAP/t-SNE method in each cell, its aggregate
-ratios were 0.944 for repeated Atlas and 0.891 for the canonical seed-42
-Ripser screen, but it won only 6/12 cells for each evaluator. It is therefore
-an evaluator-scoped option with documented failure cases, not a universal
-topology guarantee. The initially Atlas-selected `spread=1.2` candidate did
-not transfer, so `ATLAS_TUNED` uses the independently validated `spread=0.8`
-setting instead.
+The presets are genuinely distinct. Both use `spread=0.8`, while
+`ATLAS_TUNED` uses `max_iter_layout=96` and `RIPSER_TUNED` uses 128. Against
+current default DiRe they improved 11/12 held-out cells under their respective
+evaluators; the suite geometric discrepancy ratios were 0.908 for both (lower
+is better). Against the strongest retained UMAP/t-SNE method in each cell,
+the aggregate ratios were 0.884 for repeated Atlas and 0.891 for the canonical
+seed-42 Ripser screen, with 6/12 cell wins for each evaluator. Neither preset
+is a universal topology guarantee. The initially Atlas-selected `spread=1.2`
+candidate failed to transfer; a subsequent seven-candidate Atlas refinement
+selected the shorter 96-iteration layout and confirmed it on the untouched
+six-dataset, 20-seed suite.
 
 ## ReducerRunner Framework
 
