@@ -25,8 +25,9 @@ threshold; the retained values remain available for interval calculations.
 Its `ripser_canonical` section is a no-fit seed-42 screen: it evaluates the
 archived canonical embeddings against the same frozen original-data subsets
 with the hash-pinned `293b622` evaluator. It is intentionally not treated as a
-repeat distribution; a competitive DiRe candidate triggers only the strongest
-missing Ripser comparator rerun.
+repeat distribution. A repeated Ripser comparator claim would require rerunning
+the strongest missing methods in their exact archived RAPIDS 26.02/Python 3.10
+environment; the issue-14 result makes no such repeated-comparator claim.
 
 `topology_preset_tuning_manifest.json` records the OpenML IDs, shapes, label
 counts, preprocessing versions, and file/array hashes for the four disjoint
@@ -43,3 +44,14 @@ canonical hashes and reconstruction contract are already retained. The three
 summary files are also unpacked under `topology_historical_h100/` for ordinary
 diff review. The predeclared result found no material post-`9117dc4`
 implementation change in any Atlas cell.
+
+`topology_preset_search_h100_audit.tar.gz` is the completed 556-record crossed
+search and validation archive (SHA-256
+`96ff2c6ee70a0920909abc11ffbce1c9274102bf3562f5d67f1677cb3431fb22`).
+It contains the 272-record broad search, 152-record guarded local refinement,
+12-record seed-42 held-out screen, 120-record/20-seed confirmation, all four
+manifests and summaries, eight tuning reference curves, and the frozen tuning
+manifest. The 22 MB tuning arrays are omitted but their file and array hashes
+remain enforced. The compact conclusion is also unpacked under
+`topology_preset_search_h100/`: only `spread=0.8` transferred, supporting
+`RIPSER_TUNED` and no separate `ATLAS_TUNED` export.

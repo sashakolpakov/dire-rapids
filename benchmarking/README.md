@@ -126,6 +126,22 @@ refinement can be run with `--design local`. It evaluates 18 one-parameter
 changes around default (plus the default control), making any safe improvement
 interpretable and adding only 152 fits. The quality gates are not relaxed.
 
+The completed H100 run retained 272 broad-search, 152 local-refinement, 12
+seed-42 screening, and 120 repeated-validation records. No broad candidate
+passed every safeguard. The local search selected `spread=1.2` for Atlas and
+`spread=0.8` for Ripser, but only `spread=0.8` transferred: over six untouched
+datasets and 20 paired seeds, its geometric ratios to default were 0.951 for
+Atlas and 0.908 for Ripser, with numerical wins in 11/12 cells under both
+evaluators. It beat the retained cell-wise UMAP/t-SNE envelope in suite
+aggregate (0.944 for repeated Atlas; 0.891 for the canonical seed-42 Ripser
+screen), but only in 6/12 individual cells. The result supports the narrow
+`RIPSER_TUNED` name and does not support a separate `ATLAS_TUNED` export.
+
+The complete raw records, manifests, tuning reference curves, and summaries
+are retained in `tests/data/topology_preset_search_h100_audit.tar.gz`; the
+compact decision summary is unpacked under
+`tests/data/topology_preset_search_h100/`.
+
 ## Key Achievements
 
 **High throughput for large datasets:**

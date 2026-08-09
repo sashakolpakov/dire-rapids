@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import io
 import json
@@ -22,6 +23,49 @@ SPECIFICATION = importlib.util.spec_from_file_location(
 assert SPECIFICATION is not None and SPECIFICATION.loader is not None
 search = importlib.util.module_from_spec(SPECIFICATION)
 SPECIFICATION.loader.exec_module(search)
+
+
+@pytest.mark.cpu
+def test_retained_h100_search_archive_contains_complete_evidence():
+    archive = (
+        Path(__file__).resolve().parent
+        / "data"
+        / "topology_preset_search_h100_audit.tar.gz"
+    )
+    assert hashlib.sha256(archive.read_bytes()).hexdigest() == (
+        "96ff2c6ee70a0920909abc11ffbce1c9274102bf3562f5d67f1677cb3431fb22"
+    )
+    expected_records = {
+        "search-production-auto": 272,
+        "search-local-auto": 152,
+        "validation-seed42": 12,
+        "validation-spread08-seeds42-61": 120,
+    }
+    with tarfile.open(archive, "r:gz") as bundle:
+        names = set(bundle.getnames())
+        references = {
+            name
+            for name in names
+            if name.startswith("reference-cache/") and name.endswith(".json")
+        }
+        assert len(references) == 4 * 2
+        for stem, count in expected_records.items():
+            raw_name = f"raw/{stem}.jsonl"
+            assert raw_name in names
+            assert f"raw/{stem}.manifest.json" in names
+            stream = bundle.extractfile(raw_name)
+            assert stream is not None
+            assert len(stream.read().splitlines()) == count
+        summary_stream = bundle.extractfile(
+            "summary/topology_preset_search_summary.json"
+        )
+        assert summary_stream is not None
+        summary = json.loads(summary_stream.read())
+        assert summary["decision"]["ripser_tuned_export"] == "RIPSER_TUNED"
+        assert summary["decision"]["atlas_tuned_export"] is None
+        confirmation = summary["held_out_confirmation"]
+        assert confirmation["layout_seeds"] == 20
+        assert confirmation["ripser_vs_default"]["mean_wins"] == 11
 
 
 @pytest.mark.cpu

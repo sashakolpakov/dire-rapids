@@ -331,8 +331,20 @@ Topology protocol parameters are exposed as ``topology_n_steps``,
 
 ``compute_betti_curve`` tries the GPU Atlas path first when GPU use is enabled,
 then the CPU Atlas path. Pass ``prefer_ripser=True`` to request Ripser first.
-No topology-tuned public preset is exported because its fixed-sample Ripser
-selection did not survive a paired held-out Atlas audit.
+The former broad ``TOPOLOGY_TUNED`` preset remains withdrawn. The crossed,
+held-out replacement is narrowly named ``RIPSER_TUNED``::
+
+   from dire_rapids import RIPSER_TUNED, create_dire
+
+   embedding = create_dire(**RIPSER_TUNED).fit_transform(X)
+
+It changes only ``spread`` from ``1.0`` to ``0.8``. Across six untouched
+datasets and 20 paired seeds it improved 11/12 Atlas and 11/12 Ripser cells
+against current default DiRe, with geometric discrepancy ratios of 0.951 and
+0.908. Against the strongest retained UMAP/t-SNE method in each cell it won
+6/12 cells for both evaluators, so the name describes its selection objective
+rather than promising a universal topology improvement. No ``ATLAS_TUNED``
+preset is exported because the Atlas-selected candidate failed to transfer.
 
 See :doc:`api/dire_rapids.metrics` for full API reference.
 
