@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "decision": {
+    "atlas_tuned_export": null,
+    "ripser_tuned_export": "RIPSER_TUNED",
+    "separate_evaluator_presets_required": false,
+    "conclusion": "The Atlas-selected spread=1.2 candidate did not transfer. The Ripser-selected spread=0.8 candidate passed every tuning quality guard and improved both evaluators against default on the held-out suite, so only the narrowly scoped RIPSER_TUNED name is supported. It beats the retained cell-wise UMAP/t-SNE envelope in suite aggregate, not in every cell."
+  },
+  "broad_search": {
+    "design": "32-candidate deterministic Sobol",
+    "records": 272,
+    "eligible_candidates": 0,
+    "diagnostic_atlas_winner": "sobol_018",
+    "diagnostic_atlas_ratio_to_default": 0.9088631854604349,
+    "diagnostic_ripser_winner": "sobol_020",
+    "diagnostic_ripser_ratio_to_default": 0.8573490917964033,
+    "diagnostic_winners_are_presets": false,
+    "source_revision": "45907a77c91c3f01b5aac3213b8f1f737637fbe2"
+  },
+  "local_refinement": {
+    "design": "18 one-parameter changes around default plus default control",
+    "records": 152,
+    "eligible_candidates": 3,
+    "atlas_selection": "local_spread_1p2",
+    "atlas_ratio_to_default": 0.9919454799217325,
+    "ripser_selection": "local_spread_0p8",
+    "ripser_ratio_to_default": 0.9357152797510608,
+    "source_revision": "6942167ba83e438bdb5f78ab2077a7cfcf296f33"
+  },
+  "held_out_seed42_screen": {
+    "datasets": 6,
+    "candidates": 2,
+    "records": 12,
+    "selected_candidate": "local_spread_0p8",
+    "atlas_geometric_ratio_to_best_umap_tsne": 0.9865070991808497,
+    "atlas_cell_wins": 5,
+    "ripser_geometric_ratio_to_best_umap_tsne": 0.8907361262250039,
+    "ripser_cell_wins": 6,
+    "ripser_comparator_scope": "archived canonical seed 42",
+    "source_revision": "f8d210d028df641974f232b65e3858fda38ed67e"
+  },
+  "held_out_confirmation": {
+    "candidate": "local_spread_0p8",
+    "parameters": {
+      "cutoff": 42.0,
+      "init": "pca",
+      "max_iter_layout": 128,
+      "min_dist": 0.01,
+      "n_neighbors": 16,
+      "neg_ratio": 8,
+      "spread": 0.8
+    },
+    "datasets": 6,
+    "layout_seeds": 20,
+    "records": 120,
+    "atlas_vs_default": {
+      "geometric_ratio": 0.951167943908874,
+      "mean_wins": 11,
+      "paired_interval_wins": 5,
+      "cells": 12
+    },
+    "ripser_vs_default": {
+      "geometric_ratio": 0.9077491543457062,
+      "mean_wins": 11,
+      "paired_interval_wins": 6,
+      "cells": 12
+    },
+    "atlas_vs_best_cellwise_umap_tsne": {
+      "geometric_ratio": 0.9442175934448894,
+      "mean_wins": 6,
+      "paired_interval_wins": 5,
+      "cells": 12,
+      "paired_counts": "10 for CPU comparators and 20 for GPU comparators"
+    },
+    "ripser_vs_best_cellwise_umap_tsne": {
+      "geometric_ratio": 0.8907361262250039,
+      "wins": 6,
+      "cells": 12,
+      "scope": "archived canonical seed 42; no repeated comparator claim"
+    },
+    "source_revision": "370b38f0df2b161621feefa3f66105298a337c07"
+  },
+  "quality_guard": {
+    "datasets": [
+      "mfeat-factors",
+      "satimage",
+      "pendigits",
+      "isolet"
+    ],
+    "maximum_knn_accuracy_drop": 0.01,
+    "maximum_neighbor_retention_drop": 0.01,
+    "maximum_global_distance_spearman_drop": 0.01,
+    "maximum_local_stress_increase_fraction": 0.1
+  },
+  "provenance": {
+    "gpu": "NVIDIA H100 80GB",
+    "environment_sha256": "b2a9be23548da97b9b97538fe7bf1280d622a2c29929e3287b1b4b8878047c92",
+    "tuning_manifest_sha256": "cb2399e13428daed0002dee73e43efdb900ef312a43c808293fda231a9375ab8",
+    "umap_tsne_baseline_fixture_sha256": "c2c9783b25d0ad0be1490c4fa42ef8f78a95e90dcafba4279049a484a889a833",
+    "historical_default_audit_sha256": "50e548e9b93beebb54e06e023889595a6304b2c3e5ba9746cde574bdc5dfa812"
+  }
+}

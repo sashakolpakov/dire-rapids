@@ -61,6 +61,8 @@ NOTES_*.md
 !images/*.png
 
 # Large result artifacts (images, embeddings)
+/issue14-historical-results/
+/issue14-preset-search/
 results/deepfake_dim/*/real/
 results/deepfake_dim/*/fake/
 results/deepfake_text/*.npy

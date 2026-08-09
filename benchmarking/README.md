@@ -4,6 +4,144 @@
 
 This directory contains comprehensive benchmarking results and performance analysis for DiRe-Rapids, focusing on scalability with high-dimensional data. The benchmarks compare reducer implementations (PyTorch, memory-efficient PyTorch, RAPIDS cuVS/cuML) and k-NN engines (`pytorch`, `pykeops`, `cuvs`) that enable processing datasets with millions of points in up to 1000 dimensions.
 
+## Withdrawn topology preset historical audit
+
+`bench_topology_historical.py` is the frozen issue #14 resolution harness. It
+does not restore or export the withdrawn preset. Instead, it privately pins the
+former parameters and compares them with default DiRe at:
+
+- `9117dc45a3e130fa1d636dfd181f3e97960c5b3b`, where the preset was added;
+- `293b622cc79fa8ea6fd5b54009e0930e3385b22f`, used by the paired audit;
+- `471ac168eb2e6638a84f700fe077f29f20e24488`, the original PR #12 head.
+
+Every revision uses the same materialized six-dataset arrays, layout seeds
+42--61, and seed-paired 1,000-row subsets. Materialization and loading both
+enforce one predeclared array SHA-256 per dataset, so dependency or source
+drift cannot silently create a different comparison. The selected labels and
+row order reproduce the retained audit exactly for all six datasets. The
+evaluator is loaded from the hash-verified `293b622` `betti_curve.py` file for
+every revision. Both direct rank-based kNN Atlas and Ripser H0/H1 Betti-DTW
+discrepancies are retained. The legacy comparisons explicitly force exact-flat
+index/search. The PR #12 head is also run through its proposed automatic
+all-neighbors path.
+
+Run the complete matrix inside the repository's RAPIDS 26.06 container on an
+NVIDIA H100. The runner rejects a different GPU class so the historical
+comparison cannot be mistaken for the requested H100 reproduction:
+
+```bash
+benchmarking/run_topology_historical.sh /workspace/issue14-historical-results
+```
+
+The command is resumable. It appends one checksummed JSON record per fit and
+refuses to summarize until all 960 records are present and their dataset and
+subset identities pair exactly across configurations and revisions. Shared
+reference Atlas and Ripser curves are content-hashed, and their hashes must
+also pair across every record. The final summary predeclares a material
+implementation change as a change in the paired preset-minus-default gap
+exceeding 5% of the historical default mean, with a descriptive paired 95%
+interval excluding zero. Raw records, reference curves, and manifests must be
+retained with the three summary files before drawing or publishing the
+historical-regression conclusion.
+
+If the exact frozen arrays have already been archived under
+`frozen-datasets/`, the runner verifies and reuses their manifest rather than
+regenerating them. This is intentional: transcendental preprocessing can
+differ by a few float32 ULPs across NumPy/libm builds, while the audit requires
+identical input bytes. A missing or altered array still fails the predeclared
+array and file hashes before any fit starts.
+
+The runner imports its required PyTorch runtime before importing each pinned
+historical checkout. Commit `293b622` used a cuML-before-PyTorch package import
+order that was needed by RAPIDS 26.04, but that historical loader order leaves
+cuBLAS uninitialized in the frozen RAPIDS 26.06 environment. Loading PyTorch
+first fixes only the shared-library order; the historical source, reducer
+parameters, and requested/effective cuVS graph policies remain pinned and are
+recorded unchanged.
+
+### Crossed Atlas/Ripser preset search
+
+`bench_topology_preset_search.py` searches for replacement presets without
+reusing the six validation datasets. It freezes four disjoint OpenML datasets
+(mfeat-factors, satimage, pendigits, and isolet), evaluates the same bounded
+Sobol candidates with both the fixed Atlas and Ripser metrics, and selects
+separate Atlas, Ripser, and compromise candidates. On every tuning dataset, a
+candidate is eligible only when its mean 15-NN accuracy, local-neighbor
+retention, and sampled global-distance Spearman correlation are no more than
+one percentage point below default DiRe, and local stress is no more than 10%
+higher. The search never fits UMAP or t-SNE; those thresholds come from the
+retained, hash-pinned baseline fixture.
+
+The search requests the released `cuvs_knn_method="auto"` policy and asserts
+that the current guarded policy resolves to `index_search`, recording the
+effective index type for every fit. The historical audit separately covers
+PR #12 head's proposed automatic all-neighbors behavior; candidate tuning does
+not silently opt into that unreleased policy change.
+
+```bash
+python benchmarking/bench_topology_preset_search.py prepare \
+  --output issue14-preset-search/tuning-datasets
+python benchmarking/bench_topology_preset_search.py run \
+  --source-root . \
+  --evaluator-source /path/to/293b622/dire_rapids/betti_curve.py \
+  --tuning-root issue14-preset-search/tuning-datasets \
+  --reference-cache issue14-preset-search/reference-cache \
+  --output issue14-preset-search/raw/search.jsonl \
+  --sobol-count 32
+python benchmarking/bench_topology_preset_search.py summarize \
+  --input issue14-preset-search/raw/search.jsonl \
+  --manifest issue14-preset-search/raw/search.manifest.json \
+  --output issue14-preset-search/summary/search-summary.json
+python benchmarking/bench_topology_preset_search.py validate \
+  --source-root . \
+  --evaluator-source /path/to/293b622/dire_rapids/betti_curve.py \
+  --frozen-root issue14-historical-results/frozen-datasets \
+  --search-summary issue14-preset-search/summary/search-summary.json \
+  --reference-cache issue14-preset-search/validation-reference-cache \
+  --output issue14-preset-search/raw/validation.jsonl \
+  --layout-seeds 42
+python benchmarking/bench_topology_preset_search.py summarize-validation \
+  --input issue14-preset-search/raw/validation.jsonl \
+  --manifest issue14-preset-search/raw/validation.manifest.json \
+  --baselines tests/data/topology_umap_tsne_atlas_baselines.json \
+  --default-audit tests/data/topology_historical_h100_audit.tar.gz \
+  --output issue14-preset-search/summary/validation-summary.json
+```
+
+The first validation pass deliberately uses only seed 42, which is the seed
+for every archived canonical UMAP/t-SNE embedding. If a Ripser candidate is
+competitive in that screen, rerun only that candidate with `--candidate NAME
+--layout-seeds 42:62` and fit only the strongest missing Ripser comparator(s)
+needed for a repeated claim. Atlas already has retained repeat distributions,
+so its validation summary uses overlapping seeds and reports paired 95%
+intervals immediately.
+
+Passing `--default-audit` also performs a fully paired Atlas/Ripser comparison
+against the retained 20-seed current-default records. Dataset arrays, topology
+subsets, reference curves, and exact-flat effective graph policy must all match
+before those records are compared.
+
+If the broad Sobol design produces no quality-feasible candidate, a bounded
+refinement can be run with `--design local`. It evaluates 18 one-parameter
+changes around default (plus the default control), making any safe improvement
+interpretable and adding only 152 fits. The quality gates are not relaxed.
+
+The completed H100 run retained 272 broad-search, 152 local-refinement, 12
+seed-42 screening, and 120 repeated-validation records. No broad candidate
+passed every safeguard. The local search selected `spread=1.2` for Atlas and
+`spread=0.8` for Ripser, but only `spread=0.8` transferred: over six untouched
+datasets and 20 paired seeds, its geometric ratios to default were 0.951 for
+Atlas and 0.908 for Ripser, with numerical wins in 11/12 cells under both
+evaluators. It beat the retained cell-wise UMAP/t-SNE envelope in suite
+aggregate (0.944 for repeated Atlas; 0.891 for the canonical seed-42 Ripser
+screen), but only in 6/12 individual cells. The result supports the narrow
+`RIPSER_TUNED` name and does not support a separate `ATLAS_TUNED` export.
+
+The complete raw records, manifests, tuning reference curves, and summaries
+are retained in `tests/data/topology_preset_search_h100_audit.tar.gz`; the
+compact decision summary is unpacked under
+`tests/data/topology_preset_search_h100/`.
+
 ## Key Achievements
 
 **High throughput for large datasets:**

@@ -1,0 +1,39 @@
+{
+  "atlas_preset_effect_by_variant": {
+    "293b622_index_search_flat": {
+      "cells": 12,
+      "preset_materially_better": 0,
+      "preset_numerically_worse": 10,
+      "preset_worse_interval_excludes_zero": 9,
+      "preset_worse_over_5pct": 9
+    },
+    "471ac16_auto_all_neighbors": {
+      "cells": 12,
+      "preset_materially_better": 0,
+      "preset_numerically_worse": 10,
+      "preset_worse_interval_excludes_zero": 9,
+      "preset_worse_over_5pct": 9
+    },
+    "471ac16_index_search_flat": {
+      "cells": 12,
+      "preset_materially_better": 0,
+      "preset_numerically_worse": 10,
+      "preset_worse_interval_excludes_zero": 9,
+      "preset_worse_over_5pct": 9
+    },
+    "9117dc4_index_search_flat": {
+      "cells": 12,
+      "preset_materially_better": 0,
+      "preset_numerically_worse": 10,
+      "preset_worse_interval_excludes_zero": 9,
+      "preset_worse_over_5pct": 9
+    }
+  },
+  "conclusion": "No Atlas cell shows a material post-9117 implementation change under the predeclared paired rule; the preset failure is consistent with objective mismatch/out-of-sample over-specialization rather than an implementation regression.",
+  "material_post_9117_implementation_change": false,
+  "material_post_9117_implementation_change_cells": [],
+  "materiality_rule": "absolute difference-in-paired-preset-gap exceeds 5% of the reference default mean and the descriptive paired 95% interval excludes zero",
+  "paired_repeats": 20,
+  "practical_band": 0.05,
+  "schema_version": 1
+}

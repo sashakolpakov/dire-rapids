@@ -314,7 +314,23 @@ print(result['beta_0'])             # connected components at each step
 print(result['beta_1'])             # 1-cycles (loops) at each step
 ```
 
-The Atlas path uses GPU kNN when cuVS/cuML is available, then performs the set-heavy atlas merge and incremental rank update on CPU. No topology-tuned public preset is exported: its fixed-sample Ripser selection did not survive the paired held-out Atlas audit described in the changelog.
+The Atlas path uses GPU kNN when cuVS/cuML is available, then performs the set-heavy atlas merge and incremental rank update on CPU. The former broad `TOPOLOGY_TUNED` preset remains withdrawn. A crossed search and untouched six-dataset, 20-seed confirmation supports the narrower `RIPSER_TUNED` preset:
+
+```python
+from dire_rapids import RIPSER_TUNED, create_dire
+
+embedding = create_dire(**RIPSER_TUNED).fit_transform(X)
+```
+
+`RIPSER_TUNED` changes only `spread` from `1.0` to `0.8`. Against current
+default DiRe it improved 11/12 held-out Atlas cells and 11/12 Ripser cells;
+the suite geometric discrepancy ratios were 0.951 and 0.908 (lower is better).
+Against the strongest retained UMAP/t-SNE method in each cell, its aggregate
+ratios were 0.944 for repeated Atlas and 0.891 for the canonical seed-42
+Ripser screen, but it won only 6/12 cells for each evaluator. It is therefore
+a Ripser-objective option with documented failure cases, not a universal
+topology guarantee. No separate `ATLAS_TUNED` preset is exported because the
+Atlas-selected tuning candidate did not transfer to held-out data.
 
 ## ReducerRunner Framework
 

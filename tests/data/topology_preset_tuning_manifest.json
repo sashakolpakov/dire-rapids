@@ -1,0 +1,66 @@
+{
+  "datasets": {
+    "isolet": {
+      "classes": 26,
+      "data_array_sha256": "89e970075b6552d2e4f5a09fc17e2a0cfdcd467c0eaa5128a3f11de0af5cbd78",
+      "data_file_sha256": "ac9e295d527b85ddd99384643daa7e5a7af02533721f6f7734626172e199a289",
+      "data_path": "isolet.npy",
+      "labels_array_sha256": "b5b8bf951d3ba919e859d52f30801ff4f85c7acb2c04662ddae717d171f66292",
+      "labels_file_sha256": "6042c46fbd77bbe306ce0d7a824302bac8d19ee7dc8ac0ce88bb4962096d6b46",
+      "labels_path": "isolet.labels.npy",
+      "openml_id": 300,
+      "shape": [
+        7797,
+        617
+      ]
+    },
+    "mfeat-factors": {
+      "classes": 10,
+      "data_array_sha256": "d387e647dbf0b4d4f0d21c4a4520dbd4eac69f72decf475c6d68e91b5f6f46ce",
+      "data_file_sha256": "a919fc0d0f0b6994f87b2e5a7888de0937fa38987b61817e3bfcb7e929227565",
+      "data_path": "mfeat-factors.npy",
+      "labels_array_sha256": "1ccddbf388f7aca140f9353eb8b51068978245f048739649003ce407a5375360",
+      "labels_file_sha256": "2fbc4800409f6a33548817b0dfc42a262eda8249b1b6fb7d2e2d06183f2d62b0",
+      "labels_path": "mfeat-factors.labels.npy",
+      "openml_id": 12,
+      "shape": [
+        2000,
+        216
+      ]
+    },
+    "pendigits": {
+      "classes": 10,
+      "data_array_sha256": "5fe9583a6d0991c1ebd9be91e62e6464c38f23b064083939d0f58e0fffe92b29",
+      "data_file_sha256": "5747b3949b4782867de0bd7adc0398faf7d3bc88565adc86be6a844dcb2a00c7",
+      "data_path": "pendigits.npy",
+      "labels_array_sha256": "8a24a7aea9266790936d77949dbd77878e34fc66833bc860d2dbebc11f4c0e33",
+      "labels_file_sha256": "4fca7066dc592f3712a5af7fab695f56a15b62ea648b9a17a2f28967e2dd6c89",
+      "labels_path": "pendigits.labels.npy",
+      "openml_id": 32,
+      "shape": [
+        10992,
+        16
+      ]
+    },
+    "satimage": {
+      "classes": 6,
+      "data_array_sha256": "64b98880f604a3d4f68510e00d2a60ea0c0d890e15a4640dd0c23a8da4585591",
+      "data_file_sha256": "6a698a19227ddd21e54baae8fe91f6dbe63dc8da2e48faca051388de9729ed70",
+      "data_path": "satimage.npy",
+      "labels_array_sha256": "298e3246e5c57c652eea8c98496da7b686b05f93ee683ea9a26077c2844d7ed5",
+      "labels_file_sha256": "9626eba676de879f07b64ad40038ebc631bfe0b93d39eb95e84bad0e03163b0b",
+      "labels_path": "satimage.labels.npy",
+      "openml_id": 182,
+      "shape": [
+        6430,
+        36
+      ]
+    }
+  },
+  "schema_version": 1,
+  "suite": "issue-14-disjoint-openml-tuning",
+  "versions": {
+    "numpy": "2.4.5",
+    "scikit-learn": "1.8.0"
+  }
+}
