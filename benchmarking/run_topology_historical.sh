@@ -39,8 +39,13 @@ add_worktree() {
 
 mkdir -p "$OUTPUT_ROOT/raw" "$OUTPUT_ROOT/summary"
 
-"$PYTHON_BIN" "$HARNESS" prepare \
-  --output "$OUTPUT_ROOT/frozen-datasets"
+if [[ -f "$OUTPUT_ROOT/frozen-datasets/manifest.json" ]]; then
+  "$PYTHON_BIN" "$HARNESS" verify-datasets \
+    --root "$OUTPUT_ROOT/frozen-datasets"
+else
+  "$PYTHON_BIN" "$HARNESS" prepare \
+    --output "$OUTPUT_ROOT/frozen-datasets"
+fi
 
 add_worktree preset-introduction 9117dc45a3e130fa1d636dfd181f3e97960c5b3b
 add_worktree audited-main 293b622cc79fa8ea6fd5b54009e0930e3385b22f

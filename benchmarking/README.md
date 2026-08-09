@@ -44,6 +44,13 @@ interval excluding zero. Raw records, reference curves, and manifests must be
 retained with the three summary files before drawing or publishing the
 historical-regression conclusion.
 
+If the exact frozen arrays have already been archived under
+`frozen-datasets/`, the runner verifies and reuses their manifest rather than
+regenerating them. This is intentional: transcendental preprocessing can
+differ by a few float32 ULPs across NumPy/libm builds, while the audit requires
+identical input bytes. A missing or altered array still fails the predeclared
+array and file hashes before any fit starts.
+
 ## Key Achievements
 
 **High throughput for large datasets:**

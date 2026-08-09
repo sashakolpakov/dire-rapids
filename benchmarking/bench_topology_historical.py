@@ -1128,6 +1128,11 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--output", type=Path, required=True)
     prepare.add_argument("--datasets", nargs="+", choices=DATASETS, default=list(DATASETS))
 
+    verify = subparsers.add_parser(
+        "verify-datasets", help="verify an existing frozen input manifest"
+    )
+    verify.add_argument("--root", type=Path, required=True)
+
     run = subparsers.add_parser("run", help="run or resume one GPU variant")
     run.add_argument("--variant", choices=tuple(VARIANTS), required=True)
     run.add_argument("--source-root", type=Path, required=True)
@@ -1146,6 +1151,9 @@ def main() -> None:
     args = parse_args()
     if args.command == "prepare":
         manifest = materialize_datasets(args.output, args.datasets)
+        print(json.dumps(manifest, indent=2, sort_keys=True))
+    elif args.command == "verify-datasets":
+        manifest, _arrays = load_dataset_manifest(args.root)
         print(json.dumps(manifest, indent=2, sort_keys=True))
     elif args.command == "run":
         run_variant(
