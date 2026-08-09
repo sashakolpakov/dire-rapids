@@ -340,19 +340,45 @@ class TestDiRePyTorchNormalization:
             f"between/within ratio = {ratio_spec:.2f} (expected > 1)"
         )
 
-    def test_topology_tuned_preset_importable_and_usable(self):
-        """TOPOLOGY_TUNED preset is exposed and produces a valid embedding."""
-        from dire_rapids import TOPOLOGY_TUNED, presets  # noqa: F401
-        assert isinstance(TOPOLOGY_TUNED, dict)
-        assert TOPOLOGY_TUNED['init'] == 'spectral'
-        assert TOPOLOGY_TUNED['spread'] > 2.0   # the signature deviation from default
-        X, _ = make_blobs(n_samples=120, n_features=10, centers=3, random_state=0)
-        # Override max_iter_layout for test speed (preset default is higher).
-        cfg = {**TOPOLOGY_TUNED, 'max_iter_layout': 20}
-        model = DiRePyTorch(n_components=2, verbose=False, random_state=0, **cfg)
-        emb = model.fit_transform(X)
-        assert emb.shape == (120, 2)
-        assert np.all(np.isfinite(emb))
+    def test_unsupported_topology_preset_is_not_exported(self):
+        """A merge or rebase must not resurrect the failed public preset."""
+        import dire_rapids
+
+        assert not hasattr(dire_rapids, "TOPOLOGY_TUNED")
+        assert "TOPOLOGY_TUNED" not in dire_rapids.__all__
+        assert not hasattr(dire_rapids.presets, "TOPOLOGY_TUNED")
+        assert "TOPOLOGY_TUNED" not in dire_rapids.presets.__all__
+
+    def test_frozen_topology_preset_audit_retains_failure_summary(self):
+        """The evidence behind preset removal remains a checked fixture."""
+        import csv
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).with_name("data")
+            / "topology_preset_atlas_audit.csv"
+        )
+        with fixture.open(encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+
+        gaps = [float(row["relative_gap"]) for row in rows]
+        intervals = [
+            (
+                float(row["paired_mean_95pct_low"]),
+                float(row["paired_mean_95pct_high"]),
+            )
+            for row in rows
+        ]
+
+        assert len(rows) == 12
+        assert {int(row["paired_count"]) for row in rows} == {20}
+        assert sum(gap > 0 for gap in gaps) == 10
+        assert sum(gap > 0.05 for gap in gaps) == 9
+        assert sum(low > 0 for low, _ in intervals) == 9
+        assert not any(
+            gap < -0.05 or high < 0
+            for gap, (_, high) in zip(gaps, intervals)
+        )
 
     def test_betti_curve_ripser_on_circle(self):
         """Ripser backend returns correct Betti curve shape and identifies one
@@ -381,6 +407,48 @@ class TestDiRePyTorchNormalization:
         # Expect at least one β_1 bar whose lifetime persists over several
         # filtration steps — the big circular loop.
         assert int(result['beta_1'].max()) >= 1
+
+    def test_betti_curve_selector_defaults_to_atlas(self, monkeypatch):
+        """Installing Ripser must not silently change the public default."""
+        import dire_rapids.betti_curve as betti_curve
+
+        sentinel = {"backend": "cpu-atlas"}
+
+        def unexpected_ripser(*args, **kwargs):
+            raise AssertionError("default selector must not call ripser")
+
+        monkeypatch.setattr(betti_curve, "compute_betti_curve_ripser", unexpected_ripser)
+        monkeypatch.setattr(
+            betti_curve,
+            "compute_betti_curve_fast",
+            lambda *args, **kwargs: sentinel,
+        )
+
+        result = betti_curve.compute_betti_curve(
+            np.zeros((4, 2), dtype=np.float32),
+            use_gpu=False,
+        )
+
+        assert result is sentinel
+
+    def test_betti_curve_selector_keeps_ripser_as_explicit_option(self, monkeypatch):
+        """Callers can still request Ripser without making it the default."""
+        import dire_rapids.betti_curve as betti_curve
+
+        sentinel = {"backend": "ripser"}
+        monkeypatch.setattr(
+            betti_curve,
+            "compute_betti_curve_ripser",
+            lambda *args, **kwargs: sentinel,
+        )
+
+        result = betti_curve.compute_betti_curve(
+            np.zeros((4, 2), dtype=np.float32),
+            use_gpu=False,
+            prefer_ripser=True,
+        )
+
+        assert result is sentinel
 
     def test_normalize_false_preserves_old_behavior(self):
         """normalize=False should leave _data untouched, for back-compat."""
@@ -584,6 +652,86 @@ class TestKnnBackendSelection:
                 verbose=False,
             )
 
+    def test_repeated_fit_refreshes_cached_knn_tensor(self):
+        """A same-shaped second fit must not optimize against the first graph."""
+        first, _ = make_blobs(
+            n_samples=24, n_features=4, centers=3, random_state=11
+        )
+        second, _ = make_blobs(
+            n_samples=24, n_features=4, centers=5, random_state=29
+        )
+        model = DiRePyTorch(
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=1,
+            knn_backend="pytorch",
+            random_state=7,
+            verbose=False,
+        )
+        model.device = torch.device("cpu")
+
+        model.fit_transform(first)
+        first_graph = model._knn_indices.copy()
+        model.fit_transform(second)
+
+        assert not np.array_equal(first_graph, model._knn_indices)
+        np.testing.assert_array_equal(
+            model._knn_indices_torch.cpu().numpy(), model._knn_indices
+        )
+
+    def test_vectorized_force_fallback_is_reported(self, monkeypatch):
+        """Downstream benchmarks can detect every chunked force fallback."""
+        data, _ = make_blobs(
+            n_samples=24, n_features=4, centers=3, random_state=23
+        )
+
+        def raise_oom(*args, **kwargs):
+            del args, kwargs
+            raise RuntimeError("forced vectorized-force failure")
+
+        monkeypatch.setattr(
+            dire_pytorch_module, "_compute_forces_compiled", raise_oom
+        )
+        model = DiRePyTorch(
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=2,
+            knn_backend="pytorch",
+            random_state=7,
+            verbose=False,
+        )
+
+        embedding = model.fit_transform(data)
+        diagnostics = model.get_diagnostics()
+
+        assert embedding.shape == (24, 2)
+        assert diagnostics["force_chunked_fallback_used"] is True
+        assert diagnostics["force_chunked_fallback_calls"] == 2
+        assert model.force_chunked_fallback_calls_ == 2
+
+    def test_memory_efficient_fit_rebuilds_invalidated_knn_tensor(self):
+        """The memory-efficient force path accepts a cleared graph cache."""
+        data, _ = make_blobs(
+            n_samples=24, n_features=4, centers=3, random_state=17
+        )
+        model = create_dire(
+            backend="pytorch_cpu",
+            memory_efficient=True,
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=1,
+            knn_backend="pytorch",
+            random_state=7,
+            verbose=False,
+        )
+
+        embedding = model.fit_transform(data)
+
+        assert embedding.shape == (24, 2)
+        assert np.all(np.isfinite(embedding))
+        np.testing.assert_array_equal(
+            model._knn_indices_torch.cpu().numpy(), model._knn_indices
+        )
 
 class TestDiRePyTorchErrors:
     """Test error handling and edge cases."""
@@ -766,6 +914,36 @@ class TestDiRePyTorchCustomMetrics:
         assert model._metric_fn is not None
         assert model._knn_indices[0, 0] == 1
         assert model._knn_indices[1, 0] == 0
+
+    @pytest.mark.parametrize("metric", ["cosine", "inner_product"])
+    def test_origin_sensitive_metric_normalization_preserves_neighbors(self, metric):
+        """Default normalization must not mean-center origin-sensitive metrics."""
+        data = np.random.default_rng(13).uniform(1.0, 8.0, size=(16, 4)).astype(
+            np.float32
+        )
+        model = DiRePyTorch(
+            metric=metric,
+            n_neighbors=3,
+            init="random",
+            max_iter_layout=1,
+            knn_backend="pytorch",
+            random_state=5,
+            verbose=False,
+        )
+        model.device = torch.device("cpu")
+
+        model.fit_transform(data)
+
+        scaled = data / np.abs(data).max()
+        np.testing.assert_allclose(model._data, scaled, rtol=1e-6, atol=1e-7)
+        if metric == "cosine":
+            norms = np.linalg.norm(scaled, axis=1)
+            pairwise = 1.0 - (scaled @ scaled.T) / np.outer(norms, norms)
+        else:
+            pairwise = -(scaled @ scaled.T)
+        np.fill_diagonal(pairwise, np.inf)
+        expected = np.argsort(pairwise, axis=1)[:, :model.n_neighbors]
+        np.testing.assert_array_equal(model._knn_indices, expected)
 
     def test_callable_metric(self):
         """Test custom callable metric function."""

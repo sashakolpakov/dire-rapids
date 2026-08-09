@@ -9,6 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Density visualization for large embeddings**: `DiRePyTorch.visualize` and `ReducerRunner` now switch large 2D embeddings from per-point WebGL scatter to a binned 2D-histogram density so the figure payload stays bounded regardless of point count (binning is done server-side with `np.histogram2d`; only a fixed `n_bins × n_bins` grid is shipped). Categorical labels render as a per-category density overlay (one filled-contour layer per class); unlabeled data renders a count heatmap and continuous labels a mean-value heatmap. Controlled by `mode` (`'auto'` | `'scatter'` | `'density'`) and `density_threshold`. Exposed as the shared, public `dire_rapids.build_embedding_figure` helper.
+- **cuVS all-neighbors graph builder**: `DiReCuVS` can use RAPIDS 26.06's
+  purpose-built all-neighbors API, including host-backed partitioned builds,
+  configurable NN-descent/brute-force/IVF-PQ local algorithms, and optional
+  multi-GPU resources.
+- **All-neighbors tests**: Added CPU-safe routing and validation coverage plus
+  GPU recall, self-removal, and out-of-core graph-contract tests.
+- **Fitted backend diagnostics**: Reducers now expose effective k-NN/cuVS
+  policy, graph/initialization/layout timings, and vectorized-force fallback
+  counts through fitted attributes and `get_diagnostics()`.
+
+### Changed
+- **RAPIDS 26.06 baseline**: Added CUDA 12 and CUDA 13 extras pinned to the
+  26.06 release line, Python 3.14 metadata, and a reproducible
+  RAPIDS 26.06/CUDA 13/Python 3.14 container configuration.
+- **cuVS all-neighbors policy**: The RAPIDS reducer preserves the released
+  automatic index-and-search policy. All-neighbors is explicit opt-in until
+  frozen downstream quality gates justify changing existing embeddings.
+- **H100 all-neighbors validation**: A held-fixed 10x/arXiv A/B run found
+  dataset-dependent runtime (about 26% slower on full 10x and 1.91x faster on
+  full arXiv), graph overlap of 0.623 and 0.839, and mixed downstream quality.
+  It remains a viable explicit option, particularly for arXiv-like workloads,
+  but was not promoted to the default; the reproducibility harness stays on
+  its separate test branch.
+- **Atlas topology default**: `compute_betti_curve` now selects GPU then CPU
+  Atlas by default. Ripser remains available with `prefer_ripser=True` as an
+  explicit reference backend.
+- **GPU graph handoff**: Reuses a DLPack-backed PyTorch view of the cuVS graph
+  during layout optimization instead of uploading the host copy again.
+
+### Fixed
+- **RAPIDS 26.06 parameter compatibility**: Build and search overrides are now
+  merged before constructing cuVS parameter extension objects, which do not
+  implement `dict.update()`.
+- **CUDA 13 import order**: The container and setup guide preload the conda
+  `libnvJitLink.so.13` and check both PyTorch/cuML import orders.
+- **Repeated-fit graph cache**: Invalidates and rebuilds the DLPack/PyTorch
+  neighbor tensor when a reducer is fitted again, including the
+  memory-efficient force path.
+- **Metric graph contracts**: Preserves the input origin for cosine and
+  inner-product normalization and keeps Euclidean distance scales consistent
+  between the all-neighbors and legacy cuVS paths.
+
+### Removed
+- **Unsupported topology preset**: Withdrew the public `TOPOLOGY_TUNED` export
+  after a paired held-out Atlas audit found worse discrepancy in 10 of 12
+  dataset-by-homology comparisons. The original fixed-sample Ripser selection
+  did not support its general name.
 
 ## [0.3.2] - 2026-06-03
 
@@ -33,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Test extras**: Added pandas and plotly to test dependencies for CI visualization tests
-- **Presets**: New `TOPOLOGY_TUNED` preset discovered via NSGA-II Pareto studies
+- **Presets (subsequently withdrawn)**: Added the former `TOPOLOGY_TUNED`
+  fixed-sample Ripser study configuration
 
 ### Changed
 - **Python version**: Updated minimum to 3.10 (was 3.9)

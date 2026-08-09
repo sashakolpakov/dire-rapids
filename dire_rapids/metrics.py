@@ -10,10 +10,8 @@ the quality of dimensionality reduction embeddings, including:
 - Context preservation metrics (SVM, kNN classification)
 - Topological metrics (persistence homology, Betti curves)
 
-The module supports multiple backends for persistence computation:
-- giotto-ph (fastest CPU, multi-threaded)
-- ripser++ (GPU-accelerated)
-- ripser (CPU fallback)
+Topology metrics use the kNN-Atlas implementation by default. Ripser remains
+available as an explicit reference backend through ``compute_betti_curve``.
 """
 
 import warnings

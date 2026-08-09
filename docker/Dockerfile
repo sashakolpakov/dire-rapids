@@ -26,9 +26,14 @@
 #   docker run --gpus=all --rm dire-rapids:0.3.2 \
 #       python -m pytest tests/test_cpu_basic.py tests/test_reducer_runner.py -v
 
-ARG RAPIDS_VERSION=26.04
-ARG CUDA_VERSION=12.8
-ARG PYTHON_VERSION=3.12
+ARG RAPIDS_VERSION=26.06
+# RAPIDS NGC tags use the CUDA major (cuda13), while the PyTorch index uses
+# major+minor (cu130). Keep these independent so neither tag is synthesized
+# incorrectly from the other.
+ARG CUDA_VERSION=13
+ARG PYTHON_VERSION=3.14
+ARG TORCH_CUDA=130
+ARG TORCH_VERSION=2.11.0
 
 FROM nvcr.io/nvidia/rapidsai/base:${RAPIDS_VERSION}-cuda${CUDA_VERSION}-py${PYTHON_VERSION}
 
@@ -36,6 +41,8 @@ FROM nvcr.io/nvidia/rapidsai/base:${RAPIDS_VERSION}-cuda${CUDA_VERSION}-py${PYTH
 ARG RAPIDS_VERSION
 ARG CUDA_VERSION
 ARG PYTHON_VERSION
+ARG TORCH_CUDA
+ARG TORCH_VERSION
 
 LABEL org.opencontainers.image.title="dire-rapids"
 LABEL org.opencontainers.image.description="PyTorch + RAPIDS accelerated dimensionality reduction"
@@ -48,20 +55,17 @@ LABEL rapids.version="${RAPIDS_VERSION}"
 USER root
 SHELL ["/bin/bash", "-c"]
 
-# Guard against the libnvJitLink shadow-import gotcha: torch's pip-installed
-# nvidia/cu13/lib/libnvJitLink.so.13 (v13.0) shadows conda's v13.2 once
-# loaded, which breaks subsequent cuML imports. We install torch with the
-# cu12x wheels (which do not ship libnvJitLink) when RAPIDS is on 12.x, and
-# rely on conda's CUDA 13 libs for the 13.x path.
-#
-# Matching-CUDA wheel index computed from CUDA_VERSION ARG:
-#   12.8 -> whl/cu128   12.5 -> whl/cu125   etc.
-#
+# Guard against the libnvJitLink shadow-import gotcha: the PyTorch CUDA 13
+# wheel also supplies libnvJitLink.so.13, but RAPIDS must load the version in
+# its conda environment. Preloading that library makes both import orders
+# deterministic.
+ENV LD_PRELOAD=/opt/conda/lib/libnvJitLink.so.${CUDA_VERSION}
+
 RUN --mount=type=cache,target=/opt/conda/pkgs \
-    cuda_mm="${CUDA_VERSION/./}" && \
-    echo "Installing torch from https://download.pytorch.org/whl/cu${cuda_mm}" && \
+    echo "Installing torch from https://download.pytorch.org/whl/cu${TORCH_CUDA}" && \
     python -m pip install --no-cache-dir \
-        torch --index-url "https://download.pytorch.org/whl/cu${cuda_mm}"
+        "torch==${TORCH_VERSION}" \
+        --index-url "https://download.pytorch.org/whl/cu${TORCH_CUDA}"
 
 # Install dire-rapids itself.
 WORKDIR /workspace
@@ -76,13 +80,19 @@ COPY README.md /tmp/README.md
 RUN python -m pip install --no-cache-dir /tmp[persistent,bench] && \
     python -c "import dire_rapids, fastdtw, ripser, optuna; print('dire-rapids', dire_rapids.__version__, 'fastdtw OK', 'ripser', ripser.__version__, 'optuna', optuna.__version__)"
 
-# Smoke-test the import chain that rapids-26.04 likes to break. If this
-# fails at build time, the tag combination is unstable and we want to know
-# immediately rather than at runtime.
-RUN python -c "import cugraph; import torch; \
-    from dire_rapids import DiRePyTorch, TOPOLOGY_TUNED, presets; \
+# Smoke-test both import orders in separate Python processes. This catches a
+# libnvJitLink selection problem that can otherwise depend on which framework
+# happens to import first.
+RUN python -c "import torch; import cuml; print('torch -> cuml import OK', torch.__version__, cuml.__version__)"
+RUN python -c "import cuml; import torch; print('cuml -> torch import OK', cuml.__version__, torch.__version__)"
+
+# Also check the installed dire-rapids surface. GPU availability is expected
+# to be false during an ordinary image build, so this test only imports.
+RUN python -c "import torch; \
+    from dire_rapids import DiRePyTorch, presets; \
     from dire_rapids.betti_curve import compute_betti_curve_ripser; \
-    print('import-order OK; torch.cuda.is_available() ==', torch.cuda.is_available())"
+    assert not hasattr(presets, 'TOPOLOGY_TUNED'); \
+    print('dire-rapids imports OK; torch.cuda.is_available() ==', torch.cuda.is_available())"
 
 WORKDIR /workspace
 CMD ["bash"]

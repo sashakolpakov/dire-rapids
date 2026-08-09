@@ -76,7 +76,7 @@ python -m pip install "dire-rapids==0.3.2"
 # With PyKeOps support for the optional PyKeOps k-NN engine
 python -m pip install "dire-rapids[keops]==0.3.2"
 
-# With CUDA CuPy support
+# With CUDA 12 CuPy support
 python -m pip install "dire-rapids[cuda]==0.3.2"
 ```
 
@@ -87,27 +87,62 @@ git clone https://github.com/sashakolpakov/dire-rapids.git
 cd dire-rapids
 
 python -m pip install -e .            # CPU + PyTorch
-python -m pip install -e ".[cuda]"    # With CUDA CuPy support
+python -m pip install -e ".[cuda]"    # With CUDA 12 CuPy support
 python -m pip install -e ".[keops]"   # With PyKeOps support
 python -m pip install -e ".[dev]"     # Development (testing + dev tools)
 ```
 
 #### With RAPIDS Support (Optional, GPU only)
 
-Use a clean virtual environment. The `rapids` extra installs cuML/cuVS/cuDF from
-the NVIDIA index and PyTorch from the matching CUDA wheel index.
-```bash
-python -m pip install \
-  --extra-index-url https://pypi.nvidia.com \
-  --extra-index-url https://download.pytorch.org/whl/cu128 \
-  "dire-rapids[rapids,keops]==0.3.2"
+Use a clean virtual environment. For the stable 0.3.2 CUDA 12 release, install
+PyTorch from its dedicated wheel index first, followed by the `rapids` extra
+from PyPI and the NVIDIA package index:
 
-# From a clone:
+```bash
+python -m pip install torch==2.11.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install --extra-index-url https://pypi.nvidia.com \
+  "dire-rapids[rapids,keops]==0.3.2"
+```
+
+For RAPIDS 26.06 and the all-neighbors implementation, choose exactly one
+CUDA-specific development extra. Both extras pin cuML, cuVS, and cuDF to
+RAPIDS 26.06.x. The development `rapids` extra remains an alias of
+`rapids-cu12` for backward compatibility.
+
+The core package supports Python 3.10+, while these RAPIDS extras require
+Python 3.11--3.14.
+The CUDA-specific extras are currently unreleased, so install this version
+from a clone:
+
+```bash
+git clone https://github.com/sashakolpakov/dire-rapids.git
+cd dire-rapids
+```
+
+CUDA 13 (recommended for the RAPIDS 26.06/Python 3.14 stack):
+
+```bash
+python -m pip install torch==2.11.0 \
+  --index-url https://download.pytorch.org/whl/cu130
 python -m pip install \
   --extra-index-url https://pypi.nvidia.com \
-  --extra-index-url https://download.pytorch.org/whl/cu128 \
-  -e ".[rapids,keops]"
+  -e ".[rapids-cu13,keops]"
 ```
+
+CUDA 12:
+
+```bash
+python -m pip install torch==2.11.0 \
+  --index-url https://download.pytorch.org/whl/cu128
+python -m pip install \
+  --extra-index-url https://pypi.nvidia.com \
+  -e ".[rapids-cu12,keops]"
+```
+
+Do not install the CUDA 12 and CUDA 13 extras together. Install the pinned
+PyTorch wheel first from its dedicated index; `cu128` above is for CUDA 12 and
+`cu130` is for CUDA 13.
 
 ## Quick Start [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sashakolpakov/dire-rapids/blob/main/benchmarking/dire_rapids_benchmarks.ipynb)
 
@@ -158,6 +193,87 @@ Custom metric expressions and callables run on the PyTorch/PyKeOps k-NN paths. c
 
 `backend` selects the DiRe implementation. `knn_backend` selects the k-nearest-neighbor engine used inside that implementation. Leave `knn_backend='auto'` to use the built-in heuristics, or set it explicitly to `'pytorch'`, `'pykeops'`, or `'cuvs'`. Explicit k-NN backend requests are strict: unsupported engines raise instead of silently falling back.
 
+### RAPIDS 26.06 All-Neighbors k-NN
+
+`DiReCuVS` can build a full approximate k-NN graph (one row per input) through
+the RAPIDS 26.06 cuVS all-neighbors API instead of constructing an ANN index
+and querying the same dataset. This path supports partitioned, host-backed
+operation and multiple GPUs, which avoids copying the entire input to one GPU
+before graph construction. Use `all_neighbors_algo="brute_force"` when an
+exact local graph is required.
+
+```python
+from dire_rapids import DiReCuVS
+
+# Auto preserves the released index-and-search policy and its size thresholds.
+reducer = DiReCuVS(cuvs_knn_method="auto")
+
+# Explicit, experimental partitioned/out-of-core all-neighbors construction.
+reducer = DiReCuVS(
+    cuvs_knn_method="all_neighbors",
+    all_neighbors_algo="nn_descent",
+    all_neighbors_n_clusters=16,
+    all_neighbors_device_ids=[0, 1],
+)
+```
+
+Host-backed/out-of-core execution requires `all_neighbors_n_clusters > 1`.
+Partitioning reduces the local graph-builder working set; the final `N × k`
+index and distance graph still has to fit on one GPU.
+`cuvs_knn_method` defaults to `"auto"`. The remaining defaults are
+`all_neighbors_algo="nn_descent"`,
+`all_neighbors_n_clusters=1`, `all_neighbors_device_ids=None`, and
+`all_neighbors_algo_params=None`. `all_neighbors_overlap_factor=None` selects
+0 for one cluster and `min(2, n_clusters - 1)` otherwise. `"auto"` and
+`"index_search"` both retain the established index-and-search behavior.
+All-neighbors remains explicit opt-in until it clears frozen neighbor-recall,
+topology, local, context, and global embedding-quality gates; API availability
+alone does not change the graph used by existing code.
+
+An H100 A/B audit produced mixed results. At full scale, all-neighbors was
+about 26% slower on 10x (0.623 graph overlap) but 1.91x faster on arXiv (0.839
+overlap); downstream quality moved in both directions and balanced context
+accuracy decreased by 1.62 and 0.84 percentage points, respectively. It was
+therefore not promoted to the default, but remains a viable explicit option,
+particularly given the arXiv performance. Full observations are recorded in
+[PR #12](https://github.com/sashakolpakov/dire-rapids/pull/12); the harness and
+raw-result workflow remain on the separate
+[`homological-stability-repro@a00aa54`](https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a)
+test branch.
+
+The legacy `cuvs_index_type="auto"` thresholds are:
+
+| Rows / shape | Effective index |
+|---|---|
+| fewer than 50,000 | `flat` |
+| 50,000 to fewer than 500,000, or more than 500 dimensions | `ivf_flat` |
+| 500,000 to fewer than 5,000,000, at most 500 dimensions | `ivf_pq` |
+| 5,000,000 or more, at most 500 dimensions, supported metric | `cagra` |
+| otherwise | `ivf_pq` |
+
+After fitting, requested policy, effective backend/index, pipeline timings, and
+force-kernel fallback status are public and exportable:
+
+```python
+embedding = reducer.fit_transform(X)
+
+print(reducer.effective_cuvs_knn_method_)
+print(reducer.effective_cuvs_index_type_)
+print(reducer.stage_timings_)
+print(reducer.force_chunked_fallback_calls_)
+record = reducer.get_diagnostics()  # JSON-serializable dictionary
+```
+
+Forcing an index or opting into all-neighbors can materially change both
+runtime and approximation behavior. Benchmark records should therefore retain
+the requested and effective policies alongside neighbor recall and downstream
+embedding-quality results.
+
+See the [cuVS all-neighbors API documentation](https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/)
+for the underlying RAPIDS interface and
+[*Massive-Scale Out-of-Core UMAP on the GPU*](110_Massive_Scale_Out_Of_Core_.pdf)
+for the partitioned all-neighbors algorithm and scale-out design.
+
 ### Backend and k-NN Engine Selection
 
 ```python
@@ -182,20 +298,23 @@ reducer = create_dire(knn_backend='cuvs')
 
 ## Betti Curves / Topology
 
-The `betti_curve` module computes **filtered Betti curves** that track topological features across filtration thresholds. It prefers `ripser` when available; otherwise it builds a kNN atlas complex and updates Betti numbers incrementally with union-find for beta\_0 and GF(2) bitset elimination for beta\_1.
+The `betti_curve` module computes **filtered Betti curves** that track topological features across filtration thresholds. By default it builds a kNN atlas complex and updates Betti numbers incrementally with union-find for beta\_0 and GF(2) bitset elimination for beta\_1. Ripser remains available as an explicit reference backend.
 
 ```python
 from dire_rapids.betti_curve import compute_betti_curve
 
-# Automatic backend selection: ripser, then GPU atlas, then CPU atlas
+# Default backend selection: GPU atlas, then CPU atlas
 result = compute_betti_curve(X, k_neighbors=20, n_steps=50)
+
+# Explicit reference-backend selection: ripser, then atlas if unavailable
+reference = compute_betti_curve(X, n_steps=50, prefer_ripser=True)
 
 print(result['filtration_values'])  # filtration thresholds
 print(result['beta_0'])             # connected components at each step
 print(result['beta_1'])             # 1-cycles (loops) at each step
 ```
 
-The atlas fallback uses GPU kNN when cuVS/cuML is available, then performs the set-heavy atlas merge and incremental rank update on CPU.
+The Atlas path uses GPU kNN when cuVS/cuML is available, then performs the set-heavy atlas merge and incremental rank update on CPU. No topology-tuned public preset is exported: its fixed-sample Ripser selection did not survive the paired held-out Atlas audit described in the changelog.
 
 ## ReducerRunner Framework
 
@@ -288,8 +407,8 @@ If you use this work, please cite:
 - PyTorch 2.0+
 - NumPy, SciPy, scikit-learn
 - (Optional) PyKeOps 2.1+ (`python -m pip install "dire-rapids[keops]==0.3.2"`)
-- (Optional) CUDA 12.x+ for GPU acceleration
-- (Optional) RAPIDS 26.2+ for the cuVS k-NN engine
+- (Optional) a matching CUDA 12 or CUDA 13 stack for GPU acceleration
+- (Optional, Python 3.11--3.14) RAPIDS 26.06.x for the cuVS k-NN and all-neighbors engines
 - (Optional) CuPy for GPU-accelerated Betti curves
 
 <p align="center">

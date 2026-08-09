@@ -698,7 +698,7 @@ def compute_betti_curve_gpu(data, k_neighbors=20, density_threshold=0.8,
 
 
 # ---------------------------------------------------------------------------
-# Ripser-based persistent-homology implementation (preferred for any N > ~500)
+# Ripser-based persistent-homology implementation (explicit reference backend)
 # ---------------------------------------------------------------------------
 
 def compute_betti_curve_ripser(data, n_steps=50, maxdim=1, thresh=None):
@@ -729,14 +729,15 @@ def compute_betti_curve_ripser(data, n_steps=50, maxdim=1, thresh=None):
 
     Returns
     -------
-    dict : same shape as the other compute_betti_curve_* backends.
-        'filtration_values' : n_steps evenly spaced values from 0 to the
-            longest finite death time seen (plus a 5% margin).
-        'beta_0', 'beta_1' : length-n_steps arrays.
-        'beta_2' : present only if maxdim >= 2.
-        'n_edges_active', 'n_triangles_active' : filled with NaN — ripser
-            does not expose these. Callers depending on the counts should
-            use compute_betti_curve_fast instead.
+    dict
+        Same shape as the other ``compute_betti_curve_*`` backends. The
+        ``filtration_values`` array contains ``n_steps`` evenly spaced values
+        from zero to the longest finite death time plus a 5% margin.
+        ``beta_0`` and ``beta_1`` are length-``n_steps`` arrays, and ``beta_2``
+        is present only when ``maxdim >= 2``. The active-edge and
+        active-triangle counts are filled with NaN because ripser does not
+        expose them; callers depending on those counts should use
+        ``compute_betti_curve_fast`` instead.
 
     Notes
     -----
@@ -808,19 +809,14 @@ def compute_betti_curve_ripser(data, n_steps=50, maxdim=1, thresh=None):
 # ---------------------------------------------------------------------------
 
 def compute_betti_curve(data, k_neighbors=20, density_threshold=0.8, overlap_factor=1.5,
-                        n_steps=50, use_gpu=True, prefer_ripser=True):
+                        n_steps=50, use_gpu=True, prefer_ripser=False):
     """
     Compute filtered Betti curve (backend selector).
 
-    Preference order (if available):
-      ripser (if ``prefer_ripser`` and ``ripser`` is installed)
-      → GPU kNN + incremental atlas path (``compute_betti_curve_gpu``) if
-        ``use_gpu``
-      → fast CPU incremental atlas path (``compute_betti_curve_fast``) as
-        fallback.
-
-    Ripser is the preferred default when available; the atlas paths provide a
-    dependency-light fallback for environments without ripser.
+    By default, try the GPU kNN + incremental atlas path
+    (``compute_betti_curve_gpu``) when ``use_gpu`` is true, then fall back to
+    the fast CPU incremental atlas path (``compute_betti_curve_fast``).
+    ``prefer_ripser=True`` explicitly selects ripser first when it is installed.
 
     Parameters
     ----------
@@ -836,10 +832,10 @@ def compute_betti_curve(data, k_neighbors=20, density_threshold=0.8, overlap_fac
     n_steps : int
         Number of filtration steps.
     use_gpu : bool
-        Whether to try the GPU kNN atlas path if ripser is not picked.
+        Whether to try the GPU kNN Atlas path before the CPU Atlas path.
     prefer_ripser : bool
-        Prefer ripser when available. Set to False to skip ripser and use
-        the atlas backends only (e.g. for correctness comparison).
+        Explicitly prefer ripser when available. The default is False, so the
+        public selector uses the atlas backends unless requested otherwise.
 
     Returns
     -------
@@ -855,7 +851,7 @@ def compute_betti_curve(data, k_neighbors=20, density_threshold=0.8, overlap_fac
         try:
             return compute_betti_curve_ripser(data, n_steps=n_steps)
         except ImportError:
-            pass   # ripser not installed — fall through to the rank-based paths
+            pass   # ripser not installed — fall through to the atlas paths
 
     if use_gpu:
         try:

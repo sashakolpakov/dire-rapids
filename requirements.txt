@@ -16,12 +16,9 @@ psutil>=5.8.0
 fastdtw>=0.3.0
 
 # Optional GPU acceleration (RAPIDS)
-# These are optional - the package will work without them but with reduced performance
-# Install via: pip install cupy-cuda12x cuml-cu12 cuvs-cu12
-# See https://docs.rapids.ai/install/ for detailed installation instructions
-# cupy>=12.0.0  # Uncomment for GPU support
-# cuml>=24.0.0  # Uncomment for GPU-accelerated ML
-# cuvs>=24.0.0  # Uncomment for GPU-accelerated k-NN
+# Use the repository's rapids-cu12 or rapids-cu13 extra for the pinned RAPIDS
+# 26.06 stack; do not add both. See docs/numpy2_rapids.md for the matching
+# PyTorch wheel index and install order.
 
 
 # Network dependencies (compatible with google-adk)

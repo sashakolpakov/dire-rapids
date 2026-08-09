@@ -3,9 +3,9 @@
 ## Overview
 
 The `betti_curve.py` module computes filtered Betti curves (`beta_0`, `beta_1`)
-for point cloud data using a kNN-based atlas complex. The non-ripser fallback
-builds the atlas once, sorts simplex insertion events by filtration value, and
-updates Betti numbers incrementally.
+for point cloud data using a kNN-based atlas complex. The default Atlas
+implementation builds the complex once, sorts simplex insertion events by
+filtration value, and updates Betti numbers incrementally.
 
 ## Mathematical Foundation
 
@@ -84,8 +84,10 @@ edge filtering):
 | `compute_betti_curve_gpu` | cuVS/cuML (GPU) | GPU kNN + incremental union-find/GF(2) bitset rank | Default when GPU available |
 | `compute_betti_curve_cpu` | sklearn (CPU) | scipy eigsh (shift-invert) | Reference implementation |
 
-The `compute_betti_curve` selector prefers ripser when installed, then tries the
-GPU atlas path, then falls back to the CPU atlas path.
+The `compute_betti_curve` selector uses Atlas by default: it tries the GPU Atlas
+path when GPU use is enabled, then falls back to the CPU Atlas path. Ripser is
+retained as an explicit reference backend through `prefer_ripser=True`; if it
+is unavailable, the selector continues to Atlas.
 
 ### Performance
 
@@ -111,5 +113,5 @@ The incremental atlas method is exact over GF(2):
   no floating-point tolerance.
 
 Small discrepancies with the eigsh reference can occur because eigsh is
-approximate and because eigsh over real coefficients and the atlas fallback over
-GF(2) are different coefficient-field protocols.
+approximate and because eigsh over real coefficients and the Atlas
+implementation over GF(2) are different coefficient-field protocols.

@@ -45,17 +45,41 @@ Install optional k-NN engines:
    # CUDA CuPy support
    python -m pip install "dire-rapids[cuda]==0.3.2"
 
-For GPU acceleration with RAPIDS:
-
-Use a clean virtual environment. The ``rapids`` extra installs cuML/cuVS/cuDF
-from the NVIDIA index and PyTorch from the matching CUDA wheel index.
+For GPU acceleration with RAPIDS 26.06, use a clean virtual environment and
+choose exactly one CUDA-specific extra. The legacy ``rapids`` extra remains a
+CUDA 12 alias for backward compatibility.
+The core package supports Python 3.10+, while RAPIDS 26.06 requires Python
+3.11--3.14.
+The CUDA-specific extras are currently unreleased. Install this version from
+a clone before choosing one of the CUDA-family commands below:
 
 .. code-block:: bash
 
+   git clone https://github.com/sashakolpakov/dire-rapids.git
+   cd dire-rapids
+
+CUDA 13 (recommended for RAPIDS 26.06 with Python 3.14):
+
+.. code-block:: bash
+
+   python -m pip install torch==2.11.0 \
+     --index-url https://download.pytorch.org/whl/cu130
    python -m pip install \
      --extra-index-url https://pypi.nvidia.com \
-     --extra-index-url https://download.pytorch.org/whl/cu128 \
-     "dire-rapids[rapids,keops]==0.3.2"
+     -e ".[rapids-cu13,keops]"
+
+CUDA 12:
+
+.. code-block:: bash
+
+   python -m pip install torch==2.11.0 \
+     --index-url https://download.pytorch.org/whl/cu128
+   python -m pip install \
+     --extra-index-url https://pypi.nvidia.com \
+     -e ".[rapids-cu12,keops]"
+
+Do not combine the CUDA 12 and CUDA 13 extras. Install the pinned PyTorch wheel
+first from the index matching the selected CUDA family.
 
 For development from a clone:
 
@@ -96,6 +120,7 @@ API Documentation
    :maxdepth: 2
    :caption: Contents:
 
+   numpy2_rapids
    api/modules
 
 Examples
@@ -153,6 +178,90 @@ GPU Acceleration with RAPIDS
        n_neighbors=64
    )
    embedding = reducer.fit_transform(X)
+
+RAPIDS 26.06 All-Neighbors Graph Construction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``DiReCuVS`` can use the cuVS all-neighbors API to build a full approximate
+k-NN graph (one row per input) without first copying the entire dataset into a
+single-GPU ANN index. The partitioned path supports host-backed/out-of-core
+data and multiple GPUs. Select ``all_neighbors_algo="brute_force"`` when an
+exact local graph is required.
+
+.. code-block:: python
+
+   from dire_rapids import DiReCuVS
+
+   # Automatic preserves the released index-and-search policy.
+   reducer = DiReCuVS(cuvs_knn_method="auto")
+
+   # Explicit experimental partitioned/out-of-core construction.
+   reducer = DiReCuVS(
+       cuvs_knn_method="all_neighbors",
+       all_neighbors_algo="nn_descent",
+       all_neighbors_n_clusters=16,
+       all_neighbors_device_ids=[0, 1],
+   )
+
+``cuvs_knn_method`` defaults to ``"auto"``. The remaining defaults are
+``all_neighbors_algo="nn_descent"``,
+``all_neighbors_n_clusters=1``, ``all_neighbors_device_ids=None``, and
+``all_neighbors_algo_params=None``. ``all_neighbors_overlap_factor=None``
+selects 0 for one cluster and ``min(2, n_clusters - 1)`` otherwise.
+``cuvs_knn_method="auto"`` and ``"index_search"`` both retain the established
+index-and-search policy. All-neighbors is explicit opt-in until it clears
+frozen neighbor-recall, topology, local, context, and global quality gates;
+availability of the API alone does not change existing embeddings.
+
+An H100 A/B audit produced mixed results. At full scale, all-neighbors was
+about 26% slower on 10x (0.623 graph overlap) but 1.91x faster on arXiv (0.839
+overlap); downstream quality moved in both directions and balanced context
+accuracy decreased by 1.62 and 0.84 percentage points, respectively. It was
+therefore not promoted to the default, but remains a viable explicit option,
+particularly given the arXiv performance. Full observations are recorded in
+`PR #12 <https://github.com/sashakolpakov/dire-rapids/pull/12>`_; the harness
+and raw-result workflow remain on the separate
+`homological-stability-repro test branch
+<https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a>`_.
+
+Partitioning reduces the local graph-builder working set, but the final
+``N x k`` index and distance graph must still fit on one GPU.
+
+The legacy automatic index thresholds are:
+
+* fewer than 50,000 rows: exact/flat;
+* 50,000 to fewer than 500,000 rows, or more than 500 dimensions: IVF-Flat;
+* 500,000 to fewer than 5,000,000 rows at no more than 500 dimensions: IVF-PQ;
+* at least 5,000,000 rows with at most 500 dimensions and a supported metric:
+  CAGRA;
+* otherwise: IVF-PQ.
+
+Fitted Backend Diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Requested policy is not a substitute for the algorithm that actually ran.
+After fitting, ``DiReCuVS`` exposes ``effective_cuvs_knn_method_`` and
+``effective_cuvs_index_type_``. All reducers expose per-stage
+``stage_timings_``, ``effective_knn_backend_``, and
+``force_chunked_fallback_calls_``. ``get_diagnostics()`` returns these values
+as a JSON-serializable dictionary:
+
+.. code-block:: python
+
+   embedding = reducer.fit_transform(X)
+   record = reducer.get_diagnostics()
+   print(record["cuvs"]["effective_index_type"])
+   print(record["stage_timings_seconds"])
+   print(record["force_chunked_fallback_calls"])
+
+Forcing an index or opting into all-neighbors can materially change both
+runtime and approximation behavior. Benchmark records should retain requested
+and effective policies together with recall and downstream embedding-quality
+measurements.
+
+See the `cuVS all-neighbors API documentation
+<https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/>`_
+for the underlying RAPIDS interface.
 
 Automatic Backend and k-NN Selection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -218,7 +327,12 @@ Topology protocol parameters are exposed as ``topology_n_steps``,
 
 * **Distortion**: stress, neighborhood preservation
 * **Context**: SVM/kNN classification accuracy
-* **Topology**: DTW distances between Betti curves (β₀, β₁) via ripser when available, otherwise a kNN-atlas fallback with union-find and GF(2) bitset elimination
+* **Topology**: DTW distances between Betti curves (β₀, β₁) via the default kNN-Atlas engine with union-find and GF(2) bitset elimination; Ripser is an explicit reference option
+
+``compute_betti_curve`` tries the GPU Atlas path first when GPU use is enabled,
+then the CPU Atlas path. Pass ``prefer_ripser=True`` to request Ripser first.
+No topology-tuned public preset is exported because its fixed-sample Ripser
+selection did not survive a paired held-out Atlas audit.
 
 See :doc:`api/dire_rapids.metrics` for full API reference.
 

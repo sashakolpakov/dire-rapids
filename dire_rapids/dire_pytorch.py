@@ -18,6 +18,7 @@ Performance characteristics:
 
 import gc
 import importlib.util
+from time import perf_counter
 
 import numpy as np
 import torch
@@ -515,12 +516,11 @@ class DiRePyTorch(TransformerMixin):
             that materialize broadcast tensors of shape ``(chunk, n_samples,
             n_features)``.
         normalize : bool, default=True
-            If True, mean-center and scale inputs to fit in [-1, 1] (global scalar
-            rescale) before kNN and PCA. This preserves neighbor rankings exactly
-            (kNN is translation- and scale-invariant) but keeps squared distances
-            in a numerically safe range for fp16. Without it, high-dimensional
-            data on large scales (e.g. raw [0, 255] MNIST pixels) overflows fp16
-            during distance computation, silently corrupting the kNN graph.
+            If True, scale inputs to fit in [-1, 1] before kNN and PCA, and
+            mean-center them for translation-invariant Euclidean metrics. Named
+            cosine and inner-product metrics retain the original origin so their
+            neighbor rankings are not changed. This keeps squared distances in a
+            numerically safe range for fp16.
         """
 
         self.n_components = n_components
@@ -750,6 +750,10 @@ class DiRePyTorch(TransformerMixin):
         ------------
         Sets self._knn_indices and self._knn_distances with computed k-NN graph.
         """
+        # A reducer can be fitted repeatedly. Any cached tensor belongs to the
+        # previous graph and must not be reused merely because N and k match.
+        self._knn_indices_torch = None
+
         n_samples = X.shape[0]
         n_dims = X.shape[1]
         self.logger.info(f"Computing {self.n_neighbors}-NN graph for {n_samples} points in {n_dims}D...")
@@ -1215,6 +1219,10 @@ class DiRePyTorch(TransformerMixin):
                 a_val, b_val, self.cutoff,
             )
         except (RuntimeError, torch.cuda.OutOfMemoryError):
+            self.force_chunked_fallback_calls_ = (
+                getattr(self, "force_chunked_fallback_calls_", 0) + 1
+            )
+            self.force_chunked_fallback_used_ = True
             if self.device.type == 'cuda':
                 torch.cuda.empty_cache()
             self.logger.warning(
@@ -1264,6 +1272,46 @@ class DiRePyTorch(TransformerMixin):
 
         return torch.clamp(forces, -self.cutoff, self.cutoff)
 
+    def _synchronize_for_timing(self):
+        """Synchronize pending accelerator work before reading a stage timer."""
+        if self.device.type == 'cuda':
+            torch.cuda.synchronize(self.device)
+
+    def _time_fit_stage(self, name, operation, *args, **kwargs):
+        """Run one fit stage and retain a wall-clock duration in seconds."""
+        self._synchronize_for_timing()
+        started = perf_counter()
+        result = operation(*args, **kwargs)
+        self._synchronize_for_timing()
+        self.stage_timings_[name] = perf_counter() - started
+        return result
+
+    def get_diagnostics(self):
+        """Return JSON-serializable fitted backend and pipeline diagnostics.
+
+        Returns
+        -------
+        dict
+            Requested/effective k-NN backend, per-stage wall-clock timings,
+            and whether the vectorized force implementation fell back to its
+            chunked implementation during the most recent fit.
+        """
+        return {
+            "requested_knn_backend": self.knn_backend,
+            "effective_knn_backend": getattr(
+                self, "effective_knn_backend_", None
+            ),
+            "stage_timings_seconds": dict(
+                getattr(self, "stage_timings_", {})
+            ),
+            "force_chunked_fallback_used": getattr(
+                self, "force_chunked_fallback_used_", False
+            ),
+            "force_chunked_fallback_calls": getattr(
+                self, "force_chunked_fallback_calls_", 0
+            ),
+        }
+
     def _optimize_layout(self, initial_positions):
         """
         Optimize the embedding layout using iterative force computation.
@@ -1293,10 +1341,18 @@ class DiRePyTorch(TransformerMixin):
 
         self.logger.info(f"Optimizing layout for {self._n_samples} points...")
 
-        # Pre-convert kNN indices to GPU tensor once (avoid re-creating every iteration)
-        self._knn_indices_torch = torch.tensor(
-            self._knn_indices, dtype=torch.long, device=self.device
-        )
+        # Pre-convert kNN indices once. GPU graph builders may already have
+        # populated this cache through DLPack, avoiding a device→host→device
+        # round trip for large all-neighbors graphs.
+        knn_indices_torch = getattr(self, '_knn_indices_torch', None)
+        if (
+                knn_indices_torch is None or
+                knn_indices_torch.device != positions.device or
+                tuple(knn_indices_torch.shape) != tuple(self._knn_indices.shape)
+        ):
+            self._knn_indices_torch = torch.as_tensor(
+                self._knn_indices, dtype=torch.long, device=positions.device
+            )
 
         # Optimization loop with linear cooling
         for iteration in range(self.max_iter_layout):
@@ -1348,6 +1404,12 @@ class DiRePyTorch(TransformerMixin):
             embedding = reducer.fit_transform(X)
             print(embedding.shape)  # (1000, 2)
         """
+        fit_started = perf_counter()
+        self.stage_timings_ = {}
+        self.effective_knn_backend_ = None
+        self.force_chunked_fallback_calls_ = 0
+        self.force_chunked_fallback_used_ = False
+
         # Seed torch RNGs for reproducibility (deferred from __init__
         # to avoid mutating global state at construction time).
         torch.manual_seed(self.random_state)
@@ -1359,15 +1421,15 @@ class DiRePyTorch(TransformerMixin):
         self._n_samples = self._data.shape[0]
 
         if self.normalize:
-            # Mean-center, then scale by a single global scalar so all values lie
-            # in [-1, 1].  Centering and uniform scaling preserve kNN rankings
-            # exactly (Euclidean neighbors are translation- and scale-invariant),
-            # so this is a pure numerical-safety transformation: it prevents
-            # fp16 squared-distance overflow on unnormalized inputs such as raw
-            # [0, 255] pixels.  PCA init is scale-equivariant, and the layout
-            # re-normalizes to unit std, so the final embedding is unchanged for
-            # data that was already in a safe range.
-            self._data = self._data - self._data.mean(axis=0, keepdims=True)
+            # Mean-centering preserves Euclidean rankings but changes cosine and
+            # inner-product neighborhoods because those metrics depend on the
+            # origin. A single positive global rescale preserves all three.
+            origin_sensitive = (
+                isinstance(self.metric_spec, str) and
+                self.metric_spec.strip().lower() in ('cosine', 'inner_product')
+            )
+            if not origin_sensitive:
+                self._data = self._data - self._data.mean(axis=0, keepdims=True)
             max_abs = float(np.abs(self._data).max())
             if max_abs > 0:
                 self._data /= max_abs
@@ -1395,13 +1457,23 @@ class DiRePyTorch(TransformerMixin):
         self._find_ab_params()
 
         # Compute k-NN graph
-        self._compute_knn(self._data, chunk_size=self.knn_chunk_size)
+        self._time_fit_stage(
+            "graph_construction",
+            self._compute_knn,
+            self._data,
+            chunk_size=self.knn_chunk_size,
+        )
+        self.effective_knn_backend_ = self._last_knn_backend
 
         # Initialize embedding
-        initial_embedding = self._initialize_embedding(self._data)
+        initial_embedding = self._time_fit_stage(
+            "initialization", self._initialize_embedding, self._data
+        )
 
         # Optimize layout
-        final_embedding = self._optimize_layout(initial_embedding)
+        final_embedding = self._time_fit_stage(
+            "layout", self._optimize_layout, initial_embedding
+        )
 
         # Convert back to numpy and store
         self._layout = torch_tensor_to_numpy(final_embedding)
@@ -1410,6 +1482,16 @@ class DiRePyTorch(TransformerMixin):
         if self.device.type == 'cuda':
             torch.cuda.empty_cache()
         gc.collect()
+        self._synchronize_for_timing()
+        self.stage_timings_["total"] = perf_counter() - fit_started
+        self.logger.info(
+            "Fit diagnostics: "
+            f"backend={self.effective_knn_backend_}, "
+            f"graph={self.stage_timings_['graph_construction']:.3f}s, "
+            f"initialization={self.stage_timings_['initialization']:.3f}s, "
+            f"layout={self.stage_timings_['layout']:.3f}s, "
+            f"chunked_force_fallbacks={self.force_chunked_fallback_calls_}"
+        )
 
         return self._layout
 
