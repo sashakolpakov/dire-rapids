@@ -84,7 +84,16 @@ def json_sha256(value) -> str:
 
 def git_commit(root: Path) -> str:
     return subprocess.check_output(
-        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        [
+            "git",
+            "-c",
+            f"safe.directory={root.resolve()}",
+            "-C",
+            str(root),
+            "rev-parse",
+            "HEAD",
+        ],
+        text=True,
     ).strip()
 
 
