@@ -44,6 +44,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="modules.html">dire_rapids</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorch"><code class="docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorchMemoryEfficient"><code class="docutils literal notranslate"><span class="pre">DiRePyTorchMemoryEfficient</span></code></a></li>
@@ -104,7 +105,7 @@ Falls back to PyTorch if cuVS is not available.</p>
 </dl>
 <dl class="py class">
 <dt class="sig sig-object py" id="dire_rapids.dire_cuvs.DiReCuVS">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.dire_cuvs.</span></span><span class="sig-name descname"><span class="pre">DiReCuVS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuvs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuml</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_index_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_build_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_search_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_cuvs.html#DiReCuVS"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_cuvs.DiReCuVS" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">dire_rapids.dire_cuvs.</span></span><span class="sig-name descname"><span class="pre">DiReCuVS</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuvs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuml</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_index_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_build_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_search_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_knn_method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_algo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'nn_descent'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_n_clusters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_device_ids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_algo_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_cuvs.html#DiReCuVS"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_cuvs.DiReCuVS" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="dire_rapids.dire_pytorch.html#dire_rapids.dire_pytorch.DiRePyTorch" title="dire_rapids.dire_pytorch.DiRePyTorch"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></p>
 <p>RAPIDS cuVS/cuML accelerated implementation of DiRe for massive datasets.</p>
 <p>This class extends DiRePyTorch with optional RAPIDS cuVS (CUDA Vector Search)
@@ -116,7 +117,7 @@ performance improvements for large-scale datasets.</p>
 <ul class="simple">
 <li><p><strong>10-100x faster k-NN</strong>: For large datasets (&gt;100K points)</p></li>
 <li><p><strong>Massive scale support</strong>: Handles 10M+ points efficiently</p></li>
-<li><p><strong>High accuracy</strong>: Approximate k-NN with &gt;95% recall</p></li>
+<li><p><strong>Tunable accuracy</strong>: Exact brute force or approximate graph builders</p></li>
 <li><p><strong>Multi-GPU ready</strong>: Supports extreme scale processing</p></li>
 <li><p><strong>GPU-accelerated PCA</strong>: cuML PCA/SVD for initialization</p></li>
 </ul>
@@ -142,13 +143,24 @@ detected based on availability and hardware.</p>
 <dt class="field-even">type use_cuml<span class="colon">:</span></dt>
 <dd class="field-even"><p>bool or None, default=None</p>
 </dd>
+<dt class="field-odd">param cuvs_knn_method<span class="colon">:</span></dt>
+<dd class="field-odd"><p>cuVS graph-construction strategy. <code class="docutils literal notranslate"><span class="pre">'auto'</span></code> preserves the established
+index-and-search policy. The purpose-built all-neighbors API is
+available through explicit <code class="docutils literal notranslate"><span class="pre">'all_neighbors'</span></code> opt-in while its
+downstream embedding-quality validation remains experimental.</p>
+</dd>
+<dt class="field-even">type cuvs_knn_method<span class="colon">:</span></dt>
+<dd class="field-even"><p>{‘auto’, ‘all_neighbors’, ‘index_search’}, default=’auto’</p>
+</dd>
 <dt class="field-odd">param cuvs_index_type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Type of cuVS index to build:
-- ‘auto’: Automatically select based on data characteristics
-- ‘ivf_flat’: Inverted file index without compression
-- ‘ivf_pq’: Inverted file index with product quantization
-- ‘cagra’: Graph-based index for very large datasets
-- ‘flat’: Brute-force exact search</p>
+<dd class="field-odd"><p>Type of legacy cuVS index to build:</p>
+<ul class="simple">
+<li><p>‘auto’: Automatically select based on data characteristics</p></li>
+<li><p>‘ivf_flat’: Inverted file index without compression</p></li>
+<li><p>‘ivf_pq’: Inverted file index with product quantization</p></li>
+<li><p>‘cagra’: Graph-based index for very large datasets</p></li>
+<li><p>‘flat’: Brute-force exact search</p></li>
+</ul>
 </dd>
 <dt class="field-even">type cuvs_index_type<span class="colon">:</span></dt>
 <dd class="field-even"><p>{‘auto’, ‘ivf_flat’, ‘ivf_pq’, ‘cagra’, ‘flat’}, default=’auto’</p>
@@ -163,6 +175,38 @@ detected based on availability and hardware.</p>
 <dd class="field-odd"><p>Custom parameters for cuVS search. Overrides defaults.</p>
 </dd>
 <dt class="field-even">type cuvs_search_params<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict, optional</p>
+</dd>
+<dt class="field-odd">param all_neighbors_algo<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Local graph builder used by cuVS all-neighbors.</p>
+</dd>
+<dt class="field-even">type all_neighbors_algo<span class="colon">:</span></dt>
+<dd class="field-even"><p>{‘nn_descent’, ‘brute_force’, ‘ivf_pq’}, default=’nn_descent’</p>
+</dd>
+<dt class="field-odd">param all_neighbors_n_clusters<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Paper parameter <code class="docutils literal notranslate"><span class="pre">c</span></code>. Values greater than one keep input on the host
+and process spatial partitions out-of-core.</p>
+</dd>
+<dt class="field-even">type all_neighbors_n_clusters<span class="colon">:</span></dt>
+<dd class="field-even"><p>int, default=1</p>
+</dd>
+<dt class="field-odd">param all_neighbors_overlap_factor<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Paper spill factor <code class="docutils literal notranslate"><span class="pre">s</span></code>. <code class="docutils literal notranslate"><span class="pre">None</span></code> selects 0 for a single cluster and
+<code class="docutils literal notranslate"><span class="pre">min(2,</span> <span class="pre">c</span> <span class="pre">-</span> <span class="pre">1)</span></code> for an out-of-core build.</p>
+</dd>
+<dt class="field-even">type all_neighbors_overlap_factor<span class="colon">:</span></dt>
+<dd class="field-even"><p>int or None, default=None</p>
+</dd>
+<dt class="field-odd">param all_neighbors_device_ids<span class="colon">:</span></dt>
+<dd class="field-odd"><p>GPU ids for multi-GPU out-of-core construction.</p>
+</dd>
+<dt class="field-even">type all_neighbors_device_ids<span class="colon">:</span></dt>
+<dd class="field-even"><p>sequence of int or None, default=None</p>
+</dd>
+<dt class="field-odd">param all_neighbors_algo_params<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Overrides for the selected local graph builder’s parameter object.</p>
+</dd>
+<dt class="field-even">type all_neighbors_algo_params<span class="colon">:</span></dt>
 <dd class="field-even"><p>dict, optional</p>
 </dd>
 <dt class="field-odd">param *args<span class="colon">:</span></dt>
@@ -247,33 +291,40 @@ metric (custom distance function for k-NN computation), knn_backend.</p>
 </pre></div>
 </div>
 <p>With custom distance metric:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># cuVS with L1 distance for k-NN computation</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Custom expressions use the PyTorch k-NN fallback</span>
 <span class="n">reducer</span> <span class="o">=</span> <span class="n">DiReCuVS</span><span class="p">(</span>
-    <span class="n">use_cuvs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;(x - y).abs().sum(-1)&#39;</span><span class="p">,</span>  <span class="c1"># L1/Manhattan distance</span>
     <span class="n">n_neighbors</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
-    <span class="n">cuvs_index_type</span><span class="o">=</span><span class="s1">&#39;ivf_flat&#39;</span>
 <span class="p">)</span>
 
 <span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 </pre></div>
 </div>
 <p class="rubric">Notes</p>
-<p><strong>Requirements:</strong>
-- RAPIDS cuVS: Follow the installation instructions at <a class="reference external" href="https://docs.rapids.ai/install/">https://docs.rapids.ai/install/</a>
-- CUDA-capable GPU with compute capability &gt;= 6.0</p>
-<p><strong>Index Selection Guidelines:</strong>
-- &lt; 50K points: ‘flat’ (exact search)
-- 50K-500K points: ‘ivf_flat’
-- 500K-5M points: ‘ivf_pq’
-- &gt; 5M points: ‘cagra’ (if dimensions &lt;= 500)</p>
-<p><strong>Memory Considerations:</strong>
-- cuVS requires float32 precision (no FP16 support)
-- Index building requires additional GPU memory
-- ‘cagra’ uses more memory but provides best performance for huge datasets</p>
+<p><strong>Requirements:</strong></p>
+<ul class="simple">
+<li><p>RAPIDS cuVS 26.06</p></li>
+<li><p>CUDA 12.2–12.9 on Volta or newer, or CUDA 13.0–13.2 on
+Turing or newer</p></li>
+</ul>
+<p><strong>Legacy Index Selection Guidelines:</strong></p>
+<ul class="simple">
+<li><p>&lt; 50K points: ‘flat’ (exact search)</p></li>
+<li><p>50K-500K points, or more than 500 dimensions: ‘ivf_flat’</p></li>
+<li><p>500K-5M points at up to 500 dimensions: ‘ivf_pq’</p></li>
+<li><p>&gt; 5M points: ‘cagra’ (if dimensions &lt;= 500)</p></li>
+</ul>
+<p><strong>Memory Considerations:</strong></p>
+<ul class="simple">
+<li><p>cuVS all-neighbors requires float32 input</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">all_neighbors_n_clusters</span> <span class="pre">&gt;</span> <span class="pre">1</span></code> keeps input in host memory, but the
+final <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">x</span> <span class="pre">k</span></code> graph must still fit on one GPU</p></li>
+<li><p>Larger cluster counts reduce working memory; larger overlap factors
+improve boundary recall at additional compute cost</p></li>
+</ul>
 <dl class="py method">
 <dt class="sig sig-object py" id="dire_rapids.dire_cuvs.DiReCuVS.__init__">
-<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuvs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuml</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_index_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_build_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_search_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_cuvs.html#DiReCuVS.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_cuvs.DiReCuVS.__init__" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuvs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_cuml</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_index_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_build_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_search_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cuvs_knn_method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_algo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'nn_descent'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_n_clusters</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_overlap_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_device_ids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">all_neighbors_algo_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_cuvs.html#DiReCuVS.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_cuvs.DiReCuVS.__init__" title="Link to this definition"></a></dt>
 <dd><p>Initialize DiReCuVS with cuVS and cuML backend configuration.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -287,18 +338,28 @@ metric (custom distance function for k-NN computation), knn_backend.</p>
 - None: Auto-detect based on availability and GPU presence
 - True: Force cuML usage (raises error if unavailable)
 - False: Disable cuML, use sklearn backend</p></li>
-<li><p><strong>cuvs_index_type</strong> (<em>{'auto'</em><em>, </em><em>'ivf_flat'</em><em>, </em><em>'ivf_pq'</em><em>, </em><em>'cagra'</em><em>, </em><em>'flat'}</em><em>, </em><em>default='auto'</em>) – Type of cuVS index to build:
-- ‘auto’: Automatically select optimal index based on data size/dimensionality
-- ‘ivf_flat’: Inverted file index without compression (good balance)
-- ‘ivf_pq’: Inverted file with product quantization (memory efficient)
-- ‘cagra’: Graph-based index (best for very large datasets)
-- ‘flat’: Brute-force exact search (small datasets only)</p></li>
+<li><p><strong>cuvs_index_type</strong> (<em>{'auto'</em><em>, </em><em>'ivf_flat'</em><em>, </em><em>'ivf_pq'</em><em>, </em><em>'cagra'</em><em>, </em><em>'flat'}</em><em>, </em><em>default='auto'</em>) – <p>Type of cuVS index to build:</p>
+<ul>
+<li><p>’auto’: Automatically select optimal index based on data size/dimensionality</p></li>
+<li><p>’ivf_flat’: Inverted file index without compression (good balance)</p></li>
+<li><p>’ivf_pq’: Inverted file with product quantization (memory efficient)</p></li>
+<li><p>’cagra’: Graph-based index (best for very large datasets)</p></li>
+<li><p>’flat’: Brute-force exact search (small datasets only)</p></li>
+</ul>
+</p></li>
 <li><p><strong>cuvs_build_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS index building. These override the
 automatically determined parameters. See cuVS documentation for
 index-specific parameters.</p></li>
 <li><p><strong>cuvs_search_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Custom parameters for cuVS search operations. These override the
 automatically determined parameters. See cuVS documentation for
 index-specific search parameters.</p></li>
+<li><p><strong>cuvs_knn_method</strong> (<em>{'auto'</em><em>, </em><em>'all_neighbors'</em><em>, </em><em>'index_search'}</em><em>, </em><em>default='auto'</em>) – Select the purpose-built graph API or the legacy build-index and
+self-query implementation.</p></li>
+<li><p><strong>all_neighbors_algo</strong> (<em>{'nn_descent'</em><em>, </em><em>'brute_force'</em><em>, </em><em>'ivf_pq'}</em><em>, </em><em>default='nn_descent'</em>) – Local graph algorithm for all-neighbors.</p></li>
+<li><p><strong>all_neighbors_n_clusters</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>default=1</em>) – Number of spatial partitions (paper parameter <code class="docutils literal notranslate"><span class="pre">c</span></code>).</p></li>
+<li><p><strong>all_neighbors_overlap_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Number of partitions per point (paper spill factor <code class="docutils literal notranslate"><span class="pre">s</span></code>).</p></li>
+<li><p><strong>all_neighbors_device_ids</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><em>None</em><em>, </em><em>default=None</em>) – Device ids used by <code class="docutils literal notranslate"><span class="pre">MultiGpuResources</span></code> for a batched build.</p></li>
+<li><p><strong>all_neighbors_algo_params</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Local algorithm parameter overrides.</p></li>
 <li><p><strong>**kwargs</strong> – Additional keyword arguments passed to DiRePyTorch parent class.
 See DiRePyTorch documentation for available parameters including:
 n_components, n_neighbors, init, max_iter_layout, min_dist, spread,
@@ -313,6 +374,12 @@ metric (custom distance function for k-NN computation).</p></li>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.dire_cuvs.DiReCuVS.get_diagnostics">
+<span class="sig-name descname"><span class="pre">get_diagnostics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_cuvs.html#DiReCuVS.get_diagnostics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_cuvs.DiReCuVS.get_diagnostics" title="Link to this definition"></a></dt>
+<dd><p>Return fitted pipeline diagnostics, including effective cuVS policy.</p>
 </dd></dl>
 
 <dl class="py method">

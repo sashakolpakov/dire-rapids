@@ -41,6 +41,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -89,6 +90,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib.util</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="kn">import</span> <span class="n">perf_counter</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -590,12 +592,11 @@
 <span class="sd">            that materialize broadcast tensors of shape ``(chunk, n_samples,</span>
 <span class="sd">            n_features)``.</span>
 <span class="sd">        normalize : bool, default=True</span>
-<span class="sd">            If True, mean-center and scale inputs to fit in [-1, 1] (global scalar</span>
-<span class="sd">            rescale) before kNN and PCA. This preserves neighbor rankings exactly</span>
-<span class="sd">            (kNN is translation- and scale-invariant) but keeps squared distances</span>
-<span class="sd">            in a numerically safe range for fp16. Without it, high-dimensional</span>
-<span class="sd">            data on large scales (e.g. raw [0, 255] MNIST pixels) overflows fp16</span>
-<span class="sd">            during distance computation, silently corrupting the kNN graph.</span>
+<span class="sd">            If True, scale inputs to fit in [-1, 1] before kNN and PCA, and</span>
+<span class="sd">            mean-center them for translation-invariant Euclidean metrics. Named</span>
+<span class="sd">            cosine and inner-product metrics retain the original origin so their</span>
+<span class="sd">            neighbor rankings are not changed. This keeps squared distances in a</span>
+<span class="sd">            numerically safe range for fp16.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">n_components</span> <span class="o">=</span> <span class="n">n_components</span>
@@ -826,6 +827,10 @@
 <span class="sd">        ------------</span>
 <span class="sd">        Sets self._knn_indices and self._knn_distances with computed k-NN graph.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># A reducer can be fitted repeatedly. Any cached tensor belongs to the</span>
+        <span class="c1"># previous graph and must not be reused merely because N and k match.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="kc">None</span>
+
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">-NN graph for </span><span class="si">{</span><span class="n">n_samples</span><span class="si">}</span><span class="s2"> points in </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D...&quot;</span><span class="p">)</span>
@@ -1291,6 +1296,10 @@
                 <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">OutOfMemoryError</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">force_chunked_fallback_calls_</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;force_chunked_fallback_calls_&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">force_chunked_fallback_used_</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -1340,6 +1349,49 @@
 
         <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">forces</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_synchronize_for_timing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Synchronize pending accelerator work before reading a stage timer.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_time_fit_stage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">operation</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run one fit stage and retain a wall-clock duration in seconds.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_synchronize_for_timing</span><span class="p">()</span>
+        <span class="n">started</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">operation</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_synchronize_for_timing</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage_timings_</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">started</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+<div class="viewcode-block" id="DiRePyTorch.get_diagnostics">
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_pytorch.DiRePyTorch.get_diagnostics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_diagnostics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return JSON-serializable fitted backend and pipeline diagnostics.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Requested/effective k-NN backend, per-stage wall-clock timings,</span>
+<span class="sd">            and whether the vectorized force implementation fell back to its</span>
+<span class="sd">            chunked implementation during the most recent fit.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;requested_knn_backend&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span><span class="p">,</span>
+            <span class="s2">&quot;effective_knn_backend&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;effective_knn_backend_&quot;</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;stage_timings_seconds&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;stage_timings_&quot;</span><span class="p">,</span> <span class="p">{})</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;force_chunked_fallback_used&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;force_chunked_fallback_used_&quot;</span><span class="p">,</span> <span class="kc">False</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;force_chunked_fallback_calls&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;force_chunked_fallback_calls_&quot;</span><span class="p">,</span> <span class="mi">0</span>
+            <span class="p">),</span>
+        <span class="p">}</span></div>
+
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_optimize_layout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial_positions</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Optimize the embedding layout using iterative force computation.</span>
@@ -1369,10 +1421,18 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Optimizing layout for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span><span class="si">}</span><span class="s2"> points...&quot;</span><span class="p">)</span>
 
-        <span class="c1"># Pre-convert kNN indices to GPU tensor once (avoid re-creating every iteration)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
-        <span class="p">)</span>
+        <span class="c1"># Pre-convert kNN indices once. GPU graph builders may already have</span>
+        <span class="c1"># populated this cache through DLPack, avoiding a device→host→device</span>
+        <span class="c1"># round trip for large all-neighbors graphs.</span>
+        <span class="n">knn_indices_torch</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_knn_indices_torch&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+                <span class="n">knn_indices_torch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span>
+                <span class="n">knn_indices_torch</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span> <span class="ow">or</span>
+                <span class="nb">tuple</span><span class="p">(</span><span class="n">knn_indices_torch</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
 
         <span class="c1"># Optimization loop with linear cooling</span>
         <span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_iter_layout</span><span class="p">):</span>
@@ -1426,6 +1486,12 @@
 <span class="sd">            embedding = reducer.fit_transform(X)</span>
 <span class="sd">            print(embedding.shape)  # (1000, 2)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">fit_started</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage_timings_</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_knn_backend_</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">force_chunked_fallback_calls_</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">force_chunked_fallback_used_</span> <span class="o">=</span> <span class="kc">False</span>
+
         <span class="c1"># Seed torch RNGs for reproducibility (deferred from __init__</span>
         <span class="c1"># to avoid mutating global state at construction time).</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">random_state</span><span class="p">)</span>
@@ -1437,15 +1503,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_n_samples</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">normalize</span><span class="p">:</span>
-            <span class="c1"># Mean-center, then scale by a single global scalar so all values lie</span>
-            <span class="c1"># in [-1, 1].  Centering and uniform scaling preserve kNN rankings</span>
-            <span class="c1"># exactly (Euclidean neighbors are translation- and scale-invariant),</span>
-            <span class="c1"># so this is a pure numerical-safety transformation: it prevents</span>
-            <span class="c1"># fp16 squared-distance overflow on unnormalized inputs such as raw</span>
-            <span class="c1"># [0, 255] pixels.  PCA init is scale-equivariant, and the layout</span>
-            <span class="c1"># re-normalizes to unit std, so the final embedding is unchanged for</span>
-            <span class="c1"># data that was already in a safe range.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="c1"># Mean-centering preserves Euclidean rankings but changes cosine and</span>
+            <span class="c1"># inner-product neighborhoods because those metrics depend on the</span>
+            <span class="c1"># origin. A single positive global rescale preserves all three.</span>
+            <span class="n">origin_sensitive</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;cosine&#39;</span><span class="p">,</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">origin_sensitive</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="n">max_abs</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
             <span class="k">if</span> <span class="n">max_abs</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">/=</span> <span class="n">max_abs</span>
@@ -1473,13 +1539,23 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_find_ab_params</span><span class="p">()</span>
 
         <span class="c1"># Compute k-NN graph</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">knn_chunk_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_time_fit_stage</span><span class="p">(</span>
+            <span class="s2">&quot;graph_construction&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_compute_knn</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">knn_chunk_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_knn_backend_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_backend</span>
 
         <span class="c1"># Initialize embedding</span>
-        <span class="n">initial_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialize_embedding</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+        <span class="n">initial_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_fit_stage</span><span class="p">(</span>
+            <span class="s2">&quot;initialization&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initialize_embedding</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+        <span class="p">)</span>
 
         <span class="c1"># Optimize layout</span>
-        <span class="n">final_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimize_layout</span><span class="p">(</span><span class="n">initial_embedding</span><span class="p">)</span>
+        <span class="n">final_embedding</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_time_fit_stage</span><span class="p">(</span>
+            <span class="s2">&quot;layout&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimize_layout</span><span class="p">,</span> <span class="n">initial_embedding</span>
+        <span class="p">)</span>
 
         <span class="c1"># Convert back to numpy and store</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span> <span class="o">=</span> <span class="n">torch_tensor_to_numpy</span><span class="p">(</span><span class="n">final_embedding</span><span class="p">)</span>
@@ -1488,6 +1564,16 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s1">&#39;cuda&#39;</span><span class="p">:</span>
             <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">empty_cache</span><span class="p">()</span>
         <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_synchronize_for_timing</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stage_timings_</span><span class="p">[</span><span class="s2">&quot;total&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">fit_started</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Fit diagnostics: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;backend=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">effective_knn_backend_</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;graph=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stage_timings_</span><span class="p">[</span><span class="s1">&#39;graph_construction&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;initialization=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stage_timings_</span><span class="p">[</span><span class="s1">&#39;initialization&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;layout=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">stage_timings_</span><span class="p">[</span><span class="s1">&#39;layout&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;chunked_force_fallbacks=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">force_chunked_fallback_calls_</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_layout</span></div>
 

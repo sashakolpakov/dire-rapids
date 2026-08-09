@@ -42,6 +42,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -75,31 +76,28 @@
 Lambda Labs GPU instance. The same NumPy/PyTorch/RAPIDS compatibility rules in
 <code class="docutils literal notranslate"><span class="pre">docs/numpy2_rapids.md</span></code> apply here: use a clean virtual environment and avoid
 mixing Lambda image system packages with a fresh NumPy 2/RAPIDS stack.</p>
+<p>This recipe selects the CUDA 12 RAPIDS 26.06.x packages explicitly and pairs
+them with PyTorch’s CUDA 12.8 wheel index.</p>
 <p>Verified instance class:</p>
 <ul class="simple">
 <li><p>Lambda Labs <code class="docutils literal notranslate"><span class="pre">gpu_1x_a10</span></code></p></li>
 <li><p>NVIDIA A10, 23 GB GPU memory</p></li>
 <li><p>Ubuntu 22.04</p></li>
 <li><p>NVIDIA driver 580.105.08</p></li>
+<li><p>Python 3.11 (RAPIDS 26.06 supports Python 3.11–3.14)</p></li>
 </ul>
 <p>Setup:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>~/dire-rapids-env
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3.11<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>~/dire-rapids-env
 <span class="nb">source</span><span class="w"> </span>~/dire-rapids-env/bin/activate
 python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>pip
 
-python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">&quot;dire-rapids[rapids,bench,viz,keops]==0.3.2&quot;</span>
-</pre></div>
-</div>
-<p>For development from a clone:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sashakolpakov/dire-rapids.git
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sashakolpakov/dire-rapids.git
 <span class="nb">cd</span><span class="w"> </span>dire-rapids
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torch</span><span class="o">==</span><span class="m">2</span>.11.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128
 python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-e<span class="w"> </span><span class="s2">&quot;.[rapids,bench,viz,keops]&quot;</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="s2">&quot;.[rapids-cu12,bench,viz,keops]&quot;</span>
 </pre></div>
 </div>
 <p>Verification:</p>

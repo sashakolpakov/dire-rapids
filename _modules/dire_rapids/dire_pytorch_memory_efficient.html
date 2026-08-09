@@ -41,6 +41,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -448,8 +449,15 @@
         <span class="n">b_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_b</span><span class="p">)</span>
 
         <span class="c1"># ============ ATTRACTION FORCES (compiled kernel) ============</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_knn_indices_torch&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">knn_indices_torch</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;_knn_indices_torch&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+                <span class="n">knn_indices_torch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span>
+                <span class="n">knn_indices_torch</span><span class="o">.</span><span class="n">device</span> <span class="o">!=</span> <span class="n">positions</span><span class="o">.</span><span class="n">device</span> <span class="ow">or</span>
+                <span class="nb">tuple</span><span class="p">(</span><span class="n">knn_indices_torch</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">positions</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">)</span>
         <span class="n">knn_indices_torch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span>
         <span class="n">forces</span> <span class="o">+=</span> <span class="n">_attraction_forces_compiled</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">knn_indices_torch</span><span class="p">,</span> <span class="n">a_val</span><span class="p">,</span> <span class="n">b_val</span><span class="p">)</span>
 

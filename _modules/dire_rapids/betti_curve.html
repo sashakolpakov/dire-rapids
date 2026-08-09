@@ -41,6 +41,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -799,7 +800,7 @@
 
 
 <span class="c1"># ---------------------------------------------------------------------------</span>
-<span class="c1"># Ripser-based persistent-homology implementation (preferred for any N &gt; ~500)</span>
+<span class="c1"># Ripser-based persistent-homology implementation (explicit reference backend)</span>
 <span class="c1"># ---------------------------------------------------------------------------</span>
 
 <div class="viewcode-block" id="compute_betti_curve_ripser">
@@ -832,14 +833,15 @@
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    dict : same shape as the other compute_betti_curve_* backends.</span>
-<span class="sd">        &#39;filtration_values&#39; : n_steps evenly spaced values from 0 to the</span>
-<span class="sd">            longest finite death time seen (plus a 5% margin).</span>
-<span class="sd">        &#39;beta_0&#39;, &#39;beta_1&#39; : length-n_steps arrays.</span>
-<span class="sd">        &#39;beta_2&#39; : present only if maxdim &gt;= 2.</span>
-<span class="sd">        &#39;n_edges_active&#39;, &#39;n_triangles_active&#39; : filled with NaN — ripser</span>
-<span class="sd">            does not expose these. Callers depending on the counts should</span>
-<span class="sd">            use compute_betti_curve_fast instead.</span>
+<span class="sd">    dict</span>
+<span class="sd">        Same shape as the other ``compute_betti_curve_*`` backends. The</span>
+<span class="sd">        ``filtration_values`` array contains ``n_steps`` evenly spaced values</span>
+<span class="sd">        from zero to the longest finite death time plus a 5% margin.</span>
+<span class="sd">        ``beta_0`` and ``beta_1`` are length-``n_steps`` arrays, and ``beta_2``</span>
+<span class="sd">        is present only when ``maxdim &gt;= 2``. The active-edge and</span>
+<span class="sd">        active-triangle counts are filled with NaN because ripser does not</span>
+<span class="sd">        expose them; callers depending on those counts should use</span>
+<span class="sd">        ``compute_betti_curve_fast`` instead.</span>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
@@ -914,19 +916,14 @@
 <div class="viewcode-block" id="compute_betti_curve">
 <a class="viewcode-back" href="../../api/dire_rapids.betti_curve.html#dire_rapids.betti_curve.compute_betti_curve">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">compute_betti_curve</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">k_neighbors</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">density_threshold</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">overlap_factor</span><span class="o">=</span><span class="mf">1.5</span><span class="p">,</span>
-                        <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">prefer_ripser</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                        <span class="n">n_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">use_gpu</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">prefer_ripser</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Compute filtered Betti curve (backend selector).</span>
 
-<span class="sd">    Preference order (if available):</span>
-<span class="sd">      ripser (if ``prefer_ripser`` and ``ripser`` is installed)</span>
-<span class="sd">      → GPU kNN + incremental atlas path (``compute_betti_curve_gpu``) if</span>
-<span class="sd">        ``use_gpu``</span>
-<span class="sd">      → fast CPU incremental atlas path (``compute_betti_curve_fast``) as</span>
-<span class="sd">        fallback.</span>
-
-<span class="sd">    Ripser is the preferred default when available; the atlas paths provide a</span>
-<span class="sd">    dependency-light fallback for environments without ripser.</span>
+<span class="sd">    By default, try the GPU kNN + incremental atlas path</span>
+<span class="sd">    (``compute_betti_curve_gpu``) when ``use_gpu`` is true, then fall back to</span>
+<span class="sd">    the fast CPU incremental atlas path (``compute_betti_curve_fast``).</span>
+<span class="sd">    ``prefer_ripser=True`` explicitly selects ripser first when it is installed.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -942,10 +939,10 @@
 <span class="sd">    n_steps : int</span>
 <span class="sd">        Number of filtration steps.</span>
 <span class="sd">    use_gpu : bool</span>
-<span class="sd">        Whether to try the GPU kNN atlas path if ripser is not picked.</span>
+<span class="sd">        Whether to try the GPU kNN Atlas path before the CPU Atlas path.</span>
 <span class="sd">    prefer_ripser : bool</span>
-<span class="sd">        Prefer ripser when available. Set to False to skip ripser and use</span>
-<span class="sd">        the atlas backends only (e.g. for correctness comparison).</span>
+<span class="sd">        Explicitly prefer ripser when available. The default is False, so the</span>
+<span class="sd">        public selector uses the atlas backends unless requested otherwise.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -961,7 +958,7 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">compute_betti_curve_ripser</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-            <span class="k">pass</span>   <span class="c1"># ripser not installed — fall through to the rank-based paths</span>
+            <span class="k">pass</span>   <span class="c1"># ripser not installed — fall through to the atlas paths</span>
 
     <span class="k">if</span> <span class="n">use_gpu</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>

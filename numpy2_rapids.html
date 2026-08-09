@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NumPy 2 and RAPIDS Setup &mdash; dire-rapids 0.3.2 documentation</title>
+  <title>NumPy 2 and RAPIDS 26.06 Setup &mdash; dire-rapids 0.3.2 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
@@ -18,7 +18,9 @@
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" /> 
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="dire_rapids" href="api/modules.html" />
+    <link rel="prev" title="dire-rapids" href="index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -41,7 +43,8 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -59,7 +62,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">NumPy 2 and RAPIDS Setup</li>
+      <li class="breadcrumb-item active">NumPy 2 and RAPIDS 26.06 Setup</li>
       <li class="wy-breadcrumbs-aside">
               <a href="https://github.com/sashakolpakov/dire-rapids/blob/main/docs/numpy2_rapids.md" class="fa fa-github"> Edit on GitHub</a>
       </li>
@@ -69,8 +72,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="numpy-2-and-rapids-setup">
-<h1>NumPy 2 and RAPIDS Setup<a class="headerlink" href="#numpy-2-and-rapids-setup" title="Link to this heading"></a></h1>
+  <section id="numpy-2-and-rapids-26-06-setup">
+<h1>NumPy 2 and RAPIDS 26.06 Setup<a class="headerlink" href="#numpy-2-and-rapids-26-06-setup" title="Link to this heading"></a></h1>
 <p>DiRe-RAPIDS supports NumPy 2 in environments where PyTorch and the RAPIDS
 packages are installed against a compatible NumPy ABI. The most common failure
 mode is mixing a system PyTorch package compiled against NumPy 1.x with a newer
@@ -79,26 +82,33 @@ but <code class="docutils literal notranslate"><span class="pre">Tensor.numpy()<
 <p>Use a clean virtual environment for RAPIDS work, and install PyTorch, NumPy, and
 RAPIDS together. Avoid <code class="docutils literal notranslate"><span class="pre">--system-site-packages</span></code> unless you know the system
 PyTorch build is compatible with the active NumPy major version.</p>
-<p>Example for CUDA 12 wheels:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>~/dire-rapids-env
+<p>Choose exactly one CUDA family. CUDA 13 is the recommended RAPIDS 26.06 and
+Python 3.14 configuration:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3.14<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>~/dire-rapids-env
 <span class="nb">source</span><span class="w"> </span>~/dire-rapids-env/bin/activate
 python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--upgrade<span class="w"> </span>pip
 
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sashakolpakov/dire-rapids.git
+<span class="nb">cd</span><span class="w"> </span>dire-rapids
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torch</span><span class="o">==</span><span class="m">2</span>.11.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu130
 python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">&quot;dire-rapids[rapids,bench,viz,keops]==0.3.2&quot;</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="s2">&quot;.[rapids-cu13,bench,viz,keops]&quot;</span>
 </pre></div>
 </div>
-<p>For development from a clone:</p>
+<p>For CUDA 12, use the CUDA 12 extra and matching PyTorch index instead:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sashakolpakov/dire-rapids.git
 <span class="nb">cd</span><span class="w"> </span>dire-rapids
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torch</span><span class="o">==</span><span class="m">2</span>.11.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128
 python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>-e<span class="w"> </span><span class="s2">&quot;.[rapids,bench,viz,keops]&quot;</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="s2">&quot;.[rapids-cu12,bench,viz,keops]&quot;</span>
 </pre></div>
 </div>
+<p>The legacy <code class="docutils literal notranslate"><span class="pre">rapids</span></code> extra remains a backward-compatible alias of
+<code class="docutils literal notranslate"><span class="pre">rapids-cu12</span></code>. Do not combine the CUDA 12 and CUDA 13 extras.</p>
 <p>Verify the environment:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-<span class="w"> </span><span class="s">&lt;&lt;&#39;PY&#39;</span>
 <span class="s">import numpy, torch, cupy, cuml, cuvs, cudf</span>
@@ -111,14 +121,25 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 <span class="s">print(&quot;cudf&quot;, cudf.__version__)</span>
 <span class="s">print(&quot;torch numpy bridge&quot;, torch.arange(4, device=&quot;cuda&quot;).cpu().numpy())</span>
 <span class="s">PY</span>
+
+<span class="c1"># Check the framework import orders in independent processes.</span>
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import torch, cuml; print(&#39;torch -&gt; cuml OK&#39;)&quot;</span>
+python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import cuml, torch; print(&#39;cuml -&gt; torch OK&#39;)&quot;</span>
 </pre></div>
 </div>
-<p>Expected package family for the <code class="docutils literal notranslate"><span class="pre">rapids</span></code> extra:</p>
+<p>Expected package family:</p>
 <ul class="simple">
 <li><p>NumPy 2.x</p></li>
 <li><p>PyTorch built against NumPy 2.x</p></li>
-<li><p>RAPIDS/cuML/cuVS/cuDF 26.2 or later</p></li>
+<li><p>RAPIDS/cuML/cuVS/cuDF constrained to the 26.06.x release line</p></li>
+<li><p>CuPy 14.x for the selected CUDA family</p></li>
 </ul>
+<p>The supplied Docker image additionally preloads the RAPIDS conda environment’s
+<code class="docutils literal notranslate"><span class="pre">/opt/conda/lib/libnvJitLink.so.13</span></code>. This prevents PyTorch’s CUDA 13 wheel from
+changing whether subsequent cuML/cuVS imports succeed. If a custom conda
+environment exhibits an import-order-dependent <code class="docutils literal notranslate"><span class="pre">libnvJitLink</span></code> symbol error,
+preload <code class="docutils literal notranslate"><span class="pre">$CONDA_PREFIX/lib/libnvJitLink.so.13</span></code> and repeat both independent
+import checks above.</p>
 <p>If the verification fails with <code class="docutils literal notranslate"><span class="pre">RuntimeError:</span> <span class="pre">Numpy</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">available</span></code>, recreate
 the environment without system packages and install a PyTorch build compiled
 against the active NumPy major version.</p>
@@ -127,7 +148,10 @@ against the active NumPy major version.</p>
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="dire-rapids" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api/modules.html" class="btn btn-neutral float-right" title="dire_rapids" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 

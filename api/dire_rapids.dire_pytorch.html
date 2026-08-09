@@ -44,6 +44,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="modules.html">dire_rapids</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorch"><code class="docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorchMemoryEfficient"><code class="docutils literal notranslate"><span class="pre">DiRePyTorchMemoryEfficient</span></code></a></li>
@@ -340,13 +341,28 @@ k-NN chunk sizing.</p></li>
 <li><p><strong>knn_broadcast_memory_multiplier</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>default=3.0</em>) – Safety multiplier for arbitrary metric callables/string expressions
 that materialize broadcast tensors of shape <code class="docutils literal notranslate"><span class="pre">(chunk,</span> <span class="pre">n_samples,</span>
 <span class="pre">n_features)</span></code>.</p></li>
-<li><p><strong>normalize</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – If True, mean-center and scale inputs to fit in [-1, 1] (global scalar
-rescale) before kNN and PCA. This preserves neighbor rankings exactly
-(kNN is translation- and scale-invariant) but keeps squared distances
-in a numerically safe range for fp16. Without it, high-dimensional
-data on large scales (e.g. raw [0, 255] MNIST pixels) overflows fp16
-during distance computation, silently corrupting the kNN graph.</p></li>
+<li><p><strong>normalize</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>default=True</em>) – If True, scale inputs to fit in [-1, 1] before kNN and PCA, and
+mean-center them for translation-invariant Euclidean metrics. Named
+cosine and inner-product metrics retain the original origin so their
+neighbor rankings are not changed. This keeps squared distances in a
+numerically safe range for fp16.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="dire_rapids.dire_pytorch.DiRePyTorch.get_diagnostics">
+<span class="sig-name descname"><span class="pre">get_diagnostics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/dire_pytorch.html#DiRePyTorch.get_diagnostics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.dire_pytorch.DiRePyTorch.get_diagnostics" title="Link to this definition"></a></dt>
+<dd><p>Return JSON-serializable fitted backend and pipeline diagnostics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Requested/effective k-NN backend, per-stage wall-clock timings,
+and whether the vectorized force implementation fell back to its
+chunked implementation during the most recent fit.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a></p>
 </dd>
 </dl>
 </dd></dl>

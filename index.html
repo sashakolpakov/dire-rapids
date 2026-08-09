@@ -19,7 +19,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="dire_rapids" href="api/modules.html" /> 
+    <link rel="next" title="NumPy 2 and RAPIDS 26.06 Setup" href="numpy2_rapids.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -43,6 +43,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -111,15 +112,35 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;dire-rapids[cuda]==0.3.2&quot;</span>
 </pre></div>
 </div>
-<p>For GPU acceleration with RAPIDS:</p>
-<p>Use a clean virtual environment. The <code class="docutils literal notranslate"><span class="pre">rapids</span></code> extra installs cuML/cuVS/cuDF
-from the NVIDIA index and PyTorch from the matching CUDA wheel index.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--extra-index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="s2">&quot;dire-rapids[rapids,keops]==0.3.2&quot;</span>
+<p>For GPU acceleration with RAPIDS 26.06, use a clean virtual environment and
+choose exactly one CUDA-specific extra. The legacy <code class="docutils literal notranslate"><span class="pre">rapids</span></code> extra remains a
+CUDA 12 alias for backward compatibility.
+The core package supports Python 3.10+, while RAPIDS 26.06 requires Python
+3.11–3.14.
+The CUDA-specific extras are currently unreleased. Install this version from
+a clone before choosing one of the CUDA-family commands below:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sashakolpakov/dire-rapids.git
+<span class="nb">cd</span><span class="w"> </span>dire-rapids
 </pre></div>
 </div>
+<p>CUDA 13 (recommended for RAPIDS 26.06 with Python 3.14):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torch</span><span class="o">==</span><span class="m">2</span>.11.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu130
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="s2">&quot;.[rapids-cu13,keops]&quot;</span>
+</pre></div>
+</div>
+<p>CUDA 12:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="nv">torch</span><span class="o">==</span><span class="m">2</span>.11.0<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--index-url<span class="w"> </span>https://download.pytorch.org/whl/cu128
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--extra-index-url<span class="w"> </span>https://pypi.nvidia.com<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-e<span class="w"> </span><span class="s2">&quot;.[rapids-cu12,keops]&quot;</span>
+</pre></div>
+</div>
+<p>Do not combine the CUDA 12 and CUDA 13 extras. Install the pinned PyTorch wheel
+first from the index matching the selected CUDA family.</p>
 <p>For development from a clone:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/sashakolpakov/dire-rapids.git
 <span class="nb">cd</span><span class="w"> </span>dire-rapids
@@ -155,6 +176,7 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/modules.html">dire_rapids</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="api/modules.html#dire_rapids.DiRePyTorch"><code class="docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="api/modules.html#dire_rapids.DiRePyTorchMemoryEfficient"><code class="docutils literal notranslate"><span class="pre">DiRePyTorchMemoryEfficient</span></code></a></li>
@@ -221,6 +243,79 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 </pre></div>
 </div>
 </section>
+<section id="rapids-26-06-all-neighbors-graph-construction">
+<h3>RAPIDS 26.06 All-Neighbors Graph Construction<a class="headerlink" href="#rapids-26-06-all-neighbors-graph-construction" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">DiReCuVS</span></code> can use the cuVS all-neighbors API to build a full approximate
+k-NN graph (one row per input) without first copying the entire dataset into a
+single-GPU ANN index. The partitioned path supports host-backed/out-of-core
+data and multiple GPUs. Select <code class="docutils literal notranslate"><span class="pre">all_neighbors_algo=&quot;brute_force&quot;</span></code> when an
+exact local graph is required.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiReCuVS</span>
+
+<span class="c1"># Automatic preserves the released index-and-search policy.</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiReCuVS</span><span class="p">(</span><span class="n">cuvs_knn_method</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">)</span>
+
+<span class="c1"># Explicit experimental partitioned/out-of-core construction.</span>
+<span class="n">reducer</span> <span class="o">=</span> <span class="n">DiReCuVS</span><span class="p">(</span>
+    <span class="n">cuvs_knn_method</span><span class="o">=</span><span class="s2">&quot;all_neighbors&quot;</span><span class="p">,</span>
+    <span class="n">all_neighbors_algo</span><span class="o">=</span><span class="s2">&quot;nn_descent&quot;</span><span class="p">,</span>
+    <span class="n">all_neighbors_n_clusters</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
+    <span class="n">all_neighbors_device_ids</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">cuvs_knn_method</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">&quot;auto&quot;</span></code>. The remaining defaults are
+<code class="docutils literal notranslate"><span class="pre">all_neighbors_algo=&quot;nn_descent&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">all_neighbors_n_clusters=1</span></code>, <code class="docutils literal notranslate"><span class="pre">all_neighbors_device_ids=None</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">all_neighbors_algo_params=None</span></code>. <code class="docutils literal notranslate"><span class="pre">all_neighbors_overlap_factor=None</span></code>
+selects 0 for one cluster and <code class="docutils literal notranslate"><span class="pre">min(2,</span> <span class="pre">n_clusters</span> <span class="pre">-</span> <span class="pre">1)</span></code> otherwise.
+<code class="docutils literal notranslate"><span class="pre">cuvs_knn_method=&quot;auto&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;index_search&quot;</span></code> both retain the established
+index-and-search policy. All-neighbors is explicit opt-in until it clears
+frozen neighbor-recall, topology, local, context, and global quality gates;
+availability of the API alone does not change existing embeddings.</p>
+<p>An H100 A/B audit produced mixed results. At full scale, all-neighbors was
+about 26% slower on 10x (0.623 graph overlap) but 1.91x faster on arXiv (0.839
+overlap); downstream quality moved in both directions and balanced context
+accuracy decreased by 1.62 and 0.84 percentage points, respectively. It was
+therefore not promoted to the default, but remains a viable explicit option,
+particularly given the arXiv performance. Full observations are recorded in
+<a class="reference external" href="https://github.com/sashakolpakov/dire-rapids/pull/12">PR #12</a>; the harness
+and raw-result workflow remain on the separate
+<a class="reference external" href="https://github.com/sashakolpakov/homological-stability-repro/tree/a00aa54949a87ef64e7204ba7434a70155a51c1a">homological-stability-repro test branch</a>.</p>
+<p>Partitioning reduces the local graph-builder working set, but the final
+<code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">x</span> <span class="pre">k</span></code> index and distance graph must still fit on one GPU.</p>
+<p>The legacy automatic index thresholds are:</p>
+<ul class="simple">
+<li><p>fewer than 50,000 rows: exact/flat;</p></li>
+<li><p>50,000 to fewer than 500,000 rows, or more than 500 dimensions: IVF-Flat;</p></li>
+<li><p>500,000 to fewer than 5,000,000 rows at no more than 500 dimensions: IVF-PQ;</p></li>
+<li><p>at least 5,000,000 rows with at most 500 dimensions and a supported metric:
+CAGRA;</p></li>
+<li><p>otherwise: IVF-PQ.</p></li>
+</ul>
+</section>
+<section id="fitted-backend-diagnostics">
+<h3>Fitted Backend Diagnostics<a class="headerlink" href="#fitted-backend-diagnostics" title="Link to this heading"></a></h3>
+<p>Requested policy is not a substitute for the algorithm that actually ran.
+After fitting, <code class="docutils literal notranslate"><span class="pre">DiReCuVS</span></code> exposes <code class="docutils literal notranslate"><span class="pre">effective_cuvs_knn_method_</span></code> and
+<code class="docutils literal notranslate"><span class="pre">effective_cuvs_index_type_</span></code>. All reducers expose per-stage
+<code class="docutils literal notranslate"><span class="pre">stage_timings_</span></code>, <code class="docutils literal notranslate"><span class="pre">effective_knn_backend_</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">force_chunked_fallback_calls_</span></code>. <code class="docutils literal notranslate"><span class="pre">get_diagnostics()</span></code> returns these values
+as a JSON-serializable dictionary:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">embedding</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+<span class="n">record</span> <span class="o">=</span> <span class="n">reducer</span><span class="o">.</span><span class="n">get_diagnostics</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;cuvs&quot;</span><span class="p">][</span><span class="s2">&quot;effective_index_type&quot;</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;stage_timings_seconds&quot;</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">&quot;force_chunked_fallback_calls&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Forcing an index or opting into all-neighbors can materially change both
+runtime and approximation behavior. Benchmark records should retain requested
+and effective policies together with recall and downstream embedding-quality
+measurements.</p>
+<p>See the <a class="reference external" href="https://docs.rapids.ai/api/cuvs/stable/python_api/neighbors_all_neighbors/">cuVS all-neighbors API documentation</a>
+for the underlying RAPIDS interface.</p>
+</section>
 <section id="automatic-backend-and-k-nn-selection">
 <h3>Automatic Backend and k-NN Selection<a class="headerlink" href="#automatic-backend-and-k-nn-selection" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dire_rapids</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dire</span>
@@ -278,8 +373,12 @@ requested engine is unavailable or unsupported for the current data.</p>
 <ul class="simple">
 <li><p><strong>Distortion</strong>: stress, neighborhood preservation</p></li>
 <li><p><strong>Context</strong>: SVM/kNN classification accuracy</p></li>
-<li><p><strong>Topology</strong>: DTW distances between Betti curves (β₀, β₁) via ripser when available, otherwise a kNN-atlas fallback with union-find and GF(2) bitset elimination</p></li>
+<li><p><strong>Topology</strong>: DTW distances between Betti curves (β₀, β₁) via the default kNN-Atlas engine with union-find and GF(2) bitset elimination; Ripser is an explicit reference option</p></li>
 </ul>
+<p><code class="docutils literal notranslate"><span class="pre">compute_betti_curve</span></code> tries the GPU Atlas path first when GPU use is enabled,
+then the CPU Atlas path. Pass <code class="docutils literal notranslate"><span class="pre">prefer_ripser=True</span></code> to request Ripser first.
+No topology-tuned public preset is exported because its fixed-sample Ripser
+selection did not survive a paired held-out Atlas audit.</p>
 <p>See <a class="reference internal" href="api/dire_rapids.metrics.html"><span class="doc">dire_rapids.metrics module</span></a> for full API reference.</p>
 </section>
 <section id="custom-distance-metrics">
@@ -344,7 +443,7 @@ custom expressions/callables.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="api/modules.html" class="btn btn-neutral float-right" title="dire_rapids" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="numpy2_rapids.html" class="btn btn-neutral float-right" title="NumPy 2 and RAPIDS 26.06 Setup" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

@@ -41,6 +41,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -104,6 +105,114 @@
     <span class="n">logger</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="s2">&quot;cuVS not available. Install RAPIDS for GPU-accelerated k-NN: &quot;</span>
                  <span class="s2">&quot;Follow the installation instructions at https://docs.rapids.ai/install/&quot;</span><span class="p">)</span>
 
+<span class="c1"># cuVS 25.10+ exposes a graph-construction API tailored to the all-vs-all</span>
+<span class="c1"># workload used by manifold-learning algorithms. Keep this feature check</span>
+<span class="c1"># separate from the core cuVS imports so older supported installations can</span>
+<span class="c1"># still use the legacy index-build + self-query path.</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cuvs.common</span><span class="w"> </span><span class="kn">import</span> <span class="n">MultiGpuResources</span><span class="p">,</span> <span class="n">Resources</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">cuvs.neighbors</span><span class="w"> </span><span class="kn">import</span> <span class="n">all_neighbors</span><span class="p">,</span> <span class="n">nn_descent</span>
+    <span class="n">ALL_NEIGHBORS_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">ALL_NEIGHBORS_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_merged_params</span><span class="p">(</span><span class="n">defaults</span><span class="p">,</span> <span class="n">overrides</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return constructor kwargs with user values overriding defaults.&quot;&quot;&quot;</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">defaults</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">overrides</span><span class="p">:</span>
+        <span class="n">params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">overrides</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">params</span>
+
+
+<span class="n">_REMOVE_SELF_KERNEL</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_remove_self_from_knn_cupy</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="n">distances</span><span class="p">,</span> <span class="n">n_neighbors</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Remove each row&#39;s own id on-device while preserving neighbor order.</span>
+
+<span class="sd">    cuVS all-neighbors normally includes self, but self is not guaranteed to</span>
+<span class="sd">    occupy the first column (and may be absent for metrics such as inner</span>
+<span class="sd">    product). Requesting one extra candidate and compacting with per-row ranks</span>
+<span class="sd">    handles both cases without an O(N) Python loop or a second full graph</span>
+<span class="sd">    allocation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_REMOVE_SELF_KERNEL</span>  <span class="c1"># pylint: disable=global-statement</span>
+
+    <span class="n">indices</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
+    <span class="n">distances</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">distances</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">indices</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cuVS indices and distances must be equally shaped 2-D arrays&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">cp</span><span class="o">.</span><span class="n">int64</span> <span class="ow">or</span> <span class="n">distances</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;cuVS all-neighbors requires int64 indices and float32 distances&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">indices</span><span class="o">.</span><span class="n">flags</span><span class="o">.</span><span class="n">c_contiguous</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">distances</span><span class="o">.</span><span class="n">flags</span><span class="o">.</span><span class="n">c_contiguous</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cuVS all-neighbors outputs must be C-contiguous&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">indices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">n_neighbors</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;cuVS result has fewer columns than requested neighbors&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">_REMOVE_SELF_KERNEL</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_REMOVE_SELF_KERNEL</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">RawKernel</span><span class="p">(</span>
+<span class="w">            </span><span class="sa">r</span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">            extern &quot;C&quot; __global__</span>
+<span class="sd">            void remove_self(</span>
+<span class="sd">                long long* indices,</span>
+<span class="sd">                float* distances,</span>
+<span class="sd">                long long n_rows,</span>
+<span class="sd">                long long n_candidates,</span>
+<span class="sd">                long long n_neighbors,</span>
+<span class="sd">                int* failed)</span>
+<span class="sd">            {</span>
+<span class="sd">                long long row = (long long)blockDim.x * blockIdx.x + threadIdx.x;</span>
+<span class="sd">                if (row &gt;= n_rows) return;</span>
+
+<span class="sd">                long long base = row * n_candidates;</span>
+<span class="sd">                long long write = 0;</span>
+<span class="sd">                for (long long col = 0; col &lt; n_candidates; ++col) {</span>
+<span class="sd">                    long long neighbor = indices[base + col];</span>
+<span class="sd">                    float distance = distances[base + col];</span>
+<span class="sd">                    bool finite_distance =</span>
+<span class="sd">                        (__float_as_uint(distance) &amp; 0x7f800000U) != 0x7f800000U;</span>
+<span class="sd">                    if (</span>
+<span class="sd">                        neighbor != row &amp;&amp;</span>
+<span class="sd">                        neighbor &gt;= 0 &amp;&amp;</span>
+<span class="sd">                        neighbor &lt; n_rows &amp;&amp;</span>
+<span class="sd">                        finite_distance &amp;&amp;</span>
+<span class="sd">                        write &lt; n_neighbors</span>
+<span class="sd">                    ) {</span>
+<span class="sd">                        indices[base + write] = neighbor;</span>
+<span class="sd">                        distances[base + write] = distance;</span>
+<span class="sd">                        ++write;</span>
+<span class="sd">                    }</span>
+<span class="sd">                }</span>
+<span class="sd">                if (write &lt; n_neighbors) atomicExch(failed, 1);</span>
+<span class="sd">            }</span>
+<span class="sd">            &#39;&#39;&#39;</span><span class="p">,</span>
+            <span class="s1">&#39;remove_self&#39;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">n_rows</span><span class="p">,</span> <span class="n">n_candidates</span> <span class="o">=</span> <span class="n">indices</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">failed</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="n">threads</span> <span class="o">=</span> <span class="mi">256</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_rows</span> <span class="o">+</span> <span class="n">threads</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="n">threads</span>
+    <span class="n">_REMOVE_SELF_KERNEL</span><span class="p">(</span>
+        <span class="p">(</span><span class="n">blocks</span><span class="p">,),</span>
+        <span class="p">(</span><span class="n">threads</span><span class="p">,),</span>
+        <span class="p">(</span>
+            <span class="n">indices</span><span class="p">,</span>
+            <span class="n">distances</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">(</span><span class="n">n_rows</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">(</span><span class="n">n_candidates</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">(</span><span class="n">n_neighbors</span><span class="p">),</span>
+            <span class="n">failed</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">failed</span><span class="o">.</span><span class="n">item</span><span class="p">()):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;cuVS all-neighbors returned an invalid or underfilled row; &quot;</span>
+            <span class="s2">&quot;increase cluster capacity/overlap or reduce n_neighbors.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">indices</span><span class="p">[:,</span> <span class="p">:</span><span class="n">n_neighbors</span><span class="p">],</span> <span class="n">distances</span><span class="p">[:,</span> <span class="p">:</span><span class="n">n_neighbors</span><span class="p">]</span>
+
 <span class="c1"># Try to import cuML for GPU-accelerated PCA</span>
 <span class="k">try</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">cuml.decomposition</span><span class="w"> </span><span class="kn">import</span> <span class="n">PCA</span> <span class="k">as</span> <span class="n">cuPCA</span>
@@ -131,7 +240,7 @@
 <span class="sd">    -------------------------------------------</span>
 <span class="sd">    - **10-100x faster k-NN**: For large datasets (&gt;100K points)</span>
 <span class="sd">    - **Massive scale support**: Handles 10M+ points efficiently</span>
-<span class="sd">    - **High accuracy**: Approximate k-NN with &gt;95% recall</span>
+<span class="sd">    - **Tunable accuracy**: Exact brute force or approximate graph builders</span>
 <span class="sd">    - **Multi-GPU ready**: Supports extreme scale processing</span>
 <span class="sd">    - **GPU-accelerated PCA**: cuML PCA/SVD for initialization</span>
 <span class="sd">    </span>
@@ -150,8 +259,14 @@
 <span class="sd">    use_cuml : bool or None, default=None  </span>
 <span class="sd">        Whether to use cuML for PCA initialization. If None, automatically</span>
 <span class="sd">        detected based on availability and hardware.</span>
+<span class="sd">    cuvs_knn_method : {&#39;auto&#39;, &#39;all_neighbors&#39;, &#39;index_search&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">        cuVS graph-construction strategy. ``&#39;auto&#39;`` preserves the established</span>
+<span class="sd">        index-and-search policy. The purpose-built all-neighbors API is</span>
+<span class="sd">        available through explicit ``&#39;all_neighbors&#39;`` opt-in while its</span>
+<span class="sd">        downstream embedding-quality validation remains experimental.</span>
 <span class="sd">    cuvs_index_type : {&#39;auto&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;, &#39;flat&#39;}, default=&#39;auto&#39;</span>
-<span class="sd">        Type of cuVS index to build:</span>
+<span class="sd">        Type of legacy cuVS index to build:</span>
+
 <span class="sd">        - &#39;auto&#39;: Automatically select based on data characteristics</span>
 <span class="sd">        - &#39;ivf_flat&#39;: Inverted file index without compression</span>
 <span class="sd">        - &#39;ivf_pq&#39;: Inverted file index with product quantization</span>
@@ -161,6 +276,18 @@
 <span class="sd">        Custom parameters for cuVS index building. Overrides defaults.</span>
 <span class="sd">    cuvs_search_params : dict, optional  </span>
 <span class="sd">        Custom parameters for cuVS search. Overrides defaults.</span>
+<span class="sd">    all_neighbors_algo : {&#39;nn_descent&#39;, &#39;brute_force&#39;, &#39;ivf_pq&#39;}, default=&#39;nn_descent&#39;</span>
+<span class="sd">        Local graph builder used by cuVS all-neighbors.</span>
+<span class="sd">    all_neighbors_n_clusters : int, default=1</span>
+<span class="sd">        Paper parameter ``c``. Values greater than one keep input on the host</span>
+<span class="sd">        and process spatial partitions out-of-core.</span>
+<span class="sd">    all_neighbors_overlap_factor : int or None, default=None</span>
+<span class="sd">        Paper spill factor ``s``. ``None`` selects 0 for a single cluster and</span>
+<span class="sd">        ``min(2, c - 1)`` for an out-of-core build.</span>
+<span class="sd">    all_neighbors_device_ids : sequence of int or None, default=None</span>
+<span class="sd">        GPU ids for multi-GPU out-of-core construction.</span>
+<span class="sd">    all_neighbors_algo_params : dict, optional</span>
+<span class="sd">        Overrides for the selected local graph builder&#39;s parameter object.</span>
 <span class="sd">    *args, **kwargs</span>
 <span class="sd">        Additional arguments passed to DiRePyTorch parent class.</span>
 <span class="sd">        Includes: n_components, n_neighbors, init, max_iter_layout, min_dist,</span>
@@ -214,12 +341,10 @@
 
 <span class="sd">    With custom distance metric::</span>
 
-<span class="sd">        # cuVS with L1 distance for k-NN computation</span>
+<span class="sd">        # Custom expressions use the PyTorch k-NN fallback</span>
 <span class="sd">        reducer = DiReCuVS(</span>
-<span class="sd">            use_cuvs=True,</span>
 <span class="sd">            metric=&#39;(x - y).abs().sum(-1)&#39;,  # L1/Manhattan distance</span>
 <span class="sd">            n_neighbors=32,</span>
-<span class="sd">            cuvs_index_type=&#39;ivf_flat&#39;</span>
 <span class="sd">        )</span>
 
 <span class="sd">        embedding = reducer.fit_transform(X)</span>
@@ -227,19 +352,25 @@
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
 <span class="sd">    **Requirements:**</span>
-<span class="sd">    - RAPIDS cuVS: Follow the installation instructions at https://docs.rapids.ai/install/</span>
-<span class="sd">    - CUDA-capable GPU with compute capability &gt;= 6.0</span>
+
+<span class="sd">    - RAPIDS cuVS 26.06</span>
+<span class="sd">    - CUDA 12.2--12.9 on Volta or newer, or CUDA 13.0--13.2 on</span>
+<span class="sd">      Turing or newer</span>
 <span class="sd">    </span>
-<span class="sd">    **Index Selection Guidelines:**</span>
+<span class="sd">    **Legacy Index Selection Guidelines:**</span>
+
 <span class="sd">    - &lt; 50K points: &#39;flat&#39; (exact search)</span>
-<span class="sd">    - 50K-500K points: &#39;ivf_flat&#39; </span>
-<span class="sd">    - 500K-5M points: &#39;ivf_pq&#39;</span>
+<span class="sd">    - 50K-500K points, or more than 500 dimensions: &#39;ivf_flat&#39;</span>
+<span class="sd">    - 500K-5M points at up to 500 dimensions: &#39;ivf_pq&#39;</span>
 <span class="sd">    - &gt; 5M points: &#39;cagra&#39; (if dimensions &lt;= 500)</span>
 <span class="sd">    </span>
 <span class="sd">    **Memory Considerations:**</span>
-<span class="sd">    - cuVS requires float32 precision (no FP16 support)</span>
-<span class="sd">    - Index building requires additional GPU memory</span>
-<span class="sd">    - &#39;cagra&#39; uses more memory but provides best performance for huge datasets</span>
+
+<span class="sd">    - cuVS all-neighbors requires float32 input</span>
+<span class="sd">    - ``all_neighbors_n_clusters &gt; 1`` keeps input in host memory, but the</span>
+<span class="sd">      final ``N x k`` graph must still fit on one GPU</span>
+<span class="sd">    - Larger cluster counts reduce working memory; larger overlap factors</span>
+<span class="sd">      improve boundary recall at additional compute cost</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     
 <div class="viewcode-block" id="DiReCuVS.__init__">
@@ -252,6 +383,12 @@
         <span class="n">cuvs_index_type</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>  <span class="c1"># &#39;auto&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;</span>
         <span class="n">cuvs_build_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">cuvs_search_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">cuvs_knn_method</span><span class="o">=</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span>
+        <span class="n">all_neighbors_algo</span><span class="o">=</span><span class="s1">&#39;nn_descent&#39;</span><span class="p">,</span>
+        <span class="n">all_neighbors_n_clusters</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">all_neighbors_overlap_factor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">all_neighbors_device_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">all_neighbors_algo_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
@@ -273,6 +410,7 @@
 <span class="sd">            - False: Disable cuML, use sklearn backend</span>
 <span class="sd">        cuvs_index_type : {&#39;auto&#39;, &#39;ivf_flat&#39;, &#39;ivf_pq&#39;, &#39;cagra&#39;, &#39;flat&#39;}, default=&#39;auto&#39;</span>
 <span class="sd">            Type of cuVS index to build:</span>
+
 <span class="sd">            - &#39;auto&#39;: Automatically select optimal index based on data size/dimensionality</span>
 <span class="sd">            - &#39;ivf_flat&#39;: Inverted file index without compression (good balance)</span>
 <span class="sd">            - &#39;ivf_pq&#39;: Inverted file with product quantization (memory efficient)</span>
@@ -286,6 +424,19 @@
 <span class="sd">            Custom parameters for cuVS search operations. These override the</span>
 <span class="sd">            automatically determined parameters. See cuVS documentation for</span>
 <span class="sd">            index-specific search parameters.</span>
+<span class="sd">        cuvs_knn_method : {&#39;auto&#39;, &#39;all_neighbors&#39;, &#39;index_search&#39;}, default=&#39;auto&#39;</span>
+<span class="sd">            Select the purpose-built graph API or the legacy build-index and</span>
+<span class="sd">            self-query implementation.</span>
+<span class="sd">        all_neighbors_algo : {&#39;nn_descent&#39;, &#39;brute_force&#39;, &#39;ivf_pq&#39;}, default=&#39;nn_descent&#39;</span>
+<span class="sd">            Local graph algorithm for all-neighbors.</span>
+<span class="sd">        all_neighbors_n_clusters : int, default=1</span>
+<span class="sd">            Number of spatial partitions (paper parameter ``c``).</span>
+<span class="sd">        all_neighbors_overlap_factor : int or None, default=None</span>
+<span class="sd">            Number of partitions per point (paper spill factor ``s``).</span>
+<span class="sd">        all_neighbors_device_ids : sequence of int or None, default=None</span>
+<span class="sd">            Device ids used by ``MultiGpuResources`` for a batched build.</span>
+<span class="sd">        all_neighbors_algo_params : dict, optional</span>
+<span class="sd">            Local algorithm parameter overrides.</span>
 <span class="sd">        **kwargs</span>
 <span class="sd">            Additional keyword arguments passed to DiRePyTorch parent class.</span>
 <span class="sd">            See DiRePyTorch documentation for available parameters including:</span>
@@ -337,9 +488,293 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span> <span class="o">=</span> <span class="n">cuvs_build_params</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span> <span class="o">=</span> <span class="n">cuvs_search_params</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Store n_lists for search params (older cuVS versions don&#39;t expose index.n_lists)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Store n_lists for search params (older cuVS versions don&#39;t expose index.n_lists)</span>
 
-    
+        <span class="n">valid_methods</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="s1">&#39;all_neighbors&#39;</span><span class="p">,</span> <span class="s1">&#39;index_search&#39;</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">cuvs_knn_method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid_methods</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;cuvs_knn_method must be one of </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">valid_methods</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">cuvs_knn_method</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">valid_algos</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;nn_descent&#39;</span><span class="p">,</span> <span class="s1">&#39;brute_force&#39;</span><span class="p">,</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">all_neighbors_algo</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">valid_algos</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;all_neighbors_algo must be one of </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">valid_algos</span><span class="p">)</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got </span><span class="si">{</span><span class="n">all_neighbors_algo</span><span class="si">!r}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">all_neighbors_n_clusters</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">all_neighbors_n_clusters</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_n_clusters must be an integer&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">all_neighbors_n_clusters</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_n_clusters must be at least 1&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">all_neighbors_overlap_factor</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">all_neighbors_overlap_factor</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="mi">0</span> <span class="k">if</span> <span class="n">all_neighbors_n_clusters</span> <span class="o">==</span> <span class="mi">1</span>
+                <span class="k">else</span> <span class="nb">min</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">all_neighbors_n_clusters</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">all_neighbors_overlap_factor</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">all_neighbors_overlap_factor</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_overlap_factor must be an integer or None&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">all_neighbors_n_clusters</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">all_neighbors_overlap_factor</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;all_neighbors_overlap_factor must be 0 when &quot;</span>
+                    <span class="s2">&quot;all_neighbors_n_clusters is 1&quot;</span>
+                <span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">all_neighbors_overlap_factor</span> <span class="o">&lt;</span> <span class="n">all_neighbors_n_clusters</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;all_neighbors_overlap_factor must satisfy &quot;</span>
+                <span class="s2">&quot;1 &lt;= overlap_factor &lt; n_clusters&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">all_neighbors_device_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">all_neighbors_device_ids</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_device_ids must be a list or tuple of integers&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">all_neighbors_device_ids</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_device_ids cannot be empty&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+                    <span class="nb">isinstance</span><span class="p">(</span><span class="n">device_id</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span>
+                    <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">device_id</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">))</span> <span class="ow">or</span>
+                    <span class="n">device_id</span> <span class="o">&lt;</span> <span class="mi">0</span>
+                    <span class="k">for</span> <span class="n">device_id</span> <span class="ow">in</span> <span class="n">all_neighbors_device_ids</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_device_ids must contain non-negative integers&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">all_neighbors_device_ids</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_neighbors_device_ids</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_device_ids must be unique&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">all_neighbors_n_clusters</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;all_neighbors_device_ids requires all_neighbors_n_clusters &gt; 1&quot;</span>
+                <span class="p">)</span>
+            <span class="n">all_neighbors_device_ids</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">device_id</span><span class="p">)</span> <span class="k">for</span> <span class="n">device_id</span> <span class="ow">in</span> <span class="n">all_neighbors_device_ids</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">all_neighbors_algo_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+                <span class="n">all_neighbors_algo_params</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;all_neighbors_algo_params must be a dict or None&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_knn_method</span> <span class="o">=</span> <span class="n">cuvs_knn_method</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span> <span class="o">=</span> <span class="n">all_neighbors_algo</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_n_clusters</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">all_neighbors_n_clusters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_overlap_factor</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">all_neighbors_overlap_factor</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_device_ids</span> <span class="o">=</span> <span class="n">all_neighbors_device_ids</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo_params</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">all_neighbors_algo_params</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_cuvs_knn_method</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_select_cuvs_knn_method</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the cuVS graph-construction strategy.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_knn_method</span> <span class="o">!=</span> <span class="s1">&#39;auto&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_knn_method</span>
+        <span class="c1"># Preserve the released automatic policy until all-neighbors clears</span>
+        <span class="c1"># frozen neighbor, topology, local, context, and global quality gates.</span>
+        <span class="c1"># Availability alone is not evidence that changing the graph builder is</span>
+        <span class="c1"># quality-neutral.</span>
+        <span class="k">return</span> <span class="s1">&#39;index_search&#39;</span>
+
+<div class="viewcode-block" id="DiReCuVS.get_diagnostics">
+<a class="viewcode-back" href="../../api/modules.html#dire_rapids.dire_cuvs.DiReCuVS.get_diagnostics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_diagnostics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return fitted pipeline diagnostics, including effective cuVS policy.&quot;&quot;&quot;</span>
+        <span class="n">diagnostics</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">get_diagnostics</span><span class="p">()</span>
+        <span class="n">diagnostics</span><span class="p">[</span><span class="s2">&quot;cuvs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;requested_knn_method&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_knn_method</span><span class="p">,</span>
+            <span class="s2">&quot;effective_knn_method&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;effective_cuvs_knn_method_&quot;</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;requested_index_type&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span><span class="p">,</span>
+            <span class="s2">&quot;effective_index_type&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;effective_cuvs_index_type_&quot;</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;effective_all_neighbors_algo&quot;</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span>
+                <span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;effective_all_neighbors_algo_&quot;</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">diagnostics</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_all_neighbors_metric</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the cuVS metric and whether distances need a square root.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="kc">True</span>
+        <span class="n">metric</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">metric</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">):</span>
+            <span class="c1"># sqeuclidean is supported by every local all-neighbors builder;</span>
+            <span class="c1"># convert the returned distances to the DiRe Euclidean contract.</span>
+            <span class="k">return</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">metric</span><span class="p">,</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_make_all_neighbors_params</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">candidate_count</span><span class="p">,</span> <span class="n">metric</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Construct RAPIDS 26.06 all-neighbors and local-algorithm params.&quot;&quot;&quot;</span>
+        <span class="n">algo_params</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span> <span class="o">==</span> <span class="s1">&#39;nn_descent&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">metric</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">,</span> <span class="s1">&#39;cosine&#39;</span><span class="p">,</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">}:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;all_neighbors_algo=&#39;nn_descent&#39; does not support metric </span><span class="si">{</span><span class="n">metric</span><span class="si">!r}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;metric&#39;</span><span class="p">:</span> <span class="n">metric</span><span class="p">,</span>
+                    <span class="s1">&#39;graph_degree&#39;</span><span class="p">:</span> <span class="n">candidate_count</span><span class="p">,</span>
+                    <span class="s1">&#39;intermediate_graph_degree&#39;</span><span class="p">:</span> <span class="n">candidate_count</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
+                    <span class="s1">&#39;return_distances&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo_params</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;metric&#39;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">metric</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;all_neighbors_algo_params metric must match the reducer metric&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;graph_degree&#39;</span><span class="p">,</span> <span class="n">candidate_count</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">candidate_count</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;NN-descent graph_degree must be at least n_neighbors + 1&quot;</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;intermediate_graph_degree&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;graph_degree&#39;</span><span class="p">]:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;NN-descent intermediate_graph_degree must be at least graph_degree&quot;</span>
+                <span class="p">)</span>
+            <span class="n">algo_params</span> <span class="o">=</span> <span class="n">nn_descent</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">metric</span> <span class="o">!=</span> <span class="s1">&#39;sqeuclidean&#39;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;all_neighbors_algo=&#39;ivf_pq&#39; supports only sqeuclidean distance&quot;</span>
+                <span class="p">)</span>
+            <span class="n">local_rows</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span>
+                <span class="n">n_samples</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_overlap_factor</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_n_clusters</span>
+            <span class="p">))</span>
+            <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;metric&#39;</span><span class="p">:</span> <span class="n">metric</span><span class="p">,</span>
+                    <span class="s1">&#39;n_lists&#39;</span><span class="p">:</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">local_rows</span><span class="p">)),</span> <span class="mi">1024</span><span class="p">)),</span>
+                    <span class="s1">&#39;pq_bits&#39;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+                    <span class="s1">&#39;pq_dim&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="s1">&#39;add_data_on_build&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo_params</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;metric&#39;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">metric</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;all_neighbors_algo_params metric must match the reducer metric&quot;</span>
+                <span class="p">)</span>
+            <span class="n">algo_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo_params</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;all_neighbors_algo_params is not supported with algo=&#39;brute_force&#39;&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">params_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;algo&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span><span class="p">,</span>
+            <span class="s1">&#39;overlap_factor&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_overlap_factor</span><span class="p">,</span>
+            <span class="s1">&#39;n_clusters&#39;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_n_clusters</span><span class="p">,</span>
+            <span class="s1">&#39;metric&#39;</span><span class="p">:</span> <span class="n">metric</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span> <span class="o">==</span> <span class="s1">&#39;nn_descent&#39;</span><span class="p">:</span>
+            <span class="n">params_kwargs</span><span class="p">[</span><span class="s1">&#39;nn_descent_params&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">algo_params</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
+            <span class="n">params_kwargs</span><span class="p">[</span><span class="s1">&#39;ivf_pq_params&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">algo_params</span>
+        <span class="k">return</span> <span class="n">all_neighbors</span><span class="o">.</span><span class="n">AllNeighborsParams</span><span class="p">(</span><span class="o">**</span><span class="n">params_kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_knn_all_neighbors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the full k-NN graph with cuVS all-neighbors.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">ALL_NEIGHBORS_AVAILABLE</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;cuvs_knn_method=&#39;all_neighbors&#39; requires cuVS 25.10 or newer &quot;</span>
+                <span class="s2">&quot;(RAPIDS 26.06 is recommended)&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">n_samples</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_cuvs_knn_method_</span> <span class="o">=</span> <span class="s1">&#39;all_neighbors&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_cuvs_index_type_</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_all_neighbors_algo_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span>
+        <span class="n">candidate_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_n_clusters</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">candidate_count</span> <span class="o">&gt;</span> <span class="mi">1024</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;partitioned cuVS all-neighbors supports at most 1024 &quot;</span>
+                    <span class="s2">&quot;candidates (n_neighbors must be &lt;= 1023)&quot;</span>
+                <span class="p">)</span>
+            <span class="n">total_assignments</span> <span class="o">=</span> <span class="n">n_samples</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_overlap_factor</span>
+            <span class="n">required_assignments</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_n_clusters</span> <span class="o">*</span> <span class="n">candidate_count</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">total_assignments</span> <span class="o">&lt;</span> <span class="n">required_assignments</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;partitioned cuVS all-neighbors has insufficient average &quot;</span>
+                    <span class="s2">&quot;cluster capacity for n_neighbors; reduce n_clusters or &quot;</span>
+                    <span class="s2">&quot;n_neighbors, or increase all_neighbors_overlap_factor&quot;</span>
+                <span class="p">)</span>
+        <span class="n">metric</span><span class="p">,</span> <span class="n">take_sqrt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_neighbors_metric</span><span class="p">()</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_make_all_neighbors_params</span><span class="p">(</span>
+            <span class="n">n_samples</span><span class="p">,</span> <span class="n">candidate_count</span><span class="p">,</span> <span class="n">metric</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_n_clusters</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">dataset</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s1">&#39;C&#39;</span><span class="p">)</span>
+            <span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;in-core&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Host input is the switch that enables cuVS batched/out-of-core</span>
+            <span class="c1"># graph construction. Passing a device array here is rejected by</span>
+            <span class="c1"># the API when n_clusters &gt; 1.</span>
+            <span class="n">dataset</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+            <span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;out-of-core&#39;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_device_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">resources</span> <span class="o">=</span> <span class="n">Resources</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">resources</span> <span class="o">=</span> <span class="n">MultiGpuResources</span><span class="p">(</span><span class="n">device_ids</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_device_ids</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Building k-NN graph with cuVS all-neighbors (</span><span class="si">{</span><span class="n">mode</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;algo=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_algo</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;clusters=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_n_clusters</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;overlap=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">all_neighbors_overlap_factor</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+        <span class="n">distances_out</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">candidate_count</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">cp</span><span class="o">.</span><span class="n">float32</span>
+        <span class="p">)</span>
+        <span class="n">indices</span><span class="p">,</span> <span class="n">distances</span> <span class="o">=</span> <span class="n">all_neighbors</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+            <span class="n">dataset</span><span class="p">,</span>
+            <span class="n">candidate_count</span><span class="p">,</span>
+            <span class="n">params</span><span class="p">,</span>
+            <span class="n">distances</span><span class="o">=</span><span class="n">distances_out</span><span class="p">,</span>
+            <span class="n">resources</span><span class="o">=</span><span class="n">resources</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">resources</span><span class="o">.</span><span class="n">sync</span><span class="p">()</span>
+
+        <span class="n">indices_cp</span><span class="p">,</span> <span class="n">distances_cp</span> <span class="o">=</span> <span class="n">_remove_self_from_knn_cupy</span><span class="p">(</span>
+            <span class="n">indices</span><span class="p">,</span> <span class="n">distances</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">take_sqrt</span><span class="p">:</span>
+            <span class="n">cp</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">distances_cp</span><span class="p">)</span>
+            <span class="n">cp</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">distances_cp</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">metric</span> <span class="o">==</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">:</span>
+            <span class="n">cp</span><span class="o">.</span><span class="n">negative</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">distances_cp</span><span class="p">)</span>
+
+        <span class="c1"># Preserve the historical NumPy-facing internal contract while also</span>
+        <span class="c1"># keeping a zero-copy device view for the layout optimizer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">indices_cp</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_dlpack</span><span class="p">(</span><span class="n">indices_cp</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># The host copies and optional DLPack view are now the only live graph</span>
+        <span class="c1"># state. Release the input, distances, resources, and CuPy cache before</span>
+        <span class="c1"># PyTorch allocates the layout; the DLPack-backed index allocation stays</span>
+        <span class="c1"># alive through the Torch tensor.</span>
+        <span class="k">del</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">distances_out</span><span class="p">,</span> <span class="n">distances</span><span class="p">,</span> <span class="n">distances_cp</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">indices_cp</span>
+        <span class="k">del</span> <span class="n">resources</span>
+        <span class="n">cp</span><span class="o">.</span><span class="n">get_default_memory_pool</span><span class="p">()</span><span class="o">.</span><span class="n">free_all_blocks</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_cuvs_knn_method</span> <span class="o">=</span> <span class="s1">&#39;all_neighbors&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;k-NN graph computed via cuVS all-neighbors: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_select_cuvs_index_type</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;sqeuclidean&#39;</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Automatically select optimal cuVS index type based on data characteristics.</span>
@@ -368,9 +803,9 @@
 <span class="sd">        Selection Heuristics:</span>
 <span class="sd">        - **&lt; 50K samples**: &#39;flat&#39; (exact search)</span>
 <span class="sd">        - **50K-500K samples or &gt;500D**: &#39;ivf_flat&#39; (good balance)</span>
-<span class="sd">        - **500K-5M samples**: &#39;ivf_pq&#39; (memory efficient)</span>
+<span class="sd">        - **500K-5M samples at ≤500D**: &#39;ivf_pq&#39; (memory efficient)</span>
 <span class="sd">        - **&gt; 5M samples and ≤500D**: &#39;cagra&#39; (best performance, if metric is supported)</span>
-<span class="sd">        - **&gt; 5M samples and &gt;500D**: &#39;ivf_pq&#39; (high-D fallback)</span>
+<span class="sd">        - **&gt; 5M samples and &gt;500D**: &#39;ivf_flat&#39; (high-D policy)</span>
 <span class="sd">        - **cosine metric**: Forces IVF method (CAGRA doesn&#39;t support cosine)</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_index_type</span> <span class="o">!=</span> <span class="s1">&#39;auto&#39;</span><span class="p">:</span>
@@ -393,7 +828,8 @@
         <span class="k">if</span> <span class="n">n_dims</span> <span class="o">&lt;=</span> <span class="mi">500</span> <span class="ow">and</span> <span class="n">metric</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;sqeuclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">):</span>
             <span class="k">return</span> <span class="s1">&#39;cagra&#39;</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># Fallback to IVF-PQ for unsupported metrics (e.g., cosine) or high-D</span>
+            <span class="c1"># Fallback to IVF-PQ for unsupported CAGRA metrics (e.g., cosine).</span>
+            <span class="c1"># High-dimensional inputs already selected IVF-Flat above.</span>
             <span class="k">return</span> <span class="s1">&#39;ivf_pq&#39;</span>
     
     <span class="k">def</span><span class="w"> </span><span class="nf">_build_cuvs_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">index_type</span><span class="p">,</span> <span class="n">metric</span><span class="o">=</span><span class="s1">&#39;euclidean&#39;</span><span class="p">):</span>
@@ -451,40 +887,47 @@
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">4096</span><span class="p">)</span>
 
-            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
-                <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
-                <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
+            <span class="n">build_kwargs</span> <span class="o">=</span> <span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;n_lists&#39;</span><span class="p">:</span> <span class="n">n_lists</span><span class="p">,</span>
+                    <span class="s1">&#39;metric&#39;</span><span class="p">:</span> <span class="n">metric</span><span class="p">,</span>
+                    <span class="s1">&#39;add_data_on_build&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">,</span>
             <span class="p">)</span>
-
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
-                <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span><span class="o">**</span><span class="n">build_kwargs</span><span class="p">)</span>
 
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="n">n_lists</span>  <span class="c1"># Store for search params</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="n">build_kwargs</span><span class="p">[</span><span class="s1">&#39;n_lists&#39;</span><span class="p">]</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-Flat index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists for </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D data&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Built IVF-Flat index with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span><span class="si">}</span><span class="s2"> lists for </span><span class="si">{</span><span class="n">n_dims</span><span class="si">}</span><span class="s2">D data&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
             <span class="c1"># IVF with product quantization</span>
             <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">8192</span><span class="p">)</span>
             <span class="n">pq_dim</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">n_dims</span> <span class="o">//</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">128</span><span class="p">)</span>  <span class="c1"># Reasonable PQ dimension</span>
 
-            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
-                <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
-                <span class="n">pq_dim</span><span class="o">=</span><span class="n">pq_dim</span><span class="p">,</span>
-                <span class="n">pq_bits</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
-                <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
+            <span class="n">build_kwargs</span> <span class="o">=</span> <span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;n_lists&#39;</span><span class="p">:</span> <span class="n">n_lists</span><span class="p">,</span>
+                    <span class="s1">&#39;metric&#39;</span><span class="p">:</span> <span class="n">metric</span><span class="p">,</span>
+                    <span class="s1">&#39;pq_dim&#39;</span><span class="p">:</span> <span class="n">pq_dim</span><span class="p">,</span>
+                    <span class="s1">&#39;pq_bits&#39;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+                    <span class="s1">&#39;add_data_on_build&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">,</span>
             <span class="p">)</span>
-
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
-                <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span><span class="o">**</span><span class="n">build_kwargs</span><span class="p">)</span>
 
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="n">n_lists</span>  <span class="c1"># Store for search params</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">=</span> <span class="n">build_kwargs</span><span class="p">[</span><span class="s1">&#39;n_lists&#39;</span><span class="p">]</span>
 
-            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Built IVF-PQ index with </span><span class="si">{</span><span class="n">n_lists</span><span class="si">}</span><span class="s2"> lists, PQ dim=</span><span class="si">{</span><span class="n">pq_dim</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Built IVF-PQ index with </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span><span class="si">}</span><span class="s2"> lists, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;PQ dim=</span><span class="si">{</span><span class="n">build_kwargs</span><span class="p">[</span><span class="s1">&#39;pq_dim&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
 
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span><span class="p">:</span>
             <span class="c1"># CAGRA only supports sqeuclidean and inner_product metrics</span>
@@ -507,15 +950,16 @@
                     <span class="sa">f</span><span class="s2">&quot;(euclidean is automatically converted to sqeuclidean).&quot;</span>
                 <span class="p">)</span>
 
-            <span class="n">build_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
-                <span class="n">metric</span><span class="o">=</span><span class="n">cagra_metric</span><span class="p">,</span>
-                <span class="n">graph_degree</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
-                <span class="n">intermediate_graph_degree</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
-                <span class="n">build_algo</span><span class="o">=</span><span class="s1">&#39;nn_descent&#39;</span>
+            <span class="n">build_kwargs</span> <span class="o">=</span> <span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;metric&#39;</span><span class="p">:</span> <span class="n">cagra_metric</span><span class="p">,</span>
+                    <span class="s1">&#39;graph_degree&#39;</span><span class="p">:</span> <span class="mi">32</span><span class="p">,</span>
+                    <span class="s1">&#39;intermediate_graph_degree&#39;</span><span class="p">:</span> <span class="mi">64</span><span class="p">,</span>
+                    <span class="s1">&#39;build_algo&#39;</span><span class="p">:</span> <span class="s1">&#39;nn_descent&#39;</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">,</span>
             <span class="p">)</span>
-
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">:</span>
-                <span class="n">build_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">)</span>
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span><span class="o">**</span><span class="n">build_kwargs</span><span class="p">)</span>
 
             <span class="n">index</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
 
@@ -577,18 +1021,23 @@
             <span class="c1"># This avoids dtype issues with brute_force module</span>
             <span class="n">n_lists</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_samples</span><span class="p">)),</span> <span class="mi">1024</span><span class="p">)</span>
 
-            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span>
-                <span class="n">n_lists</span><span class="o">=</span><span class="n">n_lists</span><span class="p">,</span>
-                <span class="n">metric</span><span class="o">=</span><span class="n">metric</span><span class="p">,</span>
-                <span class="n">add_data_on_build</span><span class="o">=</span><span class="kc">True</span>
+            <span class="n">build_kwargs</span> <span class="o">=</span> <span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;n_lists&#39;</span><span class="p">:</span> <span class="n">n_lists</span><span class="p">,</span>
+                    <span class="s1">&#39;metric&#39;</span><span class="p">:</span> <span class="n">metric</span><span class="p">,</span>
+                    <span class="s1">&#39;add_data_on_build&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_build_params</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="n">build_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">IndexParams</span><span class="p">(</span><span class="o">**</span><span class="n">build_kwargs</span><span class="p">)</span>
 
             <span class="n">index</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">build_params</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">)</span>
 
             <span class="c1"># Search with high probe count for near-exact results</span>
-            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
-                <span class="n">n_probes</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">n_lists</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>  <span class="c1"># High probe count for accuracy</span>
-            <span class="p">)</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="o">**</span><span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span><span class="s1">&#39;n_probes&#39;</span><span class="p">:</span> <span class="nb">min</span><span class="p">(</span><span class="n">build_kwargs</span><span class="p">[</span><span class="s1">&#39;n_lists&#39;</span><span class="p">],</span> <span class="mi">256</span><span class="p">)},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">,</span>
+            <span class="p">))</span>
 
             <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
                 <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
@@ -596,11 +1045,10 @@
             
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_flat&#39;</span><span class="p">:</span>
             <span class="c1"># IVF search - use stored n_lists (compatible with older cuVS versions)</span>
-            <span class="n">n_probes</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="k">else</span> <span class="mi">20</span>
-            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="n">n_probes</span><span class="o">=</span><span class="n">n_probes</span><span class="p">)</span>
-            
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
-                <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>
+            <span class="n">n_probes</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="k">else</span> <span class="mi">20</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="o">**</span><span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span><span class="s1">&#39;n_probes&#39;</span><span class="p">:</span> <span class="n">n_probes</span><span class="p">},</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span>
+            <span class="p">))</span>
             
             <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">ivf_flat</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
                 <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
@@ -608,11 +1056,10 @@
             
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;ivf_pq&#39;</span><span class="p">:</span>
             <span class="c1"># IVF-PQ search - use stored n_lists (compatible with older cuVS versions)</span>
-            <span class="n">n_probes</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="k">else</span> <span class="mi">20</span>
-            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="n">n_probes</span><span class="o">=</span><span class="n">n_probes</span><span class="p">)</span>
-            
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
-                <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>
+            <span class="n">n_probes</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="o">//</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">200</span><span class="p">))</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_lists</span> <span class="k">else</span> <span class="mi">20</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="o">**</span><span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span><span class="s1">&#39;n_probes&#39;</span><span class="p">:</span> <span class="n">n_probes</span><span class="p">},</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span>
+            <span class="p">))</span>
             
             <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">ivf_pq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
                 <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
@@ -620,14 +1067,14 @@
             
         <span class="k">elif</span> <span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span><span class="p">:</span>
             <span class="c1"># CAGRA search</span>
-            <span class="n">search_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span>
-                <span class="n">max_queries</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>  <span class="c1"># Automatic</span>
-                <span class="n">itopk_size</span><span class="o">=</span><span class="nb">min</span><span class="p">(</span><span class="n">k</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
-                <span class="n">search_width</span><span class="o">=</span><span class="mi">4</span>
-            <span class="p">)</span>
-            
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">:</span>
-                <span class="n">search_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">)</span>
+            <span class="n">search_params</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">SearchParams</span><span class="p">(</span><span class="o">**</span><span class="n">_merged_params</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s1">&#39;max_queries&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="s1">&#39;itopk_size&#39;</span><span class="p">:</span> <span class="nb">min</span><span class="p">(</span><span class="n">k</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+                    <span class="s1">&#39;search_width&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_search_params</span><span class="p">,</span>
+            <span class="p">))</span>
             
             <span class="n">distances</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">cagra</span><span class="o">.</span><span class="n">search</span><span class="p">(</span>
                 <span class="n">search_params</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">X_gpu</span><span class="p">,</span> <span class="n">k</span><span class="o">+</span><span class="mi">1</span>
@@ -747,6 +1194,11 @@
 <span class="sd">        Cleans up GPU memory after computation.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices_torch</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_cuvs_knn_method</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_cuvs_knn_method_</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_cuvs_index_type_</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_all_neighbors_algo_</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;pytorch&#39;</span><span class="p">,</span> <span class="s1">&#39;pykeops&#39;</span><span class="p">):</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fallback_to_pytorch_knn</span><span class="p">(</span>
@@ -780,6 +1232,7 @@
         <span class="c1"># Decide whether to use cuVS</span>
         <span class="n">use_cuvs_for_this</span> <span class="o">=</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">knn_backend</span> <span class="o">==</span> <span class="s1">&#39;cuvs&#39;</span> <span class="ow">or</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cuvs_knn_method</span> <span class="o">!=</span> <span class="s1">&#39;auto&#39;</span> <span class="ow">or</span>
             <span class="n">n_samples</span> <span class="o">&gt;=</span> <span class="mi">10000</span>  <span class="c1"># cuVS overhead not worth it for small datasets</span>
         <span class="p">)</span>
 
@@ -796,6 +1249,13 @@
         <span class="c1"># Use cuVS for k-NN</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_last_knn_backend</span> <span class="o">=</span> <span class="s1">&#39;cuvs&#39;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Computing </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="si">}</span><span class="s2">-NN graph using cuVS...&quot;</span><span class="p">)</span>
+
+        <span class="n">cuvs_knn_method</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_cuvs_knn_method</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_cuvs_knn_method_</span> <span class="o">=</span> <span class="n">cuvs_knn_method</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Effective cuVS k-NN method: </span><span class="si">{</span><span class="n">cuvs_knn_method</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cuvs_knn_method</span> <span class="o">==</span> <span class="s1">&#39;all_neighbors&#39;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_knn_all_neighbors</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_cuvs_knn_method</span> <span class="o">=</span> <span class="s1">&#39;index_search&#39;</span>
 
         <span class="c1"># Determine which metric to use for cuVS</span>
         <span class="c1"># Default to sqeuclidean (cuVS default), but allow named metrics</span>
@@ -820,6 +1280,8 @@
 
         <span class="c1"># Select index type (pass metric to avoid selecting CAGRA for unsupported metrics)</span>
         <span class="n">index_type</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_select_cuvs_index_type</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">n_dims</span><span class="p">,</span> <span class="n">cuvs_metric</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">effective_cuvs_index_type_</span> <span class="o">=</span> <span class="n">index_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Effective cuVS index type: </span><span class="si">{</span><span class="n">index_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
         <span class="c1"># Build index</span>
         <span class="k">if</span> <span class="n">index_type</span> <span class="o">!=</span> <span class="s1">&#39;flat&#39;</span><span class="p">:</span>
@@ -836,12 +1298,27 @@
         <span class="c1"># first column when there are duplicate/tied distances.</span>
         <span class="n">indices_cp</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span>
         <span class="n">distances_cp</span> <span class="o">=</span> <span class="n">cp</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="p">,</span> <span class="n">knn_distances</span> <span class="o">=</span> <span class="n">_remove_self_from_knn</span><span class="p">(</span>
             <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">indices_cp</span><span class="p">),</span>
             <span class="n">cp</span><span class="o">.</span><span class="n">asnumpy</span><span class="p">(</span><span class="n">distances_cp</span><span class="p">),</span>
             <span class="mi">0</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">n_neighbors</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="c1"># Match the base reducer&#39;s Euclidean-distance contract. Explicit</span>
+        <span class="c1"># metric=&#39;sqeuclidean&#39; intentionally retains squared distances.</span>
+        <span class="n">metric_name</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">metric_spec</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span>
+                <span class="p">(</span><span class="n">index_type</span> <span class="o">==</span> <span class="s1">&#39;cagra&#39;</span> <span class="ow">and</span> <span class="n">metric_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;euclidean&#39;</span><span class="p">,</span> <span class="s1">&#39;l2&#39;</span><span class="p">))</span>
+        <span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">knn_distances</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">metric_name</span> <span class="o">==</span> <span class="s1">&#39;inner_product&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="o">-</span><span class="n">knn_distances</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_knn_distances</span> <span class="o">=</span> <span class="n">knn_distances</span>
         
         <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;k-NN graph computed: shape </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_knn_indices</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
         

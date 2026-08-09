@@ -41,6 +41,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../api/modules.html">dire_rapids</a></li>
 </ul>
 
@@ -81,10 +82,8 @@
 <span class="sd">- Context preservation metrics (SVM, kNN classification)</span>
 <span class="sd">- Topological metrics (persistence homology, Betti curves)</span>
 
-<span class="sd">The module supports multiple backends for persistence computation:</span>
-<span class="sd">- giotto-ph (fastest CPU, multi-threaded)</span>
-<span class="sd">- ripser++ (GPU-accelerated)</span>
-<span class="sd">- ripser (CPU fallback)</span>
+<span class="sd">Topology metrics use the kNN-Atlas implementation by default. Ripser remains</span>
+<span class="sd">available as an explicit reference backend through ``compute_betti_curve``.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>

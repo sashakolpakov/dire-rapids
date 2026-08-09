@@ -44,6 +44,7 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../numpy2_rapids.html">NumPy 2 and RAPIDS 26.06 Setup</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="modules.html">dire_rapids</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorch"><code class="docutils literal notranslate"><span class="pre">DiRePyTorch</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="modules.html#dire_rapids.DiRePyTorchMemoryEfficient"><code class="docutils literal notranslate"><span class="pre">DiRePyTorchMemoryEfficient</span></code></a></li>
@@ -119,10 +120,8 @@ the quality of dimensionality reduction embeddings, including:</p>
 <li><p>Context preservation metrics (SVM, kNN classification)</p></li>
 <li><p>Topological metrics (persistence homology, Betti curves)</p></li>
 </ul>
-<p>The module supports multiple backends for persistence computation:
-- giotto-ph (fastest CPU, multi-threaded)
-- ripser++ (GPU-accelerated)
-- ripser (CPU fallback)</p>
+<p>Topology metrics use the kNN-Atlas implementation by default. Ripser remains
+available as an explicit reference backend through <code class="docutils literal notranslate"><span class="pre">compute_betti_curve</span></code>.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="dire_rapids.metrics.welford_update_gpu">
 <span class="sig-prename descclassname"><span class="pre">dire_rapids.metrics.</span></span><span class="sig-name descname"><span class="pre">welford_update_gpu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">M2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">finite_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000000000000.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/dire_rapids/metrics.html#welford_update_gpu"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#dire_rapids.metrics.welford_update_gpu" title="Link to this definition"></a></dt>
