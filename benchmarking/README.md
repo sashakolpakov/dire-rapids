@@ -26,7 +26,8 @@ index/search. The PR #12 head is also run through its proposed automatic
 all-neighbors path.
 
 Run the complete matrix inside the repository's RAPIDS 26.06 container on an
-NVIDIA GPU (the audit that motivated issue #14 used an H100):
+NVIDIA H100. The runner rejects a different GPU class so the historical
+comparison cannot be mistaken for the requested H100 reproduction:
 
 ```bash
 benchmarking/run_topology_historical.sh /workspace/issue14-historical-results
@@ -34,11 +35,13 @@ benchmarking/run_topology_historical.sh /workspace/issue14-historical-results
 
 The command is resumable. It appends one checksummed JSON record per fit and
 refuses to summarize until all 960 records are present and their dataset and
-subset identities pair exactly across configurations and revisions. The final
-summary predeclares a material implementation change as a change in the paired
-preset-minus-default gap exceeding 5% of the historical default mean, with a
-descriptive paired 95% interval excluding zero. Raw records and manifests must
-be retained with the three summary files before drawing or publishing the
+subset identities pair exactly across configurations and revisions. Shared
+reference Atlas and Ripser curves are content-hashed, and their hashes must
+also pair across every record. The final summary predeclares a material
+implementation change as a change in the paired preset-minus-default gap
+exceeding 5% of the historical default mean, with a descriptive paired 95%
+interval excluding zero. Raw records, reference curves, and manifests must be
+retained with the three summary files before drawing or publishing the
 historical-regression conclusion.
 
 ## Key Achievements

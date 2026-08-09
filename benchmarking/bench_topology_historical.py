@@ -42,6 +42,7 @@ LAYOUT_SEEDS = tuple(range(42, 62))
 TOPOLOGY_SUBSET_SEED_OFFSET = 1_000
 TOPOLOGY_SUBSET_SIZE = 1_000
 PRACTICAL_BAND = 0.05
+REQUIRED_GPU_NAME_TOKEN = "H100"
 
 REVISIONS = {
     "preset_introduction": "9117dc45a3e130fa1d636dfd181f3e97960c5b3b",
@@ -72,6 +73,10 @@ CONFIGURATIONS = {
     "default": {
         "init": "pca",
         "n_neighbors": 16,
+        "spread": 1.0,
+        "min_dist": 1e-2,
+        "cutoff": 42.0,
+        "neg_ratio": 8,
         "max_iter_layout": 128,
     },
     "former_topology_preset": {
@@ -161,6 +166,13 @@ def json_ready(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [json_ready(item) for item in value]
     return value
+
+
+def json_sha256(value: Any) -> str:
+    payload = json.dumps(
+        json_ready(value), sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return sha256_bytes(payload)
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -512,7 +524,7 @@ def load_or_compute_reference_curves(
     dataset_sha256: str,
     layout_seed: int,
     cache_root: Path,
-) -> tuple[dict, dict]:
+) -> tuple[dict, dict, dict[str, str]]:
     """Load or atomically retain the fixed input curves shared by variants."""
     cache_path = cache_root / dataset_name / f"seed-{layout_seed}.json"
     expected_identity = {
@@ -529,7 +541,13 @@ def load_or_compute_reference_curves(
         cached = json.loads(cache_path.read_text(encoding="utf-8"))
         if any(cached.get(key) != value for key, value in expected_identity.items()):
             raise RuntimeError(f"reference-curve cache identity mismatch: {cache_path}")
-        return cached["atlas"], cached["ripser"]
+        curve_sha256 = {
+            "atlas": json_sha256(cached["atlas"]),
+            "ripser": json_sha256(cached["ripser"]),
+        }
+        if cached.get("curve_sha256") != curve_sha256:
+            raise RuntimeError(f"reference-curve cache hash mismatch: {cache_path}")
+        return cached["atlas"], cached["ripser"], curve_sha256
 
     subset = data[indices]
     atlas = evaluator.compute_betti_curve_gpu(
@@ -542,15 +560,20 @@ def load_or_compute_reference_curves(
     ripser = evaluator.compute_betti_curve_ripser(
         subset, n_steps=100, maxdim=1
     )
+    curve_sha256 = {
+        "atlas": json_sha256(atlas),
+        "ripser": json_sha256(ripser),
+    }
     write_json(
         cache_path,
         {
             **expected_identity,
             "atlas": atlas,
             "ripser": ripser,
+            "curve_sha256": curve_sha256,
         },
     )
-    return atlas, ripser
+    return atlas, ripser, curve_sha256
 
 
 def run_variant(
@@ -575,6 +598,11 @@ def run_variant(
 
     if not torch.cuda.is_available():
         raise RuntimeError("historical audit requires a CUDA GPU")
+    gpu_name = torch.cuda.get_device_name(0)
+    if REQUIRED_GPU_NAME_TOKEN not in gpu_name:
+        raise RuntimeError(
+            f"historical audit requires an H100, found {gpu_name!r}"
+        )
     try:
         from cuvs.neighbors import brute_force as _brute_force  # noqa: F401
     except ImportError as exc:
@@ -587,7 +615,7 @@ def run_variant(
     environment = {
         "platform": platform.platform(),
         "python": platform.python_version(),
-        "gpu": torch.cuda.get_device_name(0),
+        "gpu": gpu_name,
         "torch_cuda": torch.version.cuda,
         "cuda_runtime": int(cp.cuda.runtime.runtimeGetVersion()),
         "cuda_driver": int(cp.cuda.runtime.driverGetVersion()),
@@ -664,7 +692,11 @@ def run_variant(
             if not pending:
                 continue
             indices = topology_subset_indices(len(data), seed)
-            reference_atlas, reference_ripser = load_or_compute_reference_curves(
+            (
+                reference_atlas,
+                reference_ripser,
+                reference_curve_sha256,
+            ) = load_or_compute_reference_curves(
                 evaluator,
                 data,
                 indices,
@@ -728,6 +760,7 @@ def run_variant(
                     "subset_seed": seed + TOPOLOGY_SUBSET_SEED_OFFSET,
                     "subset_indices_sha256": subset_sha256(indices),
                     "subset_size": len(indices),
+                    "reference_curve_sha256": reference_curve_sha256,
                     "fit_seconds": fit_seconds,
                     "metrics": {
                         "atlas_dtw_beta0": atlas["dtw_beta0"],
@@ -817,6 +850,12 @@ def validate_complete_records(records: list[dict], repeats: int = 20) -> dict:
             raise RuntimeError(f"wrong subset seed for {key}")
         if int(record.get("subset_size", -1)) != TOPOLOGY_SUBSET_SIZE:
             raise RuntimeError(f"wrong subset size for {key}")
+        reference_curve_sha256 = record.get("reference_curve_sha256", {})
+        if set(reference_curve_sha256) != {"atlas", "ripser"} or any(
+            not isinstance(value, str) or len(value) != 64
+            for value in reference_curve_sha256.values()
+        ):
+            raise RuntimeError(f"invalid reference curve hashes for {key}")
         parameters = record.get("parameters", {})
         for name, value in CONFIGURATIONS[record["configuration"]].items():
             if parameters.get(name) != value:
@@ -864,6 +903,7 @@ def validate_complete_records(records: list[dict], repeats: int = 20) -> dict:
                     "subset_seed",
                     "subset_indices_sha256",
                     "subset_size",
+                    "reference_curve_sha256",
                 ):
                     if left[field] != right[field]:
                         raise RuntimeError(
@@ -882,6 +922,7 @@ def validate_complete_records(records: list[dict], repeats: int = 20) -> dict:
                     "subset_seed",
                     "subset_indices_sha256",
                     "subset_size",
+                    "reference_curve_sha256",
                 ):
                     if reference[field] != candidate[field]:
                         raise RuntimeError(

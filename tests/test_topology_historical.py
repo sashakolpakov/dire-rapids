@@ -77,6 +77,10 @@ def make_complete_records(repeats=2):
                             "subset_seed": seed + 1_000,
                             "subset_indices_sha256": f"subset-{dataset}-{seed}",
                             "subset_size": 1_000,
+                            "reference_curve_sha256": {
+                                "atlas": f"{'a' * 56}{dataset_index:08x}",
+                                "ripser": f"{'b' * 56}{dataset_index:08x}",
+                            },
                             "metrics": {
                                 metric: value for metric in historical.METRICS
                             },
@@ -155,6 +159,21 @@ def test_historical_reducer_kwargs_keep_removed_preset_private_and_pinned():
     assert "knn_backend" not in old
     assert old["spread"] == 3.6
     assert old["max_iter_layout"] == 150
+    default = historical.reducer_kwargs(
+        historical.REVISIONS["preset_introduction"],
+        "index_search_flat",
+        "default",
+        42,
+    )
+    assert {
+        name: default[name]
+        for name in ("spread", "min_dist", "cutoff", "neg_ratio")
+    } == {
+        "spread": 1.0,
+        "min_dist": 1e-2,
+        "cutoff": 42.0,
+        "neg_ratio": 8,
+    }
     assert pr_auto["knn_backend"] == "cuvs"
     assert pr_auto["cuvs_knn_method"] == "auto"
     assert pr_auto["cuvs_index_type"] == "auto"
@@ -265,7 +284,9 @@ def test_run_variant_writes_resumable_records_and_shared_reference_cache(
     )
     monkeypatch.setattr(historical, "sha256_file", lambda _path: "manifest-hash")
     monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
-    monkeypatch.setattr(torch.cuda, "get_device_name", lambda _index: "Fake H100")
+    monkeypatch.setattr(
+        torch.cuda, "get_device_name", lambda _index: "Fake H100"
+    )
     monkeypatch.setattr(torch.cuda, "synchronize", lambda: None)
     monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
     monkeypatch.setitem(sys.modules, "cupy", fake_cupy)
@@ -298,5 +319,9 @@ def test_run_variant_writes_resumable_records_and_shared_reference_cache(
     assert all(
         record["effective_policy"]
         == {"method": "index_search", "index_type": "flat"}
+        for record in records
+    )
+    assert all(
+        set(record["reference_curve_sha256"]) == {"atlas", "ripser"}
         for record in records
     )
