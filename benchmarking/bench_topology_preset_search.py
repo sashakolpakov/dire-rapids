@@ -20,6 +20,7 @@ from pathlib import Path
 import platform
 import subprocess
 import sys
+import tarfile
 from tempfile import TemporaryDirectory
 import time
 
@@ -47,6 +48,7 @@ QUALITY_TOLERANCE = 0.01
 STRESS_RELATIVE_TOLERANCE = 0.10
 GLOBAL_PAIR_COUNT = 20_000
 EXPECTED_AUTO_METHOD = "index_search"
+HISTORICAL_DEFAULT_VARIANT = "293b622_index_search_flat"
 TUNING_DATASETS = {
     "mfeat-factors": {"openml_id": 12},
     "satimage": {"openml_id": 182},
@@ -942,9 +944,9 @@ def run_validation(
                     torch.cuda.empty_cache()
 
 
-def paired_interval(gaps: list[float]) -> tuple[float, float]:
+def paired_interval(gaps: list[float]) -> tuple[float | None, float | None]:
     if len(gaps) < 2:
-        return float("nan"), float("nan")
+        return None, None
     from scipy.stats import t
 
     values = np.asarray(gaps, dtype=np.float64)
@@ -957,11 +959,49 @@ def paired_interval(gaps: list[float]) -> tuple[float, float]:
     return mean - half_width, mean + half_width
 
 
+def load_historical_default_records(
+    archive_path: Path,
+) -> dict[tuple[str, int], dict]:
+    """Load the retained 20-seed current-default records from the H100 audit."""
+    raw_name = f"raw/{HISTORICAL_DEFAULT_VARIANT}.jsonl"
+    with tarfile.open(archive_path, "r:gz") as bundle:
+        stream = bundle.extractfile(raw_name)
+        if stream is None:
+            raise RuntimeError(f"historical default audit is missing {raw_name}")
+        records = [
+            json.loads(line)
+            for line in stream.read().decode("utf-8").splitlines()
+            if line.strip()
+        ]
+    retained = {
+        (record["dataset"], record["layout_seed"]): record
+        for record in records
+        if record.get("configuration") == "default"
+    }
+    expected = {
+        (dataset, seed)
+        for dataset in historical.DATASETS
+        for seed in historical.LAYOUT_SEEDS
+    }
+    if set(retained) != expected or len(retained) != len(expected):
+        raise RuntimeError("historical default audit matrix is incomplete")
+    for record in retained.values():
+        if record.get("variant") != HISTORICAL_DEFAULT_VARIANT:
+            raise RuntimeError("historical default audit variant changed")
+        if record.get("effective_policy") != {
+            "method": "index_search",
+            "index_type": "flat",
+        }:
+            raise RuntimeError("historical default audit policy changed")
+    return retained
+
+
 def summarize_validation(
     input_path: Path,
     manifest_path: Path,
     baseline_path: Path,
     output: Path,
+    default_audit_path: Path | None = None,
 ) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     baselines = json.loads(baseline_path.read_text(encoding="utf-8"))
@@ -976,6 +1016,11 @@ def summarize_validation(
     }
     candidates = tuple(manifest["candidates"])
     seeds = tuple(manifest["layout_seeds"])
+    default_records = (
+        load_historical_default_records(default_audit_path)
+        if default_audit_path is not None
+        else None
+    )
     expected = {
         (candidate, dataset, seed)
         for candidate in candidates
@@ -1028,7 +1073,7 @@ def summarize_validation(
                     "paired_95pct_low": low,
                     "paired_95pct_high": high,
                     "mean_win": gap_mean < 0,
-                    "interval_win": high < 0,
+                    "interval_win": high is not None and high < 0,
                 }
 
                 if 42 in seeds:
@@ -1049,6 +1094,68 @@ def summarize_validation(
                         "comparator_value": ripser_threshold["best_value"],
                         "win": candidate_value < ripser_threshold["best_value"],
                     }
+        if default_records is not None:
+            default_output = {"cells": {"atlas": {}, "ripser": {}}}
+            for backend in ("atlas", "ripser"):
+                ratios = []
+                for dataset in historical.DATASETS:
+                    for metric in TOPOLOGY_METRICS:
+                        candidate_values = []
+                        comparator_values = []
+                        for seed in seeds:
+                            current = by_key[(candidate, dataset, seed)]
+                            default = default_records[(dataset, seed)]
+                            if (
+                                current["dataset_array_sha256"]
+                                != default["dataset_array_sha256"]
+                                or current["subset_indices_sha256"]
+                                != default["subset_indices_sha256"]
+                                or current["reference_curve_sha256"]
+                                != default["reference_curve_sha256"]
+                            ):
+                                raise RuntimeError(
+                                    "candidate/default validation provenance differs"
+                                )
+                            candidate_values.append(
+                                float(current["metrics"][backend][metric])
+                            )
+                            comparator_values.append(
+                                float(default["metrics"][f"{backend}_{metric}"])
+                            )
+                        gaps = [
+                            current - comparator
+                            for current, comparator in zip(
+                                candidate_values, comparator_values
+                            )
+                        ]
+                        low, high = paired_interval(gaps)
+                        gap_mean = float(np.mean(gaps))
+                        ratio = (float(np.mean(candidate_values)) + 1e-12) / (
+                            float(np.mean(comparator_values)) + 1e-12
+                        )
+                        ratios.append(ratio)
+                        default_output["cells"][backend][f"{dataset}/{metric}"] = {
+                            "paired_count": len(gaps),
+                            "candidate_mean": float(np.mean(candidate_values)),
+                            "default_mean": float(np.mean(comparator_values)),
+                            "paired_gap_candidate_minus_default": gap_mean,
+                            "paired_95pct_low": low,
+                            "paired_95pct_high": high,
+                            "mean_win": gap_mean < 0,
+                            "interval_win": high is not None and high < 0,
+                        }
+                cells = default_output["cells"][backend].values()
+                default_output[f"{backend}_geometric_ratio_to_default"] = (
+                    geometric_mean(ratios)
+                )
+                default_output[f"{backend}_mean_wins"] = sum(
+                    cell["mean_win"] for cell in cells
+                )
+                default_output[f"{backend}_interval_wins"] = sum(
+                    cell["interval_win"]
+                    for cell in default_output["cells"][backend].values()
+                )
+            candidate_output["historical_default_comparison"] = default_output
         atlas_cells = candidate_output["cells"]["atlas"].values()
         ripser_cells = candidate_output["cells"]["ripser"].values()
         candidate_output.update(
@@ -1085,6 +1192,11 @@ def summarize_validation(
         "source_revision": manifest["source_revision"],
         "validation_manifest_sha256": historical.sha256_file(manifest_path),
         "baseline_fixture_sha256": historical.sha256_file(baseline_path),
+        "historical_default_audit_sha256": (
+            historical.sha256_file(default_audit_path)
+            if default_audit_path is not None
+            else None
+        ),
         "layout_seeds": list(seeds),
         "selections": selections,
         "scores": scores,
@@ -1137,6 +1249,7 @@ def main() -> None:
     validation_summary.add_argument("--input", type=Path, required=True)
     validation_summary.add_argument("--manifest", type=Path, required=True)
     validation_summary.add_argument("--baselines", type=Path, required=True)
+    validation_summary.add_argument("--default-audit", type=Path)
     validation_summary.add_argument("--output", type=Path, required=True)
 
     args = parser.parse_args()
@@ -1169,7 +1282,11 @@ def main() -> None:
         print(
             json.dumps(
                 summarize_validation(
-                    args.input, args.manifest, args.baselines, args.output
+                    args.input,
+                    args.manifest,
+                    args.baselines,
+                    args.output,
+                    args.default_audit,
                 ),
                 indent=2,
             )

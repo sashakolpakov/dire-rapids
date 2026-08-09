@@ -104,6 +104,7 @@ python benchmarking/bench_topology_preset_search.py summarize-validation \
   --input issue14-preset-search/raw/validation.jsonl \
   --manifest issue14-preset-search/raw/validation.manifest.json \
   --baselines tests/data/topology_umap_tsne_atlas_baselines.json \
+  --default-audit tests/data/topology_historical_h100_audit.tar.gz \
   --output issue14-preset-search/summary/validation-summary.json
 ```
 
@@ -114,6 +115,11 @@ competitive in that screen, rerun only that candidate with `--candidate NAME
 needed for a repeated claim. Atlas already has retained repeat distributions,
 so its validation summary uses overlapping seeds and reports paired 95%
 intervals immediately.
+
+Passing `--default-audit` also performs a fully paired Atlas/Ripser comparison
+against the retained 20-seed current-default records. Dataset arrays, topology
+subsets, reference curves, and exact-flat effective graph policy must all match
+before those records are compared.
 
 If the broad Sobol design produces no quality-feasible candidate, a bounded
 refinement can be run with `--design local`. It evaluates 18 one-parameter

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 from pathlib import Path
+import tarfile
 
 import pytest
 
@@ -198,6 +200,7 @@ def test_validation_summary_uses_paired_atlas_and_seed42_ripser(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(search.historical, "DATASETS", ("tiny",))
+    monkeypatch.setattr(search.historical, "LAYOUT_SEEDS", (42, 43))
     candidates = {"atlas_candidate": {"spread": 1}, "ripser_candidate": {"spread": 2}}
     manifest = {
         "source_revision": "revision",
@@ -243,6 +246,12 @@ def test_validation_summary_uses_paired_atlas_and_seed42_ripser(
                     "candidate": candidate,
                     "dataset": "tiny",
                     "layout_seed": seed,
+                    "dataset_array_sha256": "dataset-hash",
+                    "subset_indices_sha256": f"subset-{seed}",
+                    "reference_curve_sha256": {
+                        "atlas": f"atlas-{seed}",
+                        "ripser": f"ripser-{seed}",
+                    },
                     "metrics": {
                         "atlas": {
                             metric: atlas_value for metric in search.TOPOLOGY_METRICS
@@ -257,17 +266,61 @@ def test_validation_summary_uses_paired_atlas_and_seed42_ripser(
     baseline_path = tmp_path / "baselines.json"
     input_path = tmp_path / "validation.jsonl"
     output_path = tmp_path / "summary.json"
+    default_audit_path = tmp_path / "default-audit.tar.gz"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     baseline_path.write_text(json.dumps(baselines), encoding="utf-8")
     input_path.write_text(
         "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
     )
+    default_records = []
+    for seed in (42, 43):
+        default_records.append(
+            {
+                "configuration": "default",
+                "variant": search.HISTORICAL_DEFAULT_VARIANT,
+                "dataset": "tiny",
+                "layout_seed": seed,
+                "dataset_array_sha256": "dataset-hash",
+                "subset_indices_sha256": f"subset-{seed}",
+                "reference_curve_sha256": {
+                    "atlas": f"atlas-{seed}",
+                    "ripser": f"ripser-{seed}",
+                },
+                "effective_policy": {
+                    "method": "index_search",
+                    "index_type": "flat",
+                },
+                "metrics": {
+                    f"{backend}_{metric}": 1.0
+                    for backend in ("atlas", "ripser")
+                    for metric in search.TOPOLOGY_METRICS
+                },
+            }
+        )
+    payload = "".join(json.dumps(record) + "\n" for record in default_records).encode()
+    with tarfile.open(default_audit_path, "w:gz") as bundle:
+        info = tarfile.TarInfo(
+            f"raw/{search.HISTORICAL_DEFAULT_VARIANT}.jsonl"
+        )
+        info.size = len(payload)
+        bundle.addfile(info, io.BytesIO(payload))
 
     summary = search.summarize_validation(
-        input_path, manifest_path, baseline_path, output_path
+        input_path,
+        manifest_path,
+        baseline_path,
+        output_path,
+        default_audit_path,
     )
 
     assert summary["selections"]["atlas"] == "atlas_candidate"
     assert summary["selections"]["ripser_seed42_screen"] == "ripser_candidate"
     assert summary["scores"]["atlas_candidate"]["atlas_interval_wins"] == 2
     assert summary["scores"]["ripser_candidate"]["ripser_seed42_wins"] == 2
+    default_comparison = summary["scores"]["atlas_candidate"][
+        "historical_default_comparison"
+    ]
+    assert default_comparison["atlas_geometric_ratio_to_default"] == pytest.approx(
+        0.5
+    )
+    assert default_comparison["atlas_interval_wins"] == 2
