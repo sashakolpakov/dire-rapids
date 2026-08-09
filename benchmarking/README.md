@@ -59,6 +59,33 @@ first fixes only the shared-library order; the historical source, reducer
 parameters, and requested/effective cuVS graph policies remain pinned and are
 recorded unchanged.
 
+### Crossed Atlas/Ripser preset search
+
+`bench_topology_preset_search.py` searches for replacement presets without
+reusing the six validation datasets. It freezes four disjoint OpenML datasets
+(mfeat-factors, satimage, pendigits, and isolet), evaluates the same bounded
+Sobol candidates with both the fixed Atlas and Ripser metrics, and selects
+separate Atlas, Ripser, and compromise candidates. A candidate is eligible
+only when its mean 15-NN accuracy is no more than one percentage point below
+default DiRe on every tuning dataset. The search never fits UMAP or t-SNE;
+those thresholds come from the retained, hash-pinned baseline fixture.
+
+```bash
+python benchmarking/bench_topology_preset_search.py prepare \
+  --output issue14-preset-search/tuning-datasets
+python benchmarking/bench_topology_preset_search.py run \
+  --source-root . \
+  --evaluator-source /path/to/293b622/dire_rapids/betti_curve.py \
+  --tuning-root issue14-preset-search/tuning-datasets \
+  --reference-cache issue14-preset-search/reference-cache \
+  --output issue14-preset-search/raw/search.jsonl \
+  --sobol-count 32
+python benchmarking/bench_topology_preset_search.py summarize \
+  --input issue14-preset-search/raw/search.jsonl \
+  --manifest issue14-preset-search/raw/search.manifest.json \
+  --output issue14-preset-search/summary/search-summary.json
+```
+
 ## Key Achievements
 
 **High throughput for large datasets:**
