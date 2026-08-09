@@ -590,11 +590,19 @@ def run_variant(
     specification = VARIANTS[variant]
     revision = specification["revision"]
     policy = specification["policy"]
+
+    # Import PyTorch before the historical package. Commit 293b622 changed
+    # dire_rapids.__init__ to import cuML before PyTorch for the RAPIDS 26.04
+    # loader. With the frozen RAPIDS 26.06 environment, that old import order
+    # leaves CuPy/cuVS with CUBLAS_STATUS_NOT_INITIALIZED. PyTorch is already a
+    # required part of every audited run; loading it first only stabilizes the
+    # shared CUDA-library order and does not alter a reducer or graph policy.
+    import torch
+
     dire_rapids = import_target_dire(source_root, revision)
     evaluator = load_fixed_evaluator(evaluator_source)
 
     import cupy as cp
-    import torch
 
     if not torch.cuda.is_available():
         raise RuntimeError("historical audit requires a CUDA GPU")

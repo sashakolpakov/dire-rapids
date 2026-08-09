@@ -51,6 +51,14 @@ differ by a few float32 ULPs across NumPy/libm builds, while the audit requires
 identical input bytes. A missing or altered array still fails the predeclared
 array and file hashes before any fit starts.
 
+The runner imports its required PyTorch runtime before importing each pinned
+historical checkout. Commit `293b622` used a cuML-before-PyTorch package import
+order that was needed by RAPIDS 26.04, but that historical loader order leaves
+cuBLAS uninitialized in the frozen RAPIDS 26.06 environment. Loading PyTorch
+first fixes only the shared-library order; the historical source, reducer
+parameters, and requested/effective cuVS graph policies remain pinned and are
+recorded unchanged.
+
 ## Key Achievements
 
 **High throughput for large datasets:**
