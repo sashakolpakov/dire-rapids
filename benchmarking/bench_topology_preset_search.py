@@ -44,6 +44,8 @@ SEARCH_SEEDS = (42, 43)
 SOBOL_SEED = 14
 TOPOLOGY_METRICS = ("dtw_beta0", "dtw_beta1")
 QUALITY_TOLERANCE = 0.01
+STRESS_RELATIVE_TOLERANCE = 0.10
+GLOBAL_PAIR_COUNT = 20_000
 TUNING_DATASETS = {
     "mfeat-factors": {"openml_id": 12},
     "satimage": {"openml_id": 182},
@@ -267,6 +269,42 @@ def knn_accuracy(embedding: np.ndarray, labels: np.ndarray) -> float:
     return float(model.score(embedding[test], labels[test]))
 
 
+def local_quality(dire_rapids, data: np.ndarray, embedding: np.ndarray) -> dict:
+    metrics = dire_rapids.metrics.compute_local_metrics(
+        data,
+        embedding,
+        n_neighbors=16,
+        subsample_threshold=1.0,
+        use_gpu=True,
+    )
+    return {
+        "stress": float(metrics["stress"]),
+        "neighbor_mean": float(metrics["neighbor"][0]),
+        "neighbor_std": float(metrics["neighbor"][1]),
+        "n_samples": int(metrics["n_samples"]),
+    }
+
+
+def global_distance_correlation(
+    data: np.ndarray, embedding: np.ndarray, seed: int
+) -> float:
+    """Spearman correlation on a fixed sample of global pairwise distances."""
+    from scipy.stats import spearmanr
+
+    rng = np.random.default_rng(seed + 3_000)
+    left = rng.integers(0, len(data), size=GLOBAL_PAIR_COUNT)
+    right = rng.integers(0, len(data) - 1, size=GLOBAL_PAIR_COUNT)
+    right = right + (right >= left)
+    original_distances = np.linalg.norm(data[left] - data[right], axis=1)
+    embedded_distances = np.linalg.norm(
+        embedding[left] - embedding[right], axis=1
+    )
+    correlation = spearmanr(original_distances, embedded_distances).statistic
+    if not np.isfinite(correlation):
+        raise RuntimeError("global distance correlation is not finite")
+    return float(correlation)
+
+
 def run_search(
     source_root: Path,
     evaluator_source: Path,
@@ -320,6 +358,8 @@ def run_search(
         "sobol_seed": SOBOL_SEED,
         "sobol_count": sobol_count,
         "quality_tolerance": QUALITY_TOLERANCE,
+        "stress_relative_tolerance": STRESS_RELATIVE_TOLERANCE,
+        "global_pair_count": GLOBAL_PAIR_COUNT,
         "candidates": candidates,
         "candidate_sha256": json_sha256(candidates),
         "environment": environment,
@@ -413,6 +453,12 @@ def run_search(
                         "effective_policy": effective_policy(reducer),
                         "fit_seconds": fit_seconds,
                         "knn_accuracy": knn_accuracy(embedding, labels),
+                        "local": local_quality(
+                            dire_rapids, data[indices], embedded_subset
+                        ),
+                        "global_distance_spearman": global_distance_correlation(
+                            data[indices], embedded_subset, seed
+                        ),
                         "metrics": {
                             "atlas": historical.curve_distances(
                                 atlas_reference, atlas_curve, len(indices)
@@ -462,11 +508,23 @@ def summarize_records(records: list[dict], candidates: dict) -> dict:
         for dataset in TUNING_DATASETS:
             candidate_accuracies = []
             default_accuracies = []
+            candidate_neighbors = []
+            default_neighbors = []
+            candidate_stress = []
+            default_stress = []
+            candidate_global = []
+            default_global = []
             for seed in SEARCH_SEEDS:
                 current = by_key[(candidate, dataset, seed)]
                 default = by_key[("default", dataset, seed)]
                 candidate_accuracies.append(current["knn_accuracy"])
                 default_accuracies.append(default["knn_accuracy"])
+                candidate_neighbors.append(current["local"]["neighbor_mean"])
+                default_neighbors.append(default["local"]["neighbor_mean"])
+                candidate_stress.append(current["local"]["stress"])
+                default_stress.append(default["local"]["stress"])
+                candidate_global.append(current["global_distance_spearman"])
+                default_global.append(default["global_distance_spearman"])
                 for backend in ratios:
                     for metric in TOPOLOGY_METRICS:
                         numerator = current["metrics"][backend][metric]
@@ -476,13 +534,41 @@ def summarize_records(records: list[dict], candidates: dict) -> dict:
                         )
             candidate_accuracy = float(np.mean(candidate_accuracies))
             default_accuracy = float(np.mean(default_accuracies))
+            candidate_neighbor = float(np.mean(candidate_neighbors))
+            default_neighbor = float(np.mean(default_neighbors))
+            candidate_stress_mean = float(np.mean(candidate_stress))
+            default_stress_mean = float(np.mean(default_stress))
+            candidate_global_mean = float(np.mean(candidate_global))
+            default_global_mean = float(np.mean(default_global))
             dataset_quality[dataset] = {
-                "candidate_mean": candidate_accuracy,
-                "default_mean": default_accuracy,
-                "gap": candidate_accuracy - default_accuracy,
+                "knn_accuracy": {
+                    "candidate_mean": candidate_accuracy,
+                    "default_mean": default_accuracy,
+                    "gap": candidate_accuracy - default_accuracy,
+                },
+                "neighbor": {
+                    "candidate_mean": candidate_neighbor,
+                    "default_mean": default_neighbor,
+                    "gap": candidate_neighbor - default_neighbor,
+                },
+                "stress": {
+                    "candidate_mean": candidate_stress_mean,
+                    "default_mean": default_stress_mean,
+                    "ratio": (candidate_stress_mean + 1e-12)
+                    / (default_stress_mean + 1e-12),
+                },
+                "global_distance_spearman": {
+                    "candidate_mean": candidate_global_mean,
+                    "default_mean": default_global_mean,
+                    "gap": candidate_global_mean - default_global_mean,
+                },
             }
         feasible = all(
-            value["gap"] >= -QUALITY_TOLERANCE for value in dataset_quality.values()
+            value["knn_accuracy"]["gap"] >= -QUALITY_TOLERANCE
+            and value["neighbor"]["gap"] >= -QUALITY_TOLERANCE
+            and value["global_distance_spearman"]["gap"] >= -QUALITY_TOLERANCE
+            and value["stress"]["ratio"] <= 1.0 + STRESS_RELATIVE_TOLERANCE
+            for value in dataset_quality.values()
         )
         atlas_score = geometric_mean(ratios["atlas"])
         ripser_score = geometric_mean(ratios["ripser"])
@@ -514,8 +600,9 @@ def summarize_records(records: list[dict], candidates: dict) -> dict:
         "schema_version": SCHEMA_VERSION,
         "selection_rule": {
             "quality_guard": (
-                "candidate mean 15-NN accuracy is no more than 0.01 below default "
-                "on every tuning dataset"
+                "on every tuning dataset, candidate mean 15-NN accuracy, local "
+                "neighbor retention, and global distance Spearman are no more than "
+                "0.01 below default, while local stress is no more than 10% above default"
             ),
             "topology_score": (
                 "geometric mean of paired candidate/default DTW ratios over "
@@ -707,6 +794,12 @@ def run_validation(
                         "reference_curve_sha256": reference_hashes,
                         "effective_policy": effective_policy(reducer),
                         "fit_seconds": fit_seconds,
+                        "local": local_quality(
+                            dire_rapids, data[indices], embedded_subset
+                        ),
+                        "global_distance_spearman": global_distance_correlation(
+                            data[indices], embedded_subset, seed
+                        ),
                         "metrics": {
                             "atlas": historical.curve_distances(
                                 atlas_reference, atlas_curve, len(indices)

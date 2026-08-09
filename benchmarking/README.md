@@ -65,10 +65,12 @@ recorded unchanged.
 reusing the six validation datasets. It freezes four disjoint OpenML datasets
 (mfeat-factors, satimage, pendigits, and isolet), evaluates the same bounded
 Sobol candidates with both the fixed Atlas and Ripser metrics, and selects
-separate Atlas, Ripser, and compromise candidates. A candidate is eligible
-only when its mean 15-NN accuracy is no more than one percentage point below
-default DiRe on every tuning dataset. The search never fits UMAP or t-SNE;
-those thresholds come from the retained, hash-pinned baseline fixture.
+separate Atlas, Ripser, and compromise candidates. On every tuning dataset, a
+candidate is eligible only when its mean 15-NN accuracy, local-neighbor
+retention, and sampled global-distance Spearman correlation are no more than
+one percentage point below default DiRe, and local stress is no more than 10%
+higher. The search never fits UMAP or t-SNE; those thresholds come from the
+retained, hash-pinned baseline fixture.
 
 ```bash
 python benchmarking/bench_topology_preset_search.py prepare \
@@ -84,7 +86,27 @@ python benchmarking/bench_topology_preset_search.py summarize \
   --input issue14-preset-search/raw/search.jsonl \
   --manifest issue14-preset-search/raw/search.manifest.json \
   --output issue14-preset-search/summary/search-summary.json
+python benchmarking/bench_topology_preset_search.py validate \
+  --source-root . \
+  --evaluator-source /path/to/293b622/dire_rapids/betti_curve.py \
+  --frozen-root issue14-historical-results/frozen-datasets \
+  --search-summary issue14-preset-search/summary/search-summary.json \
+  --reference-cache issue14-preset-search/validation-reference-cache \
+  --output issue14-preset-search/raw/validation.jsonl \
+  --layout-seeds 42
+python benchmarking/bench_topology_preset_search.py summarize-validation \
+  --input issue14-preset-search/raw/validation.jsonl \
+  --manifest issue14-preset-search/raw/validation.manifest.json \
+  --baselines tests/data/topology_umap_tsne_atlas_baselines.json \
+  --output issue14-preset-search/summary/validation-summary.json
 ```
+
+The first validation pass deliberately uses only seed 42, which is the seed
+for every archived canonical UMAP/t-SNE embedding. If a Ripser candidate is
+competitive in that screen, rerun validation with `--layout-seeds 42:62` and
+fit only the strongest missing Ripser comparator(s) needed for a repeated
+claim. Atlas already has retained repeat distributions, so its validation
+summary uses overlapping seeds and reports paired 95% intervals immediately.
 
 ## Key Achievements
 

@@ -97,6 +97,8 @@ def test_summary_can_select_distinct_atlas_and_ripser_candidates(monkeypatch):
                     "dataset": "tiny",
                     "layout_seed": seed,
                     "knn_accuracy": 0.9,
+                    "local": {"neighbor_mean": 0.8, "stress": 1.0},
+                    "global_distance_spearman": 0.8,
                     "metrics": {
                         backend: {metric: value for metric in search.TOPOLOGY_METRICS}
                         for backend, value in (("atlas", atlas), ("ripser", ripser))
