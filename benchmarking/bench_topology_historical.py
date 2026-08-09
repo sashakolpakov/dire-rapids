@@ -86,6 +86,14 @@ CONFIGURATIONS = {
 }
 
 DATASETS = ("blobs", "disk", "moons", "mnist", "levine13", "levine32")
+EXPECTED_DATASET_ARRAY_SHA256 = {
+    "blobs": "157871f8f53c5ae635fd9209421b45839f2e5c403733c378ebe4978d61dfedbd",
+    "disk": "58376cc292c5554bba8838226d57da8045b197c4f8353f7342a33fb21569ef3d",
+    "moons": "8c498d08870c273c238bf0a6d1c1e120d67f19888cec1513cf67249c6c57f8cc",
+    "mnist": "04b58779d24167a47eb5538c6a48ec107c0e4beeb3d36d7d29f5277938ae778d",
+    "levine13": "1864dd7eb01a6c6ec575ee3aa8b2e7dcee32e5ca959059b65877e79c5202dd90",
+    "levine32": "c3884a693247a3989f0d38cd180658c11e5e417035ddfb615a81e7a4d6481446",
+}
 METRICS = (
     "atlas_dtw_beta0",
     "atlas_dtw_beta1",
@@ -281,13 +289,20 @@ def materialize_datasets(output: Path, requested: Iterable[str] = DATASETS) -> d
         data = np.asarray(data, dtype=np.float32, order="C")
         if data.shape[0] != 10_000:
             raise RuntimeError(f"{name} has {data.shape[0]} rows, expected 10000")
+        actual_array_sha256 = array_sha256(data)
+        expected_array_sha256 = EXPECTED_DATASET_ARRAY_SHA256[name]
+        if actual_array_sha256 != expected_array_sha256:
+            raise RuntimeError(
+                f"{name} does not match the frozen issue #14 input: "
+                f"{actual_array_sha256} != {expected_array_sha256}"
+            )
         path = output / f"{name}.npy"
         save_array(path, data)
         records[name] = {
             "path": path.name,
             "shape": list(data.shape),
             "dtype": str(data.dtype),
-            "array_sha256": array_sha256(data),
+            "array_sha256": actual_array_sha256,
             "file_sha256": sha256_file(path),
             "source": source,
         }
@@ -316,8 +331,15 @@ def load_dataset_manifest(root: Path) -> tuple[dict, dict[str, np.ndarray]]:
         if sha256_file(path) != record["file_sha256"]:
             raise RuntimeError(f"dataset file hash mismatch: {path}")
         data = np.load(path, allow_pickle=False)
-        if array_sha256(data) != record["array_sha256"]:
+        actual_array_sha256 = array_sha256(data)
+        if actual_array_sha256 != record["array_sha256"]:
             raise RuntimeError(f"dataset array hash mismatch: {path}")
+        expected_array_sha256 = EXPECTED_DATASET_ARRAY_SHA256[name]
+        if actual_array_sha256 != expected_array_sha256:
+            raise RuntimeError(
+                f"{name} violates the frozen issue #14 input contract: "
+                f"{actual_array_sha256} != {expected_array_sha256}"
+            )
         arrays[name] = np.asarray(data, dtype=np.float32)
     return manifest, arrays
 

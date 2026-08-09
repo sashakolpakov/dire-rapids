@@ -15,11 +15,15 @@ former parameters and compares them with default DiRe at:
 - `471ac168eb2e6638a84f700fe077f29f20e24488`, the original PR #12 head.
 
 Every revision uses the same materialized six-dataset arrays, layout seeds
-42--61, and seed-paired 1,000-row subsets. The evaluator is loaded from the
-hash-verified `293b622` `betti_curve.py` file for every revision. Both direct
-rank-based kNN Atlas and Ripser H0/H1 Betti-DTW discrepancies are retained.
-The legacy comparisons explicitly force exact-flat index/search. The PR #12
-head is also run through its proposed automatic all-neighbors path.
+42--61, and seed-paired 1,000-row subsets. Materialization and loading both
+enforce one predeclared array SHA-256 per dataset, so dependency or source
+drift cannot silently create a different comparison. The selected labels and
+row order reproduce the retained audit exactly for all six datasets. The
+evaluator is loaded from the hash-verified `293b622` `betti_curve.py` file for
+every revision. Both direct rank-based kNN Atlas and Ripser H0/H1 Betti-DTW
+discrepancies are retained. The legacy comparisons explicitly force exact-flat
+index/search. The PR #12 head is also run through its proposed automatic
+all-neighbors path.
 
 Run the complete matrix inside the repository's RAPIDS 26.06 container on an
 NVIDIA GPU (the audit that motivated issue #14 used an H100):

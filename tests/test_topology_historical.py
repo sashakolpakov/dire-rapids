@@ -161,6 +161,33 @@ def test_historical_reducer_kwargs_keep_removed_preset_private_and_pinned():
 
 
 @pytest.mark.cpu
+def test_dataset_manifest_rejects_self_consistent_noncanonical_input(tmp_path):
+    data = np.asarray([[1.0, 2.0]], dtype=np.float32)
+    path = tmp_path / "blobs.npy"
+    historical.save_array(path, data)
+    actual_array_sha256 = historical.array_sha256(data)
+    historical.write_json(
+        tmp_path / "manifest.json",
+        {
+            "datasets": {
+                "blobs": {
+                    "path": path.name,
+                    "file_sha256": historical.sha256_file(path),
+                    "array_sha256": actual_array_sha256,
+                }
+            }
+        },
+    )
+    original_datasets = historical.DATASETS
+    historical.DATASETS = ("blobs",)
+    try:
+        with pytest.raises(RuntimeError, match="frozen issue #14 input contract"):
+            historical.load_dataset_manifest(tmp_path)
+    finally:
+        historical.DATASETS = original_datasets
+
+
+@pytest.mark.cpu
 def test_run_variant_writes_resumable_records_and_shared_reference_cache(
     tmp_path, monkeypatch
 ):
