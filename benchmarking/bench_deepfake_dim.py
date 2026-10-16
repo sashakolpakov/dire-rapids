@@ -99,7 +99,7 @@ def generate_fake_images(category, n_images, output_dir):
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY not set. Source ~/devel/heretic/.env first.")
+        raise RuntimeError("GEMINI_API_KEY not set. Source ~/.config/secrets/llm.env first.")
 
     client = genai.Client(api_key=api_key)
     cat = CATEGORIES[category]
