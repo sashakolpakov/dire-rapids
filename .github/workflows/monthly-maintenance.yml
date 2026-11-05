@@ -41,7 +41,7 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
           # Install with --upgrade to get latest versions
-          pip install --upgrade -e .
+          pip install --upgrade -e ".[test]"
 
           # Force upgrade all dependencies to latest
           pip list --outdated --format=json | python -c "
@@ -100,7 +100,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-timeout
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install --upgrade -e .
+          pip install --upgrade -e ".[test]"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
